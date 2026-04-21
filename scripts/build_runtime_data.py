@@ -27,6 +27,8 @@ from check_sources import (
     normalize_title,
     open_sqlite_readonly,
     collect_source_report,
+    split_title_parts,
+    title_part_variants,
 )
 
 
@@ -160,6 +162,154 @@ def clean_text(value: str) -> str:
     return text.strip()
 
 
+def strip_inline_gloss(text: str, headword: str) -> str:
+    cleaned = clean_text(text)
+    if not cleaned:
+        return cleaned
+    cleaned = re.sub(r"\b([A-D])\s*(?=[\u4e00-\u9fff]{1,3}\s*[:：]\s*(?![“\"]))", "", cleaned)
+    if headword:
+        specific = rf"(?:\s|/|；|。|，|、)+{re.escape(headword)}\s*[:：]\s*(?![“\"])[^/；。！？]+[。！？]?"
+        cleaned = re.sub(specific, "", cleaned)
+    generic = r"(?:\s|/|；|。|，|、)+[\u4e00-\u9fff]{1,3}\s*[:：]\s*(?![“\"])[^/；。！？]+[。！？]?"
+    cleaned = re.sub(generic, "", cleaned).strip(" /")
+    return clean_text(cleaned)
+
+
+def is_simple_headword(value: str) -> bool:
+    return bool(re.fullmatch(r"[\u4e00-\u9fff]{1,3}", clean_text(value)))
+
+
+def normalize_occurrence_headword(headword: str, excerpt: str) -> str:
+    cleaned_headword = clean_text(headword)
+    if len(cleaned_headword) <= 3:
+        return cleaned_headword
+    cleaned_excerpt = clean_text(excerpt)
+    repeated_tail = re.search(rf"([\u4e00-\u9fff]){re.escape(cleaned_headword)}\s*[:：]\s*(?![“\"])", cleaned_excerpt)
+    if repeated_tail and repeated_tail.group(1) == cleaned_headword[-1]:
+        return repeated_tail.group(1)
+    match = re.search(r"([\u4e00-\u9fff]{1,3})\s*[:：]\s*(?![“\"])", cleaned_excerpt)
+    if match:
+        return match.group(1)
+    return cleaned_headword
+
+
+def derive_canonical_content_headword(headword: str, occurrences: list[dict[str, Any]]) -> str:
+    cleaned_headword = clean_text(headword)
+    if is_simple_headword(cleaned_headword):
+        return cleaned_headword
+    candidates: Counter[str] = Counter()
+    for occurrence in occurrences:
+        excerpt = clean_text(str(occurrence.get("excerpt") or ""))
+        repeated_tail = re.search(rf"([\u4e00-\u9fff]){re.escape(cleaned_headword)}\s*[:：]\s*(?![“\"])", excerpt)
+        if repeated_tail and repeated_tail.group(1) == cleaned_headword[-1]:
+            candidates[repeated_tail.group(1)] += 4
+        match = re.search(r"([\u4e00-\u9fff]{1,3})\s*[:：]\s*(?![“\"])", excerpt)
+        if match:
+            candidates[match.group(1)] += 2
+        for marked in re.findall(r"\*([\u4e00-\u9fff]{1,3})\*", str(occurrence.get("excerpt") or "")):
+            candidates[marked] += 1
+    if candidates:
+        candidate, _score = candidates.most_common(1)[0]
+        return candidate
+    return cleaned_headword
+
+
+def refine_content_headword_with_qdoc(
+    raw_headword: str,
+    candidate: str,
+    occurrences: list[dict[str, Any]],
+    question_docs: dict[str, dict[str, Any]] | None,
+) -> str:
+    cleaned_raw = clean_text(raw_headword)
+    cleaned_candidate = clean_text(candidate)
+    if not question_docs or len(cleaned_raw) <= 3:
+        return cleaned_candidate
+    if not any(":" in str(item.get("excerpt") or "") or "：" in str(item.get("excerpt") or "") for item in occurrences):
+        return cleaned_candidate
+    tail = cleaned_raw[-1]
+    for occurrence in occurrences:
+        qdoc_text = clean_text(str(question_docs.get(str(occurrence.get("paper_key") or ""), {}).get("text") or ""))
+        if not qdoc_text:
+            continue
+        if tail:
+            tail_context = find_sentence_context(qdoc_text, str(occurrence.get("excerpt") or ""), tail)
+            if looks_like_sentence_context(tail_context, tail):
+                return tail
+        if cleaned_candidate in qdoc_text:
+            return cleaned_candidate
+    return cleaned_candidate
+
+
+def merge_content_terms(
+    raw_terms: list[dict[str, Any]],
+    question_docs: dict[str, dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for term in raw_terms:
+        canonical = derive_canonical_content_headword(str(term.get("headword") or ""), list(term.get("occurrences", [])))
+        canonical = refine_content_headword_with_qdoc(
+            str(term.get("headword") or ""),
+            canonical,
+            list(term.get("occurrences", [])),
+            question_docs,
+        )
+        bucket = grouped.setdefault(
+            canonical,
+            {
+                "headword": canonical,
+                "display_headword": canonical,
+                "occurrences": [],
+                "_raw_headwords": set(),
+            },
+        )
+        bucket["occurrences"].extend(term.get("occurrences", []))
+        bucket["_raw_headwords"].add(clean_text(str(term.get("headword") or "")))
+
+    merged: list[dict[str, Any]] = []
+    for canonical, bucket in grouped.items():
+        occurrences = sorted(
+            bucket["occurrences"],
+            key=lambda item: (
+                int(item.get("year") or 0),
+                str(item.get("paper_key") or ""),
+                int(item.get("question_number") or 0),
+                int(item.get("pair_index") or 0),
+            ),
+        )
+        gloss_counter = Counter(
+            clean_text(str(item.get("gloss") or ""))
+            for item in occurrences
+            if clean_text(str(item.get("gloss") or ""))
+        )
+        years = sorted(
+            {
+                int(item.get("year"))
+                for item in occurrences
+                if isinstance(item.get("year"), int)
+            }
+        )
+        question_type_counts = Counter(
+            str(item.get("question_subtype") or "")
+            for item in occurrences
+            if str(item.get("question_subtype") or "")
+        )
+        merged.append(
+            {
+                "headword": canonical,
+                "display_headword": canonical,
+                "occurrences": occurrences,
+                "years": years,
+                "total_occurrences": len(occurrences),
+                "beijing_occurrences": sum(1 for item in occurrences if item.get("scope") == "beijing"),
+                "national_occurrences": sum(1 for item in occurrences if item.get("scope") == "national"),
+                "question_type_counts": dict(question_type_counts),
+                "sample_glosses": [gloss for gloss, _count in gloss_counter.most_common(6)],
+                "raw_headwords": sorted(bucket["_raw_headwords"]),
+            }
+        )
+    return sorted(merged, key=lambda item: (-int(item["beijing_occurrences"]), item["headword"]))
+
+
 def stable_slug(value: str) -> str:
     text = clean_text(value).lower()
     text = re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "-", text)
@@ -171,7 +321,7 @@ def hash_text(value: str) -> str:
 
 
 def answer_label_for_question(answer_text: str, question_number: int) -> str:
-    match = re.search(rf"(?m)^\s*{question_number}\.\s*([A-D])\b", answer_text or "")
+    match = re.search(rf"(?<!\d){question_number}\s*[\.．、]\s*([A-D])\b", answer_text or "")
     return match.group(1) if match else ""
 
 
@@ -193,7 +343,7 @@ def stable_pick(items: list[str], seed: str, count: int) -> list[str]:
 
 def split_sentences(text: str) -> list[str]:
     prepared = clean_text(text)
-    chunks = re.split(r"(?<=[。！？；!?:：])|(?<=/)", prepared)
+    chunks = re.split(r"(?<=[。！？；!?])|(?<=/)", prepared)
     return [chunk.strip(" /") for chunk in chunks if chunk.strip(" /")]
 
 
@@ -202,20 +352,59 @@ def truncate_excerpt(text: str, limit: int = 200) -> str:
     return cleaned if len(cleaned) <= limit else cleaned[: limit - 1] + "…"
 
 
-def locate_section(text: str, title: str, window: int = 9000) -> str:
-    normalized_target = normalize_title(title)
+def truncate_around_headword(text: str, headword: str, limit: int = 240) -> str:
+    cleaned = clean_text(text)
+    if len(cleaned) <= limit:
+        return cleaned
+    if headword and headword in cleaned:
+        center = cleaned.find(headword)
+        start = max(0, center - limit // 3)
+        end = min(len(cleaned), start + limit - 1)
+        start = max(0, end - (limit - 1))
+        prefix = "…" if start > 0 else ""
+        suffix = "…" if end < len(cleaned) else ""
+        return prefix + cleaned[start:end] + suffix
+    return truncate_excerpt(cleaned, limit)
+
+
+def locate_single_section(text: str, title: str, window: int = 9000) -> str:
+    normalized_targets = [normalize_title(item) for item in title_part_variants(title)]
     best_start = -1
-    for match in re.finditer(r"(?m)^#.*$", text):
+    heading_matches = list(re.finditer(r"(?m)^#.*$", text))
+    for index, match in enumerate(heading_matches):
         line = match.group(0)
-        if normalized_target and normalized_target in normalize_title(line):
+        normalized_line = normalize_title(line)
+        if any(target and target in normalized_line for target in normalized_targets):
             best_start = match.start()
-            break
+            for next_match in heading_matches[index + 1 :]:
+                if next_match.start() > best_start:
+                    return text[best_start : next_match.start()]
+            return text[best_start : best_start + window]
     if best_start < 0:
-        pos = normalize_title(text).find(normalized_target)
-        if pos < 0:
-            return ""
-        return text[max(0, pos - 400) : pos + window]
+        normalized_text = normalize_title(text)
+        for normalized_target in normalized_targets:
+            pos = normalized_text.find(normalized_target)
+            if pos >= 0:
+                return text[max(0, pos - 400) : pos + window]
+        return ""
     return text[best_start : best_start + window]
+
+
+def locate_section(text: str, title: str, window: int = 9000) -> str:
+    parts = split_title_parts(title)
+    if len(parts) <= 1:
+        return locate_single_section(text, title, window)
+    sections: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        section = locate_single_section(text, part, window)
+        signature = hash_text(clean_text(section))
+        if section and signature not in seen:
+            seen.add(signature)
+            sections.append(section)
+    if sections:
+        return "\n\n".join(sections)
+    return locate_single_section(text, title, window)
 
 
 def build_classical_sections(manifest: dict[str, list[dict]], junior_md: str, senior_md: str) -> list[dict[str, Any]]:
@@ -250,6 +439,37 @@ def build_classical_sections(manifest: dict[str, list[dict]], junior_md: str, se
     return sections
 
 
+def looks_like_textbook_ref_sentence(sentence: str, headword: str, section_kind: str) -> bool:
+    cleaned = clean_text(sentence)
+    if not cleaned or headword not in cleaned:
+        return False
+    if cleaned.startswith("#") or re.search(r"[\\$#]", cleaned):
+        return False
+    blocked_markers = (
+        "学习提示",
+        "研习中",
+        "比如",
+        "这里",
+        "意思是",
+        "表示",
+        "表现",
+        "启示",
+        "感叹",
+        "注意",
+        "典故",
+        "典出",
+        "经典",
+        "古典",
+    )
+    if any(marker in cleaned for marker in blocked_markers):
+        return False
+    if len(headword) == 1 and any(marker in cleaned for marker in ("恩典", "典礼", "词典", "字典")):
+        return False
+    if section_kind not in {"古文", "古诗词"} and len(headword) == 1:
+        return False
+    return True
+
+
 def build_textbook_refs(all_terms: list[dict[str, str]], sections: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
     refs: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for term in all_terms:
@@ -261,7 +481,7 @@ def build_textbook_refs(all_terms: list[dict[str, str]], sections: list[dict[str
                 continue
             sentences = []
             for sentence in split_sentences(text):
-                if headword in sentence:
+                if looks_like_textbook_ref_sentence(sentence, headword, str(section["kind"] or "")):
                     sentences.append(sentence)
             if not sentences:
                 continue
@@ -335,13 +555,173 @@ def choose_gloss_distractors(all_glosses: list[str], correct_gloss: str, seed: s
 
 
 def find_passage(qdoc_text: str, excerpt: str) -> str:
-    probe = clean_text(excerpt).split("/")[0].strip()
-    if not probe:
-        return truncate_excerpt(qdoc_text, 220)
-    for paragraph in re.split(r"\n{2,}", qdoc_text):
-        if probe[:8] and probe[:8] in clean_text(paragraph):
-            return truncate_excerpt(paragraph, 240)
     return truncate_excerpt(qdoc_text, 240)
+
+
+def looks_like_sentence_context(text: str, headword: str) -> bool:
+    cleaned = clean_text(text)
+    if not cleaned or len(cleaned) < 6:
+        return False
+    if cleaned.startswith(("阅读下面", "文言文阅读", "(一)文言文阅读", "二、本大题", "下列对", "根据文意")):
+        return False
+    if "阅读下面的文言文,完成" in cleaned[:40]:
+        return False
+    if re.match(r"^\d+\s*[\.．、]", cleaned) and any(marker in cleaned for marker in ("下列", "根据文意", "完成下面")):
+        return False
+    if headword and headword not in cleaned:
+        return False
+    if re.search(r"[\u4e00-\u9fff]{1,3}\s*[:：]\s*(?![“\"])", cleaned):
+        return False
+    if any(marker in cleaned for marker in ("翻译为", "句子", "义同", "参考答案", "答案示例")):
+        return False
+    return True
+
+
+def looks_like_passage_context(text: str, headword: str) -> bool:
+    cleaned = clean_text(text)
+    if not cleaned or len(cleaned) < 6:
+        return False
+    if headword and headword not in cleaned:
+        return False
+    if cleaned.startswith(("阅读下面", "下列对", "根据文意", "将下面的句子译为")):
+        return False
+    if re.match(r"^\d+\s*[\.．、]", cleaned) and any(marker in cleaned for marker in ("下列对", "根据文意", "完成下面")):
+        return False
+    if any(marker in cleaned for marker in ("参考答案", "答案示例")):
+        return False
+    return True
+
+
+def extract_marked_compare_sentences(raw_excerpt: str, headword: str) -> list[str]:
+    raw = str(raw_excerpt or "")
+    if not raw or not headword:
+        return []
+    marked_pattern = re.escape(f"*{headword}*")
+    matches = list(re.finditer(marked_pattern, raw))
+    if len(matches) < 2:
+        if "/" in raw:
+            return [clean_text(part.replace("*", "")) for part in raw.split("/") if clean_text(part.replace("*", ""))]
+        return []
+    sentences: list[str] = []
+    sentence_markers = "。！？；/\n"
+    for index, match in enumerate(matches[:2]):
+        prev_end = matches[index - 1].end() if index > 0 else 0
+        next_start = matches[index + 1].start() if index + 1 < len(matches) else -1
+
+        previous_punctuation = max((raw.rfind(marker, prev_end, match.start()) for marker in sentence_markers), default=-1)
+        if previous_punctuation >= prev_end:
+            left = previous_punctuation + 1
+        else:
+            previous_space = raw.rfind(" ", prev_end, match.start())
+            left = previous_space + 1 if previous_space >= prev_end else 0
+
+        next_punctuation_candidates = [raw.find(marker, match.end()) for marker in sentence_markers if raw.find(marker, match.end()) != -1]
+        next_punctuation = min(next_punctuation_candidates) if next_punctuation_candidates else -1
+        right = next_punctuation + 1 if next_punctuation >= 0 else len(raw)
+        if next_start >= 0 and (next_punctuation < 0 or next_start < next_punctuation):
+            between = raw[match.end():next_start]
+            if not any(marker in between for marker in sentence_markers):
+                next_space = raw.find(" ", match.end(), next_start)
+                right = next_space if next_space != -1 else next_start
+
+        sentence = clean_text(raw[left:right].replace("*", ""))
+        if sentence and sentence not in sentences:
+            sentences.append(sentence)
+    return sentences
+
+
+def extract_function_option_sentences(entries: list[dict[str, Any]]) -> list[str]:
+    if not entries:
+        return []
+    headword = str(entries[0].get("headword") or "")
+    raw_candidates = []
+    for item in entries:
+        raw_excerpt = str(item.get("excerpt") or "")
+        if raw_excerpt and raw_excerpt not in raw_candidates:
+            raw_candidates.append(raw_excerpt)
+    for raw_excerpt in raw_candidates:
+        marked = extract_marked_compare_sentences(raw_excerpt, headword)
+        if len(marked) >= 2:
+            return [truncate_excerpt(marked[0], 80), truncate_excerpt(marked[1], 80)]
+
+    sentences = [strip_inline_gloss(str(item.get("excerpt") or ""), headword) for item in entries]
+    if (len(sentences) == 1 or len(set(sentences)) == 1) and sentences:
+        if "/" in sentences[0]:
+            sentences = [part.strip() for part in sentences[0].split("/") if part.strip()]
+        else:
+            sentences = split_sentences(sentences[0])
+    cleaned = [truncate_excerpt(clean_text(sentence), 80) for sentence in sentences if clean_text(sentence)]
+    return cleaned[:2]
+
+
+def find_sentence_context(qdoc_text: str, excerpt: str, headword: str) -> str:
+    sanitized = strip_inline_gloss(excerpt, headword)
+    if looks_like_sentence_context(sanitized, headword):
+        return truncate_excerpt(sanitized, 120)
+    candidates = [
+        clean_text(sentence)
+        for sentence in split_sentences(qdoc_text)
+        if headword and headword in sentence
+    ]
+    candidates = [
+        sentence
+        for sentence in candidates
+        if not any(marker in sentence for marker in ("阅读下面", "下列", "参考答案", "答案示例", "完成下面", "本大题共"))
+    ]
+    probe_tokens = [
+        token
+        for token in re.split(r"[，,。！？；:：\s]+", sanitized)
+        if token and token != headword
+    ]
+    best_sentence = ""
+    best_score = -1
+    for sentence in candidates:
+        score = sum(1 for token in probe_tokens[:4] if token in sentence)
+        if sanitized and sanitized[:4] and sanitized[:4] in sentence:
+            score += 2
+        if score > best_score:
+            best_sentence = sentence
+            best_score = score
+    if best_sentence:
+        return truncate_excerpt(best_sentence, 120)
+    return truncate_excerpt(sanitized, 120)
+
+
+def find_passage(qdoc_text: str, excerpt: str, headword: str) -> str:
+    probe = clean_text(excerpt).split("/")[0].strip()
+    paragraphs = [
+        clean_text(paragraph)
+        for paragraph in re.split(r"\n{2,}", qdoc_text)
+        if clean_text(paragraph)
+    ]
+    passage_candidates = [paragraph for paragraph in paragraphs if looks_like_passage_context(paragraph, headword)]
+    if probe:
+        for paragraph in passage_candidates:
+            if probe[:8] and probe[:8] in paragraph:
+                return truncate_around_headword(paragraph, headword, 240)
+
+    probe_tokens = [
+        token
+        for token in re.split(r"[，,。！？；:：\s]+", probe)
+        if token and token != headword
+    ]
+    best_paragraph = ""
+    best_score = -1
+    for paragraph in passage_candidates:
+        score = 0
+        if headword and headword in paragraph:
+            score += 2
+        score += sum(1 for token in probe_tokens[:4] if token in paragraph)
+        if score > best_score:
+            best_paragraph = paragraph
+            best_score = score
+    if best_paragraph:
+        return truncate_around_headword(best_paragraph, headword, 240)
+
+    nearby_sentences = [sentence for sentence in split_sentences(qdoc_text) if looks_like_sentence_context(sentence, headword)]
+    if nearby_sentences:
+        return truncate_around_headword(" ".join(nearby_sentences[:3]), headword, 240)
+    return truncate_around_headword(probe or clean_text(excerpt), headword, 240)
 
 
 def build_function_question_bank(function_terms: list[dict[str, Any]], question_docs: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
@@ -389,12 +769,7 @@ def build_function_question_bank(function_terms: list[dict[str, Any]], question_
                 complete = False
                 break
             ordered = sorted(entries, key=lambda item: int(item.get("pair_index") or 0))
-            sentences = [clean_text(item.get("excerpt") or "") for item in ordered]
-            if (len(sentences) == 1 or len(set(sentences)) == 1) and sentences:
-                if "/" in sentences[0]:
-                    sentences = [part.strip() for part in sentences[0].split("/") if part.strip()]
-                else:
-                    sentences = split_sentences(sentences[0])
+            sentences = extract_function_option_sentences(ordered)
             if len(sentences) < 2:
                 complete = False
                 break
@@ -445,14 +820,15 @@ def build_content_question_bank(content_terms: list[dict[str, Any]], question_do
 
     for term in content_terms:
         term_id = f"content::{term['headword']}"
-        headword = str(term["headword"])
+        raw_headword = str(term["headword"])
         for index, occurrence in enumerate(term.get("occurrences", [])):
             gloss = clean_text(str(occurrence.get("gloss") or ""))
-            excerpt = clean_text(str(occurrence.get("excerpt") or ""))
-            if not gloss or not excerpt:
-                continue
             paper_key = str(occurrence.get("paper_key") or "")
             qdoc = question_docs.get(paper_key, {})
+            headword = normalize_occurrence_headword(raw_headword, str(occurrence.get("excerpt") or ""))
+            excerpt = find_sentence_context(str(qdoc.get("text") or ""), str(occurrence.get("excerpt") or ""), headword)
+            if not gloss or not excerpt or not looks_like_sentence_context(excerpt, headword):
+                continue
             seed = f"{term_id}:{paper_key}:{occurrence.get('question_number')}:{index}"
             distractors = choose_gloss_distractors(all_glosses, gloss, seed)
             if len(distractors) < 3:
@@ -516,7 +892,7 @@ def build_content_question_bank(content_terms: list[dict[str, Any]], question_do
                 }
             )
 
-            passage = find_passage(str(qdoc.get("text") or ""), excerpt)
+            passage = find_passage(str(qdoc.get("text") or ""), excerpt, headword)
             passage_options = [
                 f"这段文字中，“{headword}”可理解为“{option}”，因此相关文意判断成立。"
                 for option in gloss_options
@@ -837,7 +1213,7 @@ def main() -> int:
     templates = load_question_templates()
 
     function_raw_terms = list(xuci.get("terms", []))
-    content_raw_terms = list(shici.get("terms", []))
+    content_raw_terms = merge_content_terms(list(shici.get("terms", [])), question_docs)
     all_terms = [
         {"term_id": f"function::{item['headword']}", "headword": item["headword"]}
         for item in function_raw_terms

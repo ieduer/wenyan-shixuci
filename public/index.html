@@ -4,121 +4,128 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>文言實虛詞</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css" />
     <script src="https://my.bdfz.net/site-auth.js" defer></script>
     <script type="module" src="/app.js" defer></script>
   </head>
   <body>
-    <div class="page-glow page-glow-a"></div>
-    <div class="page-glow page-glow-b"></div>
+    <div class="page-aura page-aura-a"></div>
+    <div class="page-aura page-aura-b"></div>
     <main class="shell">
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">北京高考文言 · 競技學習台</p>
+      <header class="topbar">
+        <div class="brand-block">
+          <p class="brand-kicker">北京高考文言對戰場</p>
           <h1>文言實虛詞</h1>
-          <p class="hero-text">
-            按高考怎麼考，就怎麼玩。先熱身，再排位，錯題立刻追擊，直到詞義、用法、句意和文意一起穩住。
-          </p>
-          <div class="hero-actions">
+        </div>
+        <div class="top-controls">
+          <div class="segmented-control" aria-label="挑戰模式">
             <button class="mode-chip active" data-mode="warmup" type="button">熱身</button>
             <button class="mode-chip" data-mode="ranked" type="button">排位</button>
-            <button class="mode-chip" data-mode="review" type="button">錯題追擊</button>
+            <button class="mode-chip" data-mode="review" type="button">追擊</button>
+          </div>
+          <div class="theme-switch" aria-label="配色主題">
+            <button class="theme-chip active" data-theme="parchment" type="button">宣紙</button>
+            <button class="theme-chip" data-theme="forest" type="button">松墨</button>
+            <button class="theme-chip" data-theme="ink" type="button">夜硯</button>
           </div>
         </div>
-        <div class="hero-board">
-          <div class="board-stat">
-            <span>匿名會話</span>
-            <strong id="session-alias">載入中</strong>
-          </div>
-          <div class="board-stat">
-            <span>登入狀態</span>
-            <strong id="auth-state">檢查中</strong>
-          </div>
-          <div class="board-stat">
-            <span>虛詞題庫</span>
-            <strong id="function-count">0</strong>
-          </div>
-          <div class="board-stat">
-            <span>實詞題庫</span>
-            <strong id="content-count">0</strong>
-          </div>
-        </div>
-      </section>
+      </header>
 
-      <section class="lane lane-entry">
-        <button class="entry-card" data-kind="function_word" type="button">
-          <span class="entry-kicker">虛詞挑戰</span>
-          <strong>四選項八短句</strong>
-          <p>按北京卷對照題進場，先盯意義，再拆用法、詞性、句法功能和關係。</p>
+      <section class="entry-strip">
+        <button class="entry-tile" data-kind="function_word" type="button">
+          <span class="entry-mark">虛詞</span>
+          <strong>虛詞</strong>
+          <p>辨義 · 辨用</p>
         </button>
-        <button class="entry-card" data-kind="content_word" type="button">
-          <span class="entry-kicker">實詞挑戰</span>
-          <strong>詞義到文意</strong>
-          <p>先定詞義，再推翻譯、句意、段意和分析短答，錯了立刻改打相近義項。</p>
+        <button class="entry-tile" data-kind="content_word" type="button">
+          <span class="entry-mark">實詞</span>
+          <strong>實詞</strong>
+          <p>定義 · 句意 · 文意</p>
         </button>
       </section>
 
-      <section class="lane lane-stage">
-        <article class="challenge-stage">
+      <section class="arena-grid">
+        <article class="battle-stage">
           <header class="stage-head">
-            <div>
-              <p class="stage-kicker" id="stage-kicker">尚未開始</p>
-              <h2 id="stage-title">選擇實詞或虛詞開始本輪挑戰</h2>
+            <div class="stage-copy">
+              <p class="stage-kicker" id="stage-kicker">熱身</p>
+              <h2 id="stage-title">選擇實詞或虛詞開始</h2>
             </div>
             <div class="stage-score">
               <span id="score-label">0 分</span>
-              <div class="score-track"><div class="score-fill" id="score-fill"></div></div>
+              <div class="score-track">
+                <div class="score-fill" id="score-fill"></div>
+              </div>
             </div>
           </header>
+
           <div class="stage-body" id="question-root">
             <div class="empty-state">
-              <p>先選題型，再讓系統抽第一題。</p>
+              <p>選一種詞類，直接進場。</p>
             </div>
           </div>
+
+          <div class="stage-note" id="stage-note" hidden></div>
+
           <footer class="stage-actions">
             <button id="submit-answer" class="primary-btn" type="button" disabled>提交答案</button>
             <button id="next-question" class="ghost-btn" type="button" disabled>下一題</button>
-            <button id="finalize-report" class="ghost-btn" type="button" disabled>生成本次報告</button>
           </footer>
         </article>
 
-        <aside class="side-stack">
-          <section class="side-card">
-            <p class="side-label">即時回饋</p>
-            <div id="feedback-root" class="feedback-root">
-              <p>提交答案後，這裡會即時告訴你哪裡穩、哪裡要追擊。</p>
+        <aside class="arena-side">
+          <section class="status-panel">
+            <div class="panel-head">
+              <p class="panel-label">戰況</p>
+              <div class="badge-strip" id="badge-strip"></div>
+            </div>
+
+            <div class="rank-card">
+              <div class="rank-summary">
+                <span class="rank-caption">階位</span>
+                <strong id="rank-name">未開局</strong>
+              </div>
+              <div class="combo-card">
+                <span>連勝</span>
+                <strong id="streak-count">0</strong>
+              </div>
+            </div>
+
+            <div class="meter-list">
+              <div class="meter-row">
+                <div class="meter-meta">
+                  <span>已答</span>
+                  <strong id="answered-count">0</strong>
+                </div>
+                <div class="meter-track"><div class="meter-fill meter-fill-a" id="answered-fill"></div></div>
+              </div>
+              <div class="meter-row">
+                <div class="meter-meta">
+                  <span>答對</span>
+                  <strong id="correct-count">0</strong>
+                </div>
+                <div class="meter-track"><div class="meter-fill meter-fill-b" id="correct-fill"></div></div>
+              </div>
+              <div class="meter-row">
+                <div class="meter-meta">
+                  <span>追擊</span>
+                  <strong id="review-count">0</strong>
+                </div>
+                <div class="meter-track"><div class="meter-fill meter-fill-c" id="review-fill"></div></div>
+              </div>
             </div>
           </section>
-          <section class="side-card">
-            <p class="side-label">本輪狀態</p>
-            <div class="status-grid">
-              <div><span>已答</span><strong id="answered-count">0</strong></div>
-              <div><span>答對</span><strong id="correct-count">0</strong></div>
-              <div><span>連勝</span><strong id="streak-count">0</strong></div>
-              <div><span>追擊隊列</span><strong id="review-count">0</strong></div>
+
+          <section class="leaderboard-panel">
+            <div class="panel-head">
+              <p class="panel-label">對戰榜</p>
+              <span class="panel-subtle">今日</span>
             </div>
-            <div class="badge-strip" id="badge-strip"></div>
-          </section>
-          <section class="side-card">
-            <p class="side-label">排行榜</p>
-            <div id="leaderboard-root" class="leaderboard-root">
-              <p>登入後才會進榜，匿名仍可完整遊玩。</p>
-            </div>
+            <div class="leaderboard-root" id="leaderboard-root"></div>
           </section>
         </aside>
       </section>
-
-      <section class="lane lane-report">
-        <article class="report-panel">
-          <header>
-            <p class="side-label">本次報告</p>
-            <h3>跑完一輪，就把報告帶走</h3>
-          </header>
-          <div id="report-root" class="report-root">
-            <p>報告會生成 `report.md` 和 `report.json`。登入後，下載記錄會同步回用戶中心。</p>
-          </div>
-        </article>
-      </section>
     </main>
   </body>
-  </html>
+</html>

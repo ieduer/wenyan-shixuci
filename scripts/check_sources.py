@@ -26,6 +26,9 @@ EXPECTED_BEIJING_YEARS = list(range(2002, 2026))
 EXPECTED_SQLITE_TABLES = {"entries", "metadata"}
 EXPECTED_ENTRY_COLUMNS = {"id", "headword", "content_text", "raw_json"}
 NOTE_PATTERN = re.compile(r"〔([^〕]+)〕")
+TITLE_ALIASES = {
+    "芣苢": ["荣苣", "茉苣"],
+}
 
 
 @dataclass
@@ -43,6 +46,36 @@ def normalize_title(value: str) -> str:
     text = text.replace("／", "/").replace("·", "").replace("•", "")
     text = re.sub(r"[\s#\-\(\)（）《》“”\"'，,。:：;；?!？！·\[\]【】]", "", text)
     return text.lower()
+
+
+def split_title_parts(value: str) -> list[str]:
+    return [part.strip() for part in re.split(r"/|／", str(value or "")) if part.strip()]
+
+
+def title_part_variants(title_part: str) -> list[str]:
+    cleaned = str(title_part or "").strip()
+    variants = [cleaned]
+    variants.extend(TITLE_ALIASES.get(cleaned, []))
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for item in variants:
+        normalized = normalize_title(item)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(item)
+    return deduped
+
+
+def title_present_in_corpus(title: str, corpus: str) -> bool:
+    normalized_corpus = normalize_title(corpus)
+    parts = split_title_parts(title)
+    if not parts:
+        return False
+    return all(
+        any(normalize_title(variant) in normalized_corpus for variant in title_part_variants(part))
+        for part in parts
+    )
 
 
 def open_sqlite_readonly(path: Path) -> tuple[sqlite3.Connection, tempfile.TemporaryDirectory[str] | None]:
@@ -139,21 +172,17 @@ def _check_term_occurrences(terms: list[dict]) -> list[str]:
 
 
 def _manifest_alignment(manifest: dict[str, list[dict]], junior_md: str, senior_md: str) -> dict[str, Any]:
-    junior_norm = normalize_title(junior_md)
-    senior_norm = normalize_title(senior_md)
     total = 0
     matched = 0
     missing: list[str] = []
     for book_key, items in manifest.items():
-        corpus = junior_norm if "初中" in book_key else senior_norm
+        corpus = junior_md if "初中" in book_key else senior_md
         for item in items:
             title = str(item.get("title") or "").strip()
             if not title:
                 continue
             total += 1
-            normalized = normalize_title(title)
-            parts = [normalize_title(part) for part in re.split(r"/|／", title) if normalize_title(part)]
-            if normalized in corpus or (len(parts) > 1 and all(part in corpus for part in parts)):
+            if title_present_in_corpus(title, corpus):
                 matched += 1
             else:
                 missing.append(f"{book_key}:{title}")

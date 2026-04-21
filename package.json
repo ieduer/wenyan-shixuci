@@ -6,6 +6,8 @@
   "scripts": {
     "check:sources": "/Users/ylsuen/.venv/bin/python scripts/check_sources.py",
     "build:data": "/Users/ylsuen/.venv/bin/python scripts/build_runtime_data.py",
+    "audit:data": "/Users/ylsuen/.venv/bin/python scripts/audit_runtime_data.py",
+    "refresh:data": "npm run build:data && npm run audit:data",
     "check": "tsc --noEmit",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",

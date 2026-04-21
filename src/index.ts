@@ -154,6 +154,27 @@ interface RuntimeManifest {
   stats: Record<string, number>;
 }
 
+interface DataQualitySummary {
+  generated_at: string;
+  source_ok: boolean;
+  xuci: {
+    raw_group_count: number;
+    complete_function_option_group_count: number;
+    emitted_count: number;
+    status_counts: Record<string, number>;
+  };
+  content: {
+    accepted_occurrences: number;
+    total_occurrences: number;
+    rejected_occurrence_counts: Record<string, number>;
+    headword_replacements_count: number;
+  };
+  runtime: {
+    challenge_counts: Record<string, number>;
+    issue_counts: Record<string, number>;
+  };
+}
+
 interface RuntimeData {
   manifest: RuntimeManifest;
   termsFunction: TermRecord[];
@@ -162,6 +183,7 @@ interface RuntimeData {
   textbookExamples: Record<string, TextbookRef[]>;
   dictLinks: Record<string, { revised_sense_links: DictLink[]; idiom_links: DictLink[] }>;
   termMap: Map<string, TermRecord>;
+  dataQuality: DataQualitySummary | null;
 }
 
 interface SessionState {
@@ -281,10 +303,14 @@ async function handleBootstrap(request: Request, env: Env): Promise<Response> {
         functionTerms: runtime.termsFunction.length,
         contentTerms: runtime.termsContent.length,
         functionChallenges: runtime.examQuestions.challenge_bank.xuci_pair_compare.length,
-        contentChallenges:
-          runtime.examQuestions.challenge_bank.content_gloss.length +
-          runtime.examQuestions.challenge_bank.translation_keypoint.length,
+        contentChallenges: QUESTION_TYPE_ORDER_CONTENT.reduce(
+          (sum, questionType) => sum + (runtime.examQuestions.challenge_bank[questionType]?.length || 0),
+          0
+        ),
+        validatedFunctionTerms: runtime.termsFunction.filter((term) => !term.needs_manual_review).length,
+        validatedContentTerms: runtime.termsContent.filter((term) => !term.needs_manual_review).length,
       },
+      dataQuality: runtime.dataQuality,
       leaderboard,
     },
     200
@@ -474,6 +500,8 @@ async function handleChallengeAnswer(request: Request, env: Env): Promise<Respon
         explanation: prompt.explanation,
         pendingReviewCount,
         relatedTerms: relevantTermIds,
+        correctAnswer: answer,
+        submittedAnswer: submitted,
       },
       run: run ? summarizeRun(run) : null,
       badges: newlyUnlocked,
@@ -525,6 +553,19 @@ async function handleReportFinalize(request: Request, env: Env): Promise<Respons
   const run = await getRun(env, runId, sessionState.id);
   if (!run) {
     return json({ error: "Run not found" }, 404);
+  }
+  if (run.report_id) {
+    const existing = await buildExistingReportResponse(env, sessionState.id, String(run.report_id));
+    if (existing) {
+      return json(
+        {
+          ok: true,
+          ...existing,
+          reused: true,
+        },
+        200
+      );
+    }
   }
   const items = await listRunItems(env, runId, sessionState.id);
   if (!items.length) {
@@ -669,6 +710,35 @@ async function handleReportGet(request: Request, env: Env, reportId: string, url
   return new Response(object.body, { headers });
 }
 
+async function buildExistingReportResponse(
+  env: Env,
+  sessionId: string,
+  reportId: string
+): Promise<Record<string, unknown> | null> {
+  const row = await env.DB.prepare(
+    `SELECT id, score, accuracy, summary_json
+     FROM session_reports
+     WHERE id = ? AND session_id = ?`
+  )
+    .bind(reportId, sessionId)
+    .first<Record<string, unknown>>();
+  if (!row) {
+    return null;
+  }
+  const summary = safeParseObject(row.summary_json) as Record<string, unknown>;
+  return {
+    reportId,
+    markdownUrl: `/api/report/${reportId}?format=markdown`,
+    jsonUrl: `/api/report/${reportId}?format=json`,
+    summary: {
+      report_id: reportId,
+      score: Number(row.score || 0),
+      accuracy: Number(row.accuracy || 0),
+      ...(summary || {}),
+    },
+  };
+}
+
 async function loadRuntime(env: Env, request: Request): Promise<RuntimeData> {
   if (!runtimeCache) {
     runtimeCache = (async () => {
@@ -688,6 +758,7 @@ async function loadRuntime(env: Env, request: Request): Promise<RuntimeData> {
         manifest,
         "dict_links"
       );
+      const dataQuality = await fetchOptionalRuntimeAsset<DataQualitySummary>(env, request, "data_quality.json");
       const termMap = new Map<string, TermRecord>();
       [...termsFunction, ...termsContent].forEach((term) => termMap.set(term.term_id, term));
       return {
@@ -698,6 +769,7 @@ async function loadRuntime(env: Env, request: Request): Promise<RuntimeData> {
         textbookExamples,
         dictLinks,
         termMap,
+        dataQuality,
       };
     })();
   }
@@ -707,6 +779,18 @@ async function loadRuntime(env: Env, request: Request): Promise<RuntimeData> {
 async function fetchRuntimeAsset<T>(env: Env, request: Request, fileName: string): Promise<T> {
   const assetUrl = new URL(`/runtime/${fileName}`, request.url);
   const response = await env.ASSETS.fetch(new Request(assetUrl.toString(), { method: "GET" }));
+  if (!response.ok) {
+    throw new Error(`Runtime asset missing: ${fileName} (${response.status})`);
+  }
+  return (await response.json()) as T;
+}
+
+async function fetchOptionalRuntimeAsset<T>(env: Env, request: Request, fileName: string): Promise<T | null> {
+  const assetUrl = new URL(`/runtime/${fileName}`, request.url);
+  const response = await env.ASSETS.fetch(new Request(assetUrl.toString(), { method: "GET" }));
+  if (response.status === 404) {
+    return null;
+  }
   if (!response.ok) {
     throw new Error(`Runtime asset missing: ${fileName} (${response.status})`);
   }
