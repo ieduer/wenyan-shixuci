@@ -1,0 +1,10 @@
+{
+  "question_type": "xuci_pair_compare",
+  "required_fields": ["stem", "options", "answer.label", "paper_key", "question_number"],
+  "distractor_rules": ["保留北京卷四选项八短句结构", "每个选项必须包含两句同字对照", "答案只接受 A-D 单选"],
+  "grading_rule": "selected_label == answer.label",
+  "explanation_fields": ["usage_profile", "explanation"],
+  "minimum_evidence": ["beijing_exam_pair_compare"],
+  "auto_generation_allowed": true,
+  "manual_review_required": false
+}

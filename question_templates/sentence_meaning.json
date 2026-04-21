@@ -1,0 +1,10 @@
+{
+  "question_type": "sentence_meaning",
+  "required_fields": ["stem", "sentence", "options", "answer.label", "term_id"],
+  "distractor_rules": ["以词义偏差带动句意偏差", "保持单选客观题"],
+  "grading_rule": "selected_label == answer.label",
+  "explanation_fields": ["sentence", "explanation"],
+  "minimum_evidence": ["exam_occurrence_with_sentence_context"],
+  "auto_generation_allowed": true,
+  "manual_review_required": true
+}

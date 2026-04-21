@@ -1,0 +1,28 @@
+node_modules/
+.wrangler/
+dist/
+.DS_Store
+*.log
+coverage/
+__pycache__/
+*.pyc
+
+# local build artifacts copied from private sources
+tmp/
+data/cache/
+data/private/
+data/runtime/*.json
+public/runtime/
+!.gitkeep
+
+# never publish raw upstream corpora or source databases
+source/
+*.db
+*.sqlite
+*.sqlite3
+*.pdf
+*.doc
+*.docx
+*.zip
+
+.dev.vars

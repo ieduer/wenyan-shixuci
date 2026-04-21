@@ -1,0 +1,10 @@
+{
+  "question_type": "analysis_short",
+  "required_fields": ["stem", "options", "answer.keys", "term_id", "response_mode"],
+  "distractor_rules": ["第一版只允许多选客观题或关键点勾选", "不做自由文本判分"],
+  "grading_rule": "sorted(selected_keys) == sorted(answer.keys)",
+  "explanation_fields": ["explanation"],
+  "minimum_evidence": ["exam_occurrence_plus_manual_review_flag"],
+  "auto_generation_allowed": true,
+  "manual_review_required": true
+}

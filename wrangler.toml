@@ -1,0 +1,34 @@
+name = "wenyan-shixuci"
+main = "src/index.ts"
+compatibility_date = "2026-04-21"
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
+workers_dev = true
+
+routes = [
+  { pattern = "wy.bdfz.net/*", zone_name = "bdfz.net" }
+]
+
+[vars]
+SITE_KEY = "wy"
+SITE_TITLE = "文言實虛詞"
+PRIMARY_HOST = "wy.bdfz.net"
+USER_CENTER_ORIGIN = "https://my.bdfz.net"
+REPORT_SYNC_ENDPOINT = "https://my.bdfz.net/api/mastery/report"
+USER_CENTER_SESSION_ENDPOINT = "https://my.bdfz.net/api/session"
+ASSET_MAX_BYTES = "26214400"
+TURNSTILE_ENABLED = "0"
+TURNSTILE_SITE_KEY = ""
+
+[[d1_databases]]
+binding = "DB"
+database_name = "wenyan-shixuci-db"
+database_id = "41879ae7-155e-4cf1-b00c-bcff7312ce6b"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "REPORTS"
+bucket_name = "wenyan-shixuci-reports"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"

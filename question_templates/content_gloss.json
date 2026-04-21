@@ -1,0 +1,10 @@
+{
+  "question_type": "content_gloss",
+  "required_fields": ["stem", "sentence", "options", "answer.label", "term_id"],
+  "distractor_rules": ["干扰项来自同库实词义项", "不得与正确义项重复", "答案只接受 A-D 单选"],
+  "grading_rule": "selected_label == answer.label",
+  "explanation_fields": ["sentence", "explanation"],
+  "minimum_evidence": ["exam_occurrence_with_gloss"],
+  "auto_generation_allowed": true,
+  "manual_review_required": false
+}

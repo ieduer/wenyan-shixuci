@@ -1,0 +1,10 @@
+{
+  "question_type": "passage_meaning",
+  "required_fields": ["stem", "passage", "options", "answer.label", "term_id"],
+  "distractor_rules": ["用词义差异带出整段理解差异", "保持单选客观题"],
+  "grading_rule": "selected_label == answer.label",
+  "explanation_fields": ["passage", "explanation"],
+  "minimum_evidence": ["exam_occurrence_with_passage_context"],
+  "auto_generation_allowed": true,
+  "manual_review_required": true
+}

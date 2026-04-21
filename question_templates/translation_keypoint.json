@@ -1,0 +1,10 @@
+{
+  "question_type": "translation_keypoint",
+  "required_fields": ["stem", "sentence", "options", "answer.label", "term_id"],
+  "distractor_rules": ["围绕翻译关键义项设干扰", "只做单词义落点，不做整句自由翻译"],
+  "grading_rule": "selected_label == answer.label",
+  "explanation_fields": ["sentence", "explanation"],
+  "minimum_evidence": ["translation_keyword_or_equivalent_exam_occurrence"],
+  "auto_generation_allowed": true,
+  "manual_review_required": false
+}
