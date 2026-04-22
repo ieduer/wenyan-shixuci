@@ -291,6 +291,13 @@ select {
   gap: 1rem;
 }
 
+.question-source {
+  font-size: 0.92rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .question-stem {
   margin: 0;
   font-size: clamp(1.95rem, 3vw, 3rem);
@@ -306,6 +313,7 @@ select {
   font-size: clamp(1.76rem, 2.8vw, 2.24rem);
   line-height: 2.05;
   word-break: break-word;
+  cursor: help;
 }
 
 .question-passage {
@@ -397,6 +405,7 @@ select {
   border-radius: 1rem;
   background: color-mix(in srgb, var(--surface-soft) 94%, transparent);
   border-left: 3px solid color-mix(in srgb, var(--gold) 58%, transparent);
+  cursor: help;
 }
 
 .analysis-card,
@@ -431,14 +440,15 @@ select {
 }
 
 .analysis-head strong {
-  font-size: 1.15rem;
+  font-size: 1.3rem;
 }
 
 .analysis-summary {
   margin: 0;
-  font-size: 1rem;
-  line-height: 1.7;
-  color: var(--muted);
+  font-size: 1.14rem;
+  line-height: 1.9;
+  color: var(--ink);
+  white-space: pre-wrap;
 }
 
 .analysis-list {
@@ -470,9 +480,10 @@ select {
 
 .analysis-item p {
   margin: 0;
-  font-size: 0.95rem;
-  line-height: 1.62;
-  color: var(--muted);
+  font-size: 1.06rem;
+  line-height: 1.82;
+  color: var(--ink);
+  white-space: pre-wrap;
 }
 
 .analysis-support {

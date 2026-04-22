@@ -1,0 +1,74 @@
+{
+  "beijing-2003-None#11": {
+    "label": "B",
+    "verification": "manual_verified"
+  },
+  "beijing-2003-None#13": {
+    "label": "C",
+    "verification": "manual_verified"
+  },
+  "beijing-2012-None#6": {
+    "label": "B",
+    "verification": "manual_verified"
+  },
+  "beijing-2012-None#7": {
+    "label": "D",
+    "verification": "manual_verified"
+  },
+  "beijing-2014-None#9": {
+    "label": "B",
+    "verification": "manual_verified"
+  },
+  "beijing-2015-None#9#1": {
+    "label": "B",
+    "verification": "manual_verified"
+  },
+  "beijing-2015-None#9#2": {
+    "label": "C",
+    "verification": "manual_verified"
+  },
+  "beijing-2015-None#10": {
+    "label": "A",
+    "verification": "manual_verified"
+  },
+  "beijing-2016-None#9": {
+    "label": "C",
+    "verification": "manual_verified"
+  },
+  "beijing-2016-None#10": {
+    "label": "B",
+    "verification": "manual_verified"
+  },
+  "beijing-2020-None#6": {
+    "label": "A",
+    "verification": "manual_verified"
+  },
+  "beijing-2020-None#7": {
+    "label": "B",
+    "verification": "manual_verified"
+  },
+  "beijing-2023-None#6": {
+    "label": "A",
+    "verification": "manual_verified"
+  },
+  "beijing-2023-None#7": {
+    "label": "C",
+    "verification": "manual_verified"
+  },
+  "beijing-2024-None#6": {
+    "label": "C",
+    "verification": "manual_verified"
+  },
+  "beijing-2024-None#7": {
+    "label": "D",
+    "verification": "manual_verified"
+  },
+  "beijing-2025-None#6": {
+    "label": "C",
+    "verification": "manual_verified"
+  },
+  "beijing-2025-None#7": {
+    "label": "B",
+    "verification": "manual_verified"
+  }
+}

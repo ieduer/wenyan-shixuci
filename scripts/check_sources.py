@@ -15,6 +15,8 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ROOT = Path("/Users/ylsuen/textbook_ai_migration")
 MANIFEST_PATH = SOURCE_ROOT / "platform" / "backend" / "textbook_classics_manifest.json"
+VERSION_MANIFEST_PATH = SOURCE_ROOT / "platform" / "backend" / "textbook_version_manifest.json.pre_chuzhong"
+MINERU_OUTPUT_ROOT = SOURCE_ROOT / "data" / "mineru_output"
 JUNIOR_MD_PATH = SOURCE_ROOT / "export" / "notebooklm" / "初中_语文.md"
 SENIOR_MD_PATH = SOURCE_ROOT / "export" / "notebooklm" / "高中_语文.md"
 XUCI_PATH = SOURCE_ROOT / "data" / "index" / "dict_exam_xuci.json"
@@ -76,6 +78,26 @@ def title_present_in_corpus(title: str, corpus: str) -> bool:
         any(normalize_title(variant) in normalized_corpus for variant in title_part_variants(part))
         for part in parts
     )
+
+
+def resolve_language_book_paths() -> dict[str, Path]:
+    payload = load_json(VERSION_MANIFEST_PATH)
+    by_book_key = payload.get("by_book_key", {}) if isinstance(payload, dict) else {}
+    resolved: dict[str, Path] = {}
+    for book_key in sorted(by_book_key):
+        if "_语文_" not in str(book_key):
+            continue
+        direct_dir = MINERU_OUTPUT_ROOT / str(book_key)
+        candidates: list[Path] = []
+        if direct_dir.exists():
+            candidates.extend(sorted(direct_dir.glob("*.md")))
+        if not candidates:
+            candidates.extend(
+                sorted(path for path in MINERU_OUTPUT_ROOT.glob(f"{book_key}*/**/*.md") if path.name.endswith(".md"))
+            )
+        if candidates:
+            resolved[str(book_key)] = candidates[0]
+    return resolved
 
 
 def open_sqlite_readonly(path: Path) -> tuple[sqlite3.Connection, tempfile.TemporaryDirectory[str] | None]:
@@ -171,12 +193,12 @@ def _check_term_occurrences(terms: list[dict]) -> list[str]:
     return failures
 
 
-def _manifest_alignment(manifest: dict[str, list[dict]], junior_md: str, senior_md: str) -> dict[str, Any]:
+def _manifest_alignment(manifest: dict[str, list[dict]], corpora: dict[str, str]) -> dict[str, Any]:
     total = 0
     matched = 0
     missing: list[str] = []
     for book_key, items in manifest.items():
-        corpus = junior_md if "初中" in book_key else senior_md
+        corpus = corpora.get(book_key, "")
         for item in items:
             title = str(item.get("title") or "").strip()
             if not title:
@@ -199,8 +221,7 @@ def collect_source_report() -> dict[str, Any]:
 
     required_paths = [
         MANIFEST_PATH,
-        JUNIOR_MD_PATH,
-        SENIOR_MD_PATH,
+        VERSION_MANIFEST_PATH,
         XUCI_PATH,
         SHICI_PATH,
         MOE_REVISED_PATH,
@@ -226,12 +247,25 @@ def collect_source_report() -> dict[str, Any]:
         }
 
     manifest = load_json(MANIFEST_PATH)
-    junior_md = JUNIOR_MD_PATH.read_text(encoding="utf-8")
-    senior_md = SENIOR_MD_PATH.read_text(encoding="utf-8")
+    language_book_paths = resolve_language_book_paths()
+    if len(language_book_paths) < 10:
+        failures.append(CheckFailure("language_books_missing", f"resolved={len(language_book_paths)}"))
+    for path in language_book_paths.values():
+        if not path.exists():
+            failures.append(CheckFailure("missing_mineru_book", str(path)))
+            continue
+        size = path.stat().st_size
+        file_stats[str(path)] = {"size_bytes": size}
+        if size < 512:
+            failures.append(CheckFailure("mineru_book_too_small", f"{path} ({size} bytes)"))
     xuci = load_json(XUCI_PATH)
     shici = load_json(SHICI_PATH)
 
-    alignment = _manifest_alignment(manifest, junior_md, senior_md)
+    corpora = {
+        book_key: path.read_text(encoding="utf-8")
+        for book_key, path in language_book_paths.items()
+    }
+    alignment = _manifest_alignment(manifest, corpora)
     if alignment["matched_titles"] != alignment["total_titles"]:
         message = f"matched={alignment['matched_titles']} total={alignment['total_titles']}"
         if alignment["matched_titles"] / max(1, alignment["total_titles"]) >= 0.95:

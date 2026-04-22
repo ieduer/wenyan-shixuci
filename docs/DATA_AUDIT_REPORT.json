@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-22T08:06:25.450175+00:00",
+  "generated_at": "2026-04-22T10:04:52.124439+00:00",
   "source_ok": true,
   "source_report": {
     "ok": true,
@@ -25,11 +25,8 @@
       "/Users/ylsuen/textbook_ai_migration/platform/backend/textbook_classics_manifest.json": {
         "size_bytes": 8746
       },
-      "/Users/ylsuen/textbook_ai_migration/export/notebooklm/初中_语文.md": {
-        "size_bytes": 1815773
-      },
-      "/Users/ylsuen/textbook_ai_migration/export/notebooklm/高中_语文.md": {
-        "size_bytes": 1506503
+      "/Users/ylsuen/textbook_ai_migration/platform/backend/textbook_version_manifest.json.pre_chuzhong": {
+        "size_bytes": 104941
       },
       "/Users/ylsuen/textbook_ai_migration/data/index/dict_exam_xuci.json": {
         "size_bytes": 360816
@@ -42,6 +39,39 @@
       },
       "/Users/ylsuen/textbook_ai_migration/data/index/dict_moe_idioms.db": {
         "size_bytes": 29884416
+      },
+      "/Users/ylsuen/textbook_ai_migration/data/mineru_output/初中_语文_初中_语文_义务教育教科书_语文七年级上册_人教版_af34076f-655e-5103-859a-82dbca5616db/初中_语文_义务教育教科书_语文七年级上册_人教版_af34076f-655e-5103-859a-82dbca5616db.md": {
+        "size_bytes": 259127
+      },
+      "/Users/ylsuen/textbook_ai_migration/data/mineru_output/初中_语文_初中_语文_义务教育教科书_语文七年级下册_人教版_a2f8af4a-5d58-5be4-8936-5449b52ed52b/初中_语文_义务教育教科书_语文七年级下册_人教版_a2f8af4a-5d58-5be4-8936-5449b52ed52b.md": {
+        "size_bytes": 327735
+      },
+      "/Users/ylsuen/textbook_ai_migration/data/mineru_output/初中_语文_初中_语文_义务教育教科书_语文九年级上册_人教版_161780d7-a905-5e62-b145-d2739c6f866e/初中_语文_义务教育教科书_语文九年级上册_人教版_161780d7-a905-5e62-b145-d2739c6f866e.md": {
+        "size_bytes": 300751
+      },
+      "/Users/ylsuen/textbook_ai_migration/data/mineru_output/初中_语文_初中_语文_义务教育教科书_语文九年级下册_人教版_e35c9e24-8076-548e-ba50-05c27a7848d0/初中_语文_义务教育教科书_语文九年级下册_人教版_e35c9e24-8076-548e-ba50-05c27a7848d0.md": {
+        "size_bytes": 315442
+      },
+      "/Users/ylsuen/textbook_ai_migration/data/mineru_output/初中_语文_初中_语文_义务教育教科书_语文八年级上册_人教版_5a7e48d5-4e8c-55fd-b4c7-67e01ba0d41f/初中_语文_义务教育教科书_语文八年级上册_人教版_5a7e48d5-4e8c-55fd-b4c7-67e01ba0d41f.md": {
+        "size_bytes": 293154
+      },
+      "/Users/ylsuen/textbook_ai_migration/data/mineru_output/初中_语文_初中_语文_义务教育教科书_语文八年级下册_人教版_c1a777a1-c2c4-5527-b746-019a18f135b0/初中_语文_义务教育教科书_语文八年级下册_人教版_c1a777a1-c2c4-5527-b746-019a18f135b0.md": {
+        "size_bytes": 289258
+      },
+      "/Users/ylsuen/textbook_ai_migration/data/mineru_output/高中_语文_普通高中教科书_语文必修_上册/普通高中教科书·语文必修 上册.md": {
+        "size_bytes": 320541
+      },
+      "/Users/ylsuen/textbook_ai_migration/data/mineru_output/高中_语文_普通高中教科书_语文必修_下册/普通高中教科书·语文必修 下册.md": {
+        "size_bytes": 384019
+      },
+      "/Users/ylsuen/textbook_ai_migration/data/mineru_output/高中_语文_普通高中教科书_语文选择性必修_上册/普通高中教科书·语文选择性必修 上册.md": {
+        "size_bytes": 232610
+      },
+      "/Users/ylsuen/textbook_ai_migration/data/mineru_output/高中_语文_普通高中教科书_语文选择性必修_下册/普通高中教科书·语文选择性必修 下册.md": {
+        "size_bytes": 261940
+      },
+      "/Users/ylsuen/textbook_ai_migration/data/mineru_output/高中_语文_普通高中教科书_语文选择性必修_中册/普通高中教科书·语文选择性必修 中册.md": {
+        "size_bytes": 298597
       }
     },
     "alignment": {
@@ -118,205 +148,49 @@
     }
   },
   "manifest_stats": {
-    "terms_function": 22,
-    "terms_content": 211,
-    "question_docs": 52,
-    "textbook_term_refs": 158,
-    "dict_term_refs": 233,
-    "answer_keys": 230
+    "terms_function": 18,
+    "terms_content": 539,
+    "exam_question_docs": 24,
+    "challenge_counts": {
+      "xuci_pair_compare": 16,
+      "function_gloss": 1,
+      "function_profile": 1,
+      "content_gloss": 16,
+      "sentence_meaning": 16,
+      "passage_meaning": 0
+    }
   },
   "content": {
-    "term_count": 211,
-    "core_term_count": 46,
-    "secondary_term_count": 165,
+    "term_count": 539,
+    "core_term_count": 11,
+    "secondary_term_count": 528,
     "challenge_counts": {
-      "content_gloss": 73,
-      "sentence_meaning": 73,
-      "passage_meaning": 62
+      "content_gloss": 16,
+      "sentence_meaning": 16,
+      "passage_meaning": 0
     },
-    "support_miss_count": 51,
-    "filtered_raw_examples": [
-      {
-        "term_id": "content::典",
-        "paper_key": "beijing-2013-None",
-        "question_number": 6,
-        "raw_gloss": "主管,掌管",
-        "cleaned_gloss": "主管,掌管",
-        "excerpt": "太祖典禁旅典:主管,掌管"
-      },
-      {
-        "term_id": "content::戚",
-        "paper_key": "beijing-2018-None",
-        "question_number": 8,
-        "raw_gloss": "为......悲伤",
-        "cleaned_gloss": "为......悲伤",
-        "excerpt": "仅存之国危而后戚之 戚:为......悲伤"
-      },
-      {
-        "term_id": "content::矜",
-        "paper_key": "national-2021-50fc7fcdf5a1",
-        "question_number": 13,
-        "raw_gloss": "怜悯,怜惜",
-        "cleaned_gloss": "怜悯,怜惜",
-        "excerpt": "“矜”,怜悯,怜 惜"
-      },
-      {
-        "term_id": "content::矜",
-        "paper_key": "national-2021-50fc7fcdf5a1",
-        "question_number": 13,
-        "raw_gloss": "怜悯,怜",
-        "cleaned_gloss": "怜悯,怜",
-        "excerpt": "关键词句:第一句省略主语;“覆视”,查看;“当”,判处;“矜”,怜悯,怜 惜;“状”,情况;“可”,值得;“闻”,使......知道。"
-      },
-      {
-        "term_id": "content::绝",
-        "paper_key": "national-2022-d68a9af04174",
-        "question_number": 13,
-        "raw_gloss": "动词,断绝",
-        "cleaned_gloss": "动词,断绝",
-        "excerpt": "“绝”,动词,断绝"
-      },
-      {
-        "term_id": "content::致",
-        "paper_key": "beijing-2006-None",
-        "question_number": 6,
-        "raw_gloss": "使......到来",
-        "cleaned_gloss": "使......到来",
-        "excerpt": "致能歌者 致:使......到来"
-      },
-      {
-        "term_id": "content::踵",
-        "paper_key": "beijing-2007-None",
-        "question_number": 6,
-        "raw_gloss": "脚后跟(还中午,指后退)",
-        "cleaned_gloss": "脚后跟(还中午,指后退)",
-        "excerpt": "死不还踵 踵:脚后跟(还中午,指后退)"
-      },
-      {
-        "term_id": "content::预",
-        "paper_key": "beijing-2013-None",
-        "question_number": 6,
-        "raw_gloss": "参与,加入 D仍赐白金万两仍:于,又",
-        "cleaned_gloss": "参与,加入 D仍赐白金万两仍:于,又",
-        "excerpt": "副帅潘美预以为贺预:参与,加入 D仍赐白金万两仍:于,又"
-      },
-      {
-        "term_id": "content::伏阙",
-        "paper_key": "national-2014-5ec76e764288",
-        "question_number": 4,
-        "raw_gloss": "是",
-        "cleaned_gloss": "是",
-        "excerpt": "是“竭力抗争 ”之意. 2“偕”是“偕同 ”之意;“伏阙 ”是“匍匐在宫殿上 ”之意;“入”即“(奏章)送入皇宫 ” 之意; “不食 ”即吃不下饭."
-      },
-      {
-        "term_id": "content::何以",
-        "paper_key": "national-2017-b5925980f961",
-        "question_number": 4,
-        "raw_gloss": "为什么,哪里用得着",
-        "cleaned_gloss": "为什么,哪里用得着",
-        "excerpt": "何以:为什么,哪里用得着"
-      },
-      {
-        "term_id": "content::偕",
-        "paper_key": "national-2014-5ec76e764288",
-        "question_number": 4,
-        "raw_gloss": "是",
-        "cleaned_gloss": "是",
-        "excerpt": "姓的产业 ”;“力争 ” 是“竭力抗争 ”之意. 2“偕”是“偕同 ”之意;“伏阙 ”是“匍匐在宫殿上 ”之意;“入”即“(奏章)送入皇宫 ” 之意; “不食 ”即吃不下饭."
-      },
-      {
-        "term_id": "content::僭上",
-        "paper_key": "national-2020-eb245275d571",
-        "question_number": 13,
-        "raw_gloss": "越分冒用尊者的仪制或宫室、器物等",
-        "cleaned_gloss": "越分冒用尊者的仪制或宫室",
-        "excerpt": "关键词:僭上:越分冒用尊者的仪制或宫室、器物等"
-      },
-      {
-        "term_id": "content::入",
-        "paper_key": "national-2014-5ec76e764288",
-        "question_number": 4,
-        "raw_gloss": "即",
-        "cleaned_gloss": "即",
-        "excerpt": "”是“偕同 ”之意;“伏阙 ”是“匍匐在宫殿上 ”之意;“入”即“(奏章)送入皇宫 ” 之意; “不食 ”即吃不下饭."
-      },
-      {
-        "term_id": "content::军旅",
-        "paper_key": "national-2015-c62fd826a408",
-        "question_number": 4,
-        "raw_gloss": "指军队,也可指军事",
-        "cleaned_gloss": "指军队,也可指军事",
-        "excerpt": "1 “军旅 ”指军队,也可指军事;这里指军事、战事; “咨怨 ”指嗟叹怨恨; “ 游幸 ”指帝王或后妃出游;这里指炀帝出游。 2“凶逆 ”,凶恶悖逆,也指凶恶悖逆的人,这里"
-      },
-      {
-        "term_id": "content::力争",
-        "paper_key": "national-2014-5ec76e764288",
-        "question_number": 4,
-        "raw_gloss": "是",
-        "cleaned_gloss": "是",
-        "excerpt": "”之意; “复”即“又”;“民业 ”即“百姓的产业 ”;“力争 ” 是“竭力抗争 ”之意. 2“偕”是“偕同 ”之意;“伏阙 ”是“匍匐在宫殿上 ”之意;“入”即“(奏章)送入皇宫 ” 之意; “不食 ”即吃不"
-      },
-      {
-        "term_id": "content::善",
-        "paper_key": "national-2022-d68a9af04174",
-        "question_number": 13,
-        "raw_gloss": "形容词,妥当,好",
-        "cleaned_gloss": "形容词,妥当,好",
-        "excerpt": "“善”,形容词,妥当,好"
-      },
-      {
-        "term_id": "content::固",
-        "paper_key": "national-2016-12f0123dae6a",
-        "question_number": 4,
-        "raw_gloss": "结实,牢靠,这里活用为动词,义同",
-        "cleaned_gloss": "结实,牢靠",
-        "excerpt": "宴会,做这样的事能心安吗? 2尝:曾经;从容:严肃;固:结实,牢靠,这里活用为动词,义同 “持”,句子 翻译为:苏轼曾从容地责备公亮不能纠正弊端,世人讥讽他保持禄位加固宠 幸."
-      },
-      {
-        "term_id": "content::复",
-        "paper_key": "national-2014-5ec76e764288",
-        "question_number": 4,
-        "raw_gloss": "又",
-        "cleaned_gloss": "又",
-        "excerpt": "“复”即“又”"
-      },
-      {
-        "term_id": "content::复",
-        "paper_key": "national-2014-5ec76e764288",
-        "question_number": 4,
-        "raw_gloss": "即",
-        "cleaned_gloss": "即",
-        "excerpt": "1 “赐”是“皇帝赏赐的 ”之意; “复”即“又”;“民业 ”即“百姓的产业 ”;“力争 ” 是“竭力抗争 ”之意. 2“偕”是“偕同 ”之意;“伏阙 ”是“匍匐在宫殿上 ”之意;“入"
-      },
-      {
-        "term_id": "content::所欲",
-        "paper_key": "national-2017-0e3728cbab6a",
-        "question_number": 4,
-        "raw_gloss": "所字结构,想要的",
-        "cleaned_gloss": "所字结构,想要的",
-        "excerpt": "所欲:所字结构,想要的. 句子翻译为 : 皇帝说: “官吏依法行事,法律才不会白费,你说别的想要的吧. ”赵王不再 说话. 2辄:就"
-      }
-    ]
+    "support_miss_count": 12,
+    "filtered_raw_examples": []
   },
   "function": {
-    "term_count": 22,
-    "core_term_count": 8,
+    "term_count": 18,
+    "core_term_count": 1,
     "challenge_counts": {
-      "xuci_pair_compare": 5,
-      "function_gloss": 0,
-      "function_profile": 17
+      "xuci_pair_compare": 16,
+      "function_gloss": 1,
+      "function_profile": 1
     }
   },
   "runtime": {
     "challenge_counts": {
-      "xuci_pair_compare": 5,
-      "function_gloss": 0,
-      "function_profile": 17,
-      "content_gloss": 73,
-      "sentence_meaning": 73,
-      "passage_meaning": 62
+      "xuci_pair_compare": 16,
+      "function_gloss": 1,
+      "function_profile": 1,
+      "content_gloss": 16,
+      "sentence_meaning": 16,
+      "passage_meaning": 0
     },
-    "answer_key_count": 230,
+    "answer_key_count": 50,
     "issue_counts": {},
     "issue_examples": [],
     "private_answer_key_paths": [

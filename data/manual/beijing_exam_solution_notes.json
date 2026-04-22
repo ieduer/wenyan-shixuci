@@ -1,0 +1,108 @@
+{
+  "beijing-2005-None#6#C": {
+    "actual_gloss": "讨伐、惩治",
+    "part_of_speech": "动词",
+    "reason": "“景公与陈无宇、公孙灶、公孙虿诛封”是联合讨伐庆封；下文紧接“封以其属斗，不胜，走如鲁”，可见此处并非已经把庆封杀掉。",
+    "dict_headword": "誅",
+    "dict_excerpt": "《重編國語辭典修訂本》“誅”：[動] 1.討伐。4.懲罰、懲治。"
+  },
+  "beijing-2006-None#6#D": {
+    "actual_gloss": "交付、交给",
+    "part_of_speech": "动词",
+    "reason": "“请奉齐国之粟米财货，委之百姓，多寡轻重，惟夫子之令”是说把赈济物资交付出去、交给晏子处置，不是“任命百姓”。",
+    "dict_headword": "委",
+    "dict_excerpt": "《重編國語辭典修訂本》“委”：[動] 1.任命、託付。此句取“交付、託付”義。"
+  },
+  "beijing-2007-None#6#A": {
+    "actual_gloss": "匡正、使端正",
+    "part_of_speech": "动词",
+    "reason": "“民不知礼义，法弗能正也”中的“正”带宾语省略，意思是“使之端正、匡正”，不是形容词“正确”。",
+    "dict_headword": "正",
+    "dict_excerpt": "《重編國語辭典修訂本》“正”：[動] 1.修改錯誤。此句取“糾正、匡正”義。"
+  },
+  "beijing-2012-None#6#B": {
+    "actual_gloss": "最终、终于",
+    "part_of_speech": "副词",
+    "reason": "“景淳竟死”里的“竟”表示事情最后发展到某种结果，不是“居然”的惊异语气。",
+    "dict_headword": "竟",
+    "dict_excerpt": "《重編國語辭典修訂本》“竟”：[副] 2.到底、終於。"
+  },
+  "beijing-2013-None#6#C": {
+    "actual_gloss": "预先、事先",
+    "part_of_speech": "副词",
+    "reason": "“副帅潘美预以为贺”是潘美事先把这件事当作祝贺之由，“预”表示在事情发生之前，不是“参与、加入”。",
+    "dict_headword": "預",
+    "dict_excerpt": "《重編國語辭典修訂本》“預”：[副] 事先、事前。"
+  },
+  "beijing-2014-None#9#B": {
+    "actual_gloss": "担忧、忧虑",
+    "part_of_speech": "动词",
+    "reason": "“风波之恐，覆溺之虞”中“虞”与上文“恐”并举，表示忧患、担心，不是“料想”。",
+    "dict_headword": "虞",
+    "dict_excerpt": "《重編國語辭典修訂本》“虞”：[動] 1.憂慮。3.預料、猜想。此句取“憂慮”義。"
+  },
+  "beijing-2016-None#9#C": {
+    "actual_gloss": "征收赋税",
+    "part_of_speech": "动词",
+    "reason": "“楚不赋于民而财用足也”说的是楚国不向百姓征税，财用却依然充足。"
+  },
+  "beijing-2017-None#9#D": {
+    "actual_gloss": "改变",
+    "part_of_speech": "动词",
+    "reason": "“宗元之论出，而诸子之论废矣，虽圣人复起，不能易也”说的是这种判断不能再改变，不是互相交换。",
+    "dict_headword": "易",
+    "dict_excerpt": "《重編國語辭典修訂本》“易”：[動] 2.改變。"
+  },
+  "beijing-2018-None#8#D": {
+    "actual_gloss": "品行、德行",
+    "part_of_speech": "名词",
+    "reason": "孔子评子贡赎人一段讨论的是善行能否持续推广，“无损于行”中的“行”指人的德行、品行，不是泛指“行为”。",
+    "dict_headword": "行",
+    "dict_excerpt": "《重編國語辭典修訂本》“行”：[名] 行為舉止。如「品行」、「操行」、「德行」。"
+  },
+  "beijing-2020-None#6#A": {
+    "actual_gloss": "灾祸、祸患",
+    "part_of_speech": "名词",
+    "reason": "“赵亡，难必及韩、魏矣”中的“难”指祸患将波及韩、魏，不是“难免”。",
+    "dict_headword": "難",
+    "dict_excerpt": "《重編國語辭典修訂本》“難”：[名] 1.災禍。"
+  },
+  "beijing-2020-None#7#B": {
+    "actual_gloss": "因为",
+    "part_of_speech": "介词",
+    "reason": "“以汾水可以灌魏之安邑”中的“以”引出原因，意思是“因为汾水能够灌魏的安邑”。"
+  },
+  "beijing-2021-None#6#C": {
+    "actual_gloss": "堤防、屏障",
+    "part_of_speech": "名词",
+    "reason": "“以旧防为无益而去之，必有水灾”与后文“礼义之旧防也”相照应，这里的“防”是堤防、屏障的比喻义，不是动词“防备”。",
+    "dict_headword": "防",
+    "dict_excerpt": "《重編國語辭典修訂本》“防”：[名] 1.堤、壩。此句取“堤防、屏障”義。"
+  },
+  "beijing-2023-None#6#A": {
+    "actual_gloss": "扩大、开拓",
+    "part_of_speech": "动词",
+    "reason": "“辟地广境数千里”与“辟地”连用，“广境”是扩展疆界的意思，不是形容边境宽广。",
+    "dict_headword": "廣",
+    "dict_excerpt": "《重編國語辭典修訂本》“廣”：[動] 1.擴大、增加。"
+  },
+  "beijing-2024-None#6#C": {
+    "actual_gloss": "消除、解除",
+    "part_of_speech": "动词",
+    "reason": "“说百姓之忧者”中的“说”通“悦”义引申，表示解消百姓忧患，不是“谈论”。"
+  },
+  "beijing-2025-None#6#C": {
+    "actual_gloss": "方法、计策",
+    "part_of_speech": "名词",
+    "reason": "“众无谋方，乞谨视见”中的“方”指谋划、方略，不是空间方向。",
+    "dict_headword": "方",
+    "dict_excerpt": "《重編國語辭典修訂本》“方”：[名] 5.法子、辦法。"
+  },
+  "beijing-2022-None#6#D": {
+    "actual_gloss": "几乎、将近",
+    "part_of_speech": "副词",
+    "reason": "“祸几及身”是说祸患几乎危及自身，“几”表示相去不远，不是“大多”。",
+    "dict_headword": "幾",
+    "dict_excerpt": "《重編國語辭典修訂本》“幾”：[副] 1.將近、相去不遠。如「幾及」。"
+  }
+}

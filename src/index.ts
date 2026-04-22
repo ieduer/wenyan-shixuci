@@ -106,7 +106,10 @@ interface BankOption {
   key?: string;
   term_id?: string;
   headword?: string;
+  sentence?: string;
+  context_window?: string[];
   sentences?: string[];
+  sentence_contexts?: string[][];
   usage_profile?: UsageProfile[];
 }
 
@@ -122,6 +125,10 @@ interface BankItem {
   term_id: string;
   term_ids?: string[];
   priority_level?: string;
+  source_kind?: string;
+  source_label?: string;
+  source_title?: string;
+  source_meta?: Record<string, unknown>;
   year?: number;
   paper?: string;
   paper_key?: string;
@@ -129,6 +136,7 @@ interface BankItem {
   stem: string;
   sentence?: string;
   passage?: string;
+  context_window?: string[];
   options: BankOption[];
   response_mode?: "single_select" | "multi_select";
 }
@@ -232,9 +240,14 @@ interface ChallengePromptPayload {
   termIds: string[];
   senseKey: string;
   priorityLevel?: string;
+  sourceKind?: string;
+  sourceLabel?: string;
+  sourceTitle?: string;
+  sourceMeta?: Record<string, unknown>;
   stem: string;
   sentence?: string;
   passage?: string;
+  contextWindow?: string[];
   options: BankOption[];
   responseMode: "single_select" | "multi_select";
 }
@@ -269,19 +282,14 @@ interface PlayerStateRow {
 const SESSION_COOKIE = "wy_session";
 const DEV_SIGNING_SECRET = "local-dev-only-not-for-production";
 const ROUND_SIZE = 10;
-const QUESTION_TYPE_ORDER_CONTENT: QuestionType[] = ["content_gloss", "sentence_meaning", "passage_meaning"];
-const QUESTION_TYPE_ORDER_FUNCTION: QuestionType[] = [
-  "xuci_pair_compare",
-  "function_profile",
-  "function_profile",
-  "xuci_pair_compare",
-  "function_profile",
-  "function_profile",
-  "xuci_pair_compare",
-  "function_profile",
-  "function_profile",
-  "xuci_pair_compare",
-];
+const EXAM_TYPE_PRIORITY: Record<Kind, QuestionType[]> = {
+  content_word: ["content_gloss", "passage_meaning"],
+  function_word: ["xuci_pair_compare", "function_gloss"],
+};
+const TEXTBOOK_TYPE_PRIORITY: Record<Kind, QuestionType[]> = {
+  content_word: ["sentence_meaning"],
+  function_word: ["function_profile"],
+};
 const BADGE_DEFS = [
   { key: "first-correct", title: "初鸣勋章", detail: "答对第一题" },
   { key: "streak-3", title: "三连破阵", detail: "连续答对 3 题" },
@@ -374,7 +382,7 @@ async function handleBootstrap(request: Request, env: Env): Promise<Response> {
           (sum, questionType) => sum + (runtime.examQuestions.challenge_bank[questionType as QuestionType]?.length || 0),
           0
         ),
-        contentChallenges: QUESTION_TYPE_ORDER_CONTENT.reduce(
+        contentChallenges: [...EXAM_TYPE_PRIORITY.content_word, ...TEXTBOOK_TYPE_PRIORITY.content_word].reduce(
           (sum, questionType) => sum + (runtime.examQuestions.challenge_bank[questionType]?.length || 0),
           0
         ),
@@ -503,9 +511,14 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
     termIds: bankItem.term_ids && bankItem.term_ids.length ? bankItem.term_ids : [bankItem.term_id],
     senseKey,
     priorityLevel: bankItem.priority_level,
+    sourceKind: bankItem.source_kind,
+    sourceLabel: bankItem.source_label,
+    sourceTitle: bankItem.source_title,
+    sourceMeta: bankItem.source_meta,
     stem: bankItem.stem,
     sentence: bankItem.sentence,
     passage: bankItem.passage,
+    contextWindow: bankItem.context_window || [],
     options: bankItem.options,
     responseMode: bankItem.response_mode || "single_select",
   };
@@ -598,7 +611,7 @@ async function handleChallengeAnswer(request: Request, env: Env): Promise<Respon
   }
 
   const row = await env.DB.prepare(
-    `SELECT id, run_id, question_type, kind, term_id, term_ids_json, sense_key, prompt_json, answer_json, answered_at
+    `SELECT id, run_id, question_type, kind, term_id, term_ids_json, sense_key, prompt_json, answer_json, submitted_answer_json, correct, score, answered_at
      FROM challenge_items WHERE id = ? AND run_id = ? AND session_id = ?`
   )
     .bind(tokenPayload.iid, tokenPayload.rid, owner.ownerId)
@@ -606,15 +619,43 @@ async function handleChallengeAnswer(request: Request, env: Env): Promise<Respon
   if (!row) {
     return json({ error: "Challenge item not found" }, 404);
   }
-  if (row.answered_at) {
-    return json({ error: "This item has already been answered" }, 409);
-  }
 
   const prompt = safeParseObject(row.prompt_json) as unknown as ChallengePromptPayload;
   const answer = safeParseObject(row.answer_json) as unknown as BankAnswer;
   const answerKey = runtime.answerKeys[prompt.challengeId];
   if (!answerKey) {
     return json({ error: `Answer key missing for ${prompt.challengeId}` }, 500);
+  }
+  if (row.answered_at) {
+    const storedSubmitted = safeParseObject(row.submitted_answer_json) as unknown as ChallengeAnswerPayload;
+    const relevantTermIds = resolveRelevantTermIds(prompt, answer, storedSubmitted || {});
+    const run = await getRun(env, String(row.run_id), owner.ownerId);
+    const playerState = await getPlayerState(env, owner.ownerId, String(row.kind || prompt.kind || "content_word") as Kind);
+    const pendingReviewCount = await countPendingReview(env, owner.ownerId, String(row.kind || prompt.kind || "content_word") as Kind);
+    return json(
+      {
+        ok: true,
+        alreadyAnswered: true,
+        result: {
+          correct: Number(row.correct || 0) === 1,
+          scoreDelta: Number(row.score || 0),
+          encouragingFeedback: "",
+          explanation: answerKey.explanation,
+          pendingReviewCount,
+          relatedTerms: relevantTermIds,
+          correctAnswer: answer,
+          submittedAnswer: storedSubmitted,
+          answerKey,
+        },
+        run: run ? summarizeRun(run) : null,
+        badges: [],
+        roundCompleted: false,
+        round: null,
+        player: summarizePlayerState(playerState),
+        report: null,
+      },
+      200
+    );
   }
   const correct = evaluateAnswer(prompt.responseMode, answer, submitted);
   const relevantTermIds = resolveRelevantTermIds(prompt, answer, submitted);
@@ -1011,18 +1052,32 @@ function selectBankItem(
     return null;
   }
 
-  const rotation = kind === "function_word" ? QUESTION_TYPE_ORDER_FUNCTION : QUESTION_TYPE_ORDER_CONTENT;
-  const desiredType = rotation[answeredCount % rotation.length];
-  const primaryItems = pickBankByPriority(bank[desiredType] || [], playerState);
-  const selectedPrimary = chooseUnusedItem(primaryItems, usedChallengeIds, `${ownerId}:${String(runRow.id)}:${desiredType}:${answeredCount}`);
-  if (selectedPrimary) {
-    return selectedPrimary;
+  const desiredSourceKind = answeredCount % 2 === 0 ? "exam" : "textbook";
+  const sourceBuckets = desiredSourceKind === "exam" ? EXAM_TYPE_PRIORITY[kind] : TEXTBOOK_TYPE_PRIORITY[kind];
+  for (const qType of sourceBuckets) {
+    const items = pickBankByPriority((bank[qType] || []).filter((item) => String(item.source_kind || "") === desiredSourceKind), playerState);
+    const selected = chooseUnusedItem(items, usedChallengeIds, `${ownerId}:${String(runRow.id)}:${desiredSourceKind}:${qType}:${answeredCount}`);
+    if (selected) {
+      return selected;
+    }
   }
 
-  for (const qType of rotation) {
+  const fallbackBuckets = desiredSourceKind === "exam" ? TEXTBOOK_TYPE_PRIORITY[kind] : EXAM_TYPE_PRIORITY[kind];
+  for (const qType of fallbackBuckets) {
+    const fallbackSource = desiredSourceKind === "exam" ? "textbook" : "exam";
+    const items = pickBankByPriority((bank[qType] || []).filter((item) => String(item.source_kind || "") === fallbackSource), playerState);
+    const selected = chooseUnusedItem(items, usedChallengeIds, `${ownerId}:${String(runRow.id)}:${fallbackSource}:${qType}:${answeredCount}`);
+    if (selected) {
+      return selected;
+    }
+  }
+
+  for (const qType of [...EXAM_TYPE_PRIORITY[kind], ...TEXTBOOK_TYPE_PRIORITY[kind]]) {
     const items = pickBankByPriority(bank[qType] || [], playerState);
-    const selected = chooseUnusedItem(items, usedChallengeIds, `${ownerId}:${String(runRow.id)}:${qType}:${answeredCount}`);
-    if (selected) return selected;
+    const selected = chooseUnusedItem(items, usedChallengeIds, `${ownerId}:${String(runRow.id)}:fallback:${qType}:${answeredCount}`);
+    if (selected) {
+      return selected;
+    }
   }
   return null;
 }

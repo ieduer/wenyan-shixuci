@@ -166,14 +166,19 @@ function renderQuestion() {
   const headword = termHeadword(prompt.termId);
   const parts = [
     `<article class="question-card">`,
+    prompt.sourceLabel ? `<div class="question-source">${escapeHtml(prompt.sourceLabel)}</div>` : "",
     `<h2 class="question-stem">${escapeHtml(prompt.stem)}</h2>`,
   ];
 
   if (prompt.sentence) {
-    parts.push(`<div class="question-context">${highlightTerm(prompt.sentence, headword)}</div>`);
+    parts.push(
+      `<div class="question-context" title="${escapeAttr(contextTooltip(prompt.contextWindow || []))}">${highlightTerm(prompt.sentence, headword)}</div>`
+    );
   }
   if (prompt.passage) {
-    parts.push(`<div class="question-passage">${highlightTerm(prompt.passage, headword)}</div>`);
+    parts.push(
+      `<div class="question-passage" title="${escapeAttr(contextTooltip(prompt.contextWindow || []))}">${highlightTerm(prompt.passage, headword)}</div>`
+    );
   }
 
   parts.push(`<div class="option-list">`);
@@ -192,7 +197,12 @@ function renderQuestion() {
 
     if (prompt.questionType === "xuci_pair_compare") {
       const sentences = Array.isArray(option.sentences)
-        ? option.sentences.map((sentence) => `<div class="pair-sentence">${highlightTerm(sentence, option.headword || headword)}</div>`).join("")
+        ? option.sentences
+            .map((sentence, index) => {
+              const contexts = Array.isArray(option.sentence_contexts) ? option.sentence_contexts[index] || [] : [];
+              return `<div class="pair-sentence" title="${escapeAttr(contextTooltip(contexts))}">${highlightTerm(sentence, option.headword || headword)}</div>`;
+            })
+            .join("")
         : "";
       parts.push(`
         <button class="${classes}" type="button" data-option="${escapeAttr(key)}" ${state.answered ? "disabled" : ""}>
@@ -207,7 +217,7 @@ function renderQuestion() {
     }
 
     parts.push(`
-      <button class="${classes}" type="button" data-option="${escapeAttr(key)}" ${state.answered ? "disabled" : ""}>
+      <button class="${classes}" type="button" data-option="${escapeAttr(key)}" title="${escapeAttr(contextTooltip(option.context_window || []))}" ${state.answered ? "disabled" : ""}>
         <div class="option-head">
           <span class="option-tag">${escapeHtml(key)}</span>
         </div>
@@ -407,7 +417,9 @@ async function submitAnswer(label) {
     state.answerReveal = buildAnswerReveal(payload?.result?.correctAnswer, payload?.result?.submittedAnswer);
     state.answerCard = payload?.result?.answerKey || null;
     state.player = payload?.player || state.player || currentPlayerState();
-    state.roundMarks.push(correct);
+    if (!payload?.alreadyAnswered) {
+      state.roundMarks.push(correct);
+    }
     state.roundComplete = payload?.roundCompleted ? payload.round || null : null;
     renderShell();
     if (state.roundComplete) {
@@ -501,6 +513,14 @@ function countTrue(values) {
 
 function cleanInline(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function contextTooltip(items) {
+  const lines = (Array.isArray(items) ? items : [])
+    .map((item) => cleanInline(item))
+    .filter(Boolean)
+    .slice(0, 7);
+  return lines.join("\n");
 }
 
 async function api(url, init = {}) {
