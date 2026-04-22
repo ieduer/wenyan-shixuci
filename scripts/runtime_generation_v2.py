@@ -29,7 +29,7 @@ from check_sources import (
 )
 
 
-ASSET_MAX_BYTES = int(os.environ.get("ASSET_MAX_BYTES", "26214400"))
+ASSET_MAX_BYTES = int(os.environ.get("ASSET_MAX_BYTES", str(5 * 1024 * 1024)))
 RUNTIME_MIRROR_DIR = REPO_ROOT / "data" / "runtime"
 PUBLIC_RUNTIME_DIR = REPO_ROOT / "public" / "runtime"
 PRIVATE_RUNTIME_DIR = REPO_ROOT / "data" / "runtime_private"

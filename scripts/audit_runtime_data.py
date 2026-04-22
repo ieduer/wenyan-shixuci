@@ -39,6 +39,23 @@ def looks_like_public_answer_leak(item: dict[str, Any]) -> bool:
     return "answer" in item or "explanation" in item or "correct_label" in item
 
 
+def load_runtime_asset(manifest: dict[str, Any], asset_name: str) -> Any:
+    asset = dict((manifest.get("assets") or {}).get(asset_name) or {})
+    shards = list(asset.get("shards") or [])
+    if not shards:
+        raise FileNotFoundError(f"Runtime asset missing: {asset_name}")
+    payloads = [load_json(PUBLIC_RUNTIME_DIR / str(shard.get("file_name") or "")) for shard in shards]
+    if asset.get("kind") == "list":
+        merged: list[Any] = []
+        for payload in payloads:
+            merged.extend(list(payload or []))
+        return merged
+    merged_object: dict[str, Any] = {}
+    for payload in payloads:
+        merged_object.update(dict(payload or {}))
+    return merged_object
+
+
 def validate_option_text(text: str, question_type: str) -> str | None:
     cleaned = clean_text(text)
     if not cleaned:
@@ -201,15 +218,15 @@ def duplicate_prompt_counts(challenge_bank: dict[str, list[dict[str, Any]]]) -> 
 def build_summary_report() -> dict[str, Any]:
     source_report = collect_source_report()
     manifest = load_json(PUBLIC_RUNTIME_DIR / "manifest.json")
-    terms_function = load_json(PUBLIC_RUNTIME_DIR / "terms_function.json")
-    terms_content = load_json(PUBLIC_RUNTIME_DIR / "terms_content.json")
-    exam_questions = load_json(PUBLIC_RUNTIME_DIR / "exam_questions.json")
-    corpus_indexes = load_json(PUBLIC_RUNTIME_DIR / "corpus_indexes.json")
-    textbook_frequency_table = load_json(PUBLIC_RUNTIME_DIR / "textbook_frequency_table.json")
-    exam_frequency_table = load_json(PUBLIC_RUNTIME_DIR / "exam_frequency_table.json")
-    union_frequency_table = load_json(PUBLIC_RUNTIME_DIR / "union_frequency_table.json")
-    function_usage_table = load_json(PUBLIC_RUNTIME_DIR / "function_usage_table.json")
-    textbook_note_stats = load_json(PUBLIC_RUNTIME_DIR / "textbook_note_stats.json")
+    terms_function = load_runtime_asset(manifest, "terms_function")
+    terms_content = load_runtime_asset(manifest, "terms_content")
+    exam_questions = load_runtime_asset(manifest, "exam_questions")
+    corpus_indexes = load_runtime_asset(manifest, "corpus_indexes")
+    textbook_frequency_table = load_runtime_asset(manifest, "textbook_frequency_table")
+    exam_frequency_table = load_runtime_asset(manifest, "exam_frequency_table")
+    union_frequency_table = load_runtime_asset(manifest, "union_frequency_table")
+    function_usage_table = load_runtime_asset(manifest, "function_usage_table")
+    textbook_note_stats = load_runtime_asset(manifest, "textbook_note_stats")
     answer_keys = load_json(PRIVATE_RUNTIME_DIR / "answer_keys.json")
     textbook_source_audit = load_json(TEXTBOOK_SOURCE_AUDIT_PATH) if TEXTBOOK_SOURCE_AUDIT_PATH.exists() else {}
 
