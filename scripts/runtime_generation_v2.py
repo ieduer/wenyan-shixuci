@@ -2923,6 +2923,57 @@ def build_textbook_note_table(textbook_refs: dict[str, list[dict[str, Any]]]) ->
     return rows
 
 
+def build_textbook_note_term_index(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        term_id = str(row.get("term_id") or "")
+        bucket = grouped.setdefault(
+            term_id,
+            {
+                "term_id": term_id,
+                "kind": row.get("kind"),
+                "headword": row.get("headword"),
+                "note_count": 0,
+                "source_titles": [],
+                "book_titles": [],
+                "school_stages": [],
+                "ref_ids": [],
+            },
+        )
+        bucket["note_count"] += 1
+        bucket["source_titles"].append(clean_text(str(row.get("source_title") or "")))
+        bucket["book_titles"].append(clean_text(str(row.get("book_title") or "")))
+        bucket["school_stages"].append(clean_text(str(row.get("school_stage") or "")))
+        bucket["ref_ids"].append(clean_text(str(row.get("ref_id") or "")))
+    results: list[dict[str, Any]] = []
+    for bucket in grouped.values():
+        bucket["source_titles"] = unique_clean_strings(bucket["source_titles"])
+        bucket["book_titles"] = unique_clean_strings(bucket["book_titles"])
+        bucket["school_stages"] = unique_clean_strings(bucket["school_stages"])
+        bucket["ref_ids"] = unique_clean_strings(bucket["ref_ids"])
+        results.append(bucket)
+    return sorted(results, key=lambda item: (-int(item.get("note_count") or 0), str(item.get("term_id") or "")))
+
+
+def build_textbook_note_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    by_kind = Counter(str(row.get("kind") or "") for row in rows if clean_text(str(row.get("kind") or "")))
+    by_stage = Counter(clean_text(str(row.get("school_stage") or "")) for row in rows if clean_text(str(row.get("school_stage") or "")))
+    by_book = Counter(clean_text(str(row.get("book_title") or "")) for row in rows if clean_text(str(row.get("book_title") or "")))
+    by_title = Counter(clean_text(str(row.get("source_title") or "")) for row in rows if clean_text(str(row.get("source_title") or "")))
+    by_headword = Counter(clean_text(str(row.get("headword") or "")) for row in rows if clean_text(str(row.get("headword") or "")))
+    return {
+        "total_notes": len(rows),
+        "content_notes": sum(1 for row in rows if str(row.get("kind") or "") == "content_word"),
+        "function_notes": sum(1 for row in rows if str(row.get("kind") or "") == "function_word"),
+        "unique_terms": len({str(row.get("term_id") or "") for row in rows if str(row.get("term_id") or "")}),
+        "by_kind": dict(by_kind),
+        "by_school_stage": dict(by_stage),
+        "top_books": [{"book_title": key, "count": value} for key, value in by_book.most_common(20)],
+        "top_titles": [{"source_title": key, "count": value} for key, value in by_title.most_common(30)],
+        "top_headwords": [{"headword": key, "count": value} for key, value in by_headword.most_common(40)],
+    }
+
+
 def write_table_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     fieldnames = [
         "ref_id",
@@ -3136,6 +3187,10 @@ def main() -> int:
 
     sections, textbook_refs = build_textbook_sections()
     textbook_note_table = build_textbook_note_table(textbook_refs)
+    textbook_note_content = [row for row in textbook_note_table if str(row.get("kind") or "") == "content_word"]
+    textbook_note_function = [row for row in textbook_note_table if str(row.get("kind") or "") == "function_word"]
+    textbook_note_term_index = build_textbook_note_term_index(textbook_note_table)
+    textbook_note_stats = build_textbook_note_stats(textbook_note_table)
     all_headwords = sorted(
         {
             str(term.get("headword") or "")
@@ -3223,6 +3278,8 @@ def main() -> int:
     clear_old_runtime_files()
     write_private_answer_keys(answer_keys)
     write_table_csv(PRIVATE_RUNTIME_DIR / "textbook_notes_table.csv", textbook_note_table)
+    write_table_csv(PRIVATE_RUNTIME_DIR / "textbook_notes_content.csv", textbook_note_content)
+    write_table_csv(PRIVATE_RUNTIME_DIR / "textbook_notes_function.csv", textbook_note_function)
 
     manifest_payload = {
         "built_at": datetime.now(timezone.utc).isoformat(),
@@ -3235,6 +3292,8 @@ def main() -> int:
             "textbook_corpus_docs": len(textbook_passages),
             "exam_corpus_docs": len(exam_passages),
             "textbook_notes": len(textbook_note_table),
+            "textbook_content_notes": len(textbook_note_content),
+            "textbook_function_notes": len(textbook_note_function),
             "challenge_counts": {key: len(value) for key, value in challenge_bank.items()},
         },
     }
@@ -3243,6 +3302,10 @@ def main() -> int:
     write_runtime_asset("exam_questions", exam_questions, "object", manifest_payload)
     write_runtime_asset("textbook_examples", textbook_examples, "object", manifest_payload)
     write_runtime_asset("textbook_notes_table", textbook_note_table, "list", manifest_payload)
+    write_runtime_asset("textbook_notes_content", textbook_note_content, "list", manifest_payload)
+    write_runtime_asset("textbook_notes_function", textbook_note_function, "list", manifest_payload)
+    write_runtime_asset("textbook_note_term_index", textbook_note_term_index, "list", manifest_payload)
+    write_runtime_asset("textbook_note_stats", textbook_note_stats, "object", manifest_payload)
     write_runtime_asset("dict_links", dict_links, "object", manifest_payload)
     write_runtime_asset("corpus_indexes", corpus_indexes, "object", manifest_payload)
     write_runtime_asset("textbook_frequency_table", textbook_frequency_table, "list", manifest_payload)

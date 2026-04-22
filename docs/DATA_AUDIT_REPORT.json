@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-22T11:52:17.053756+00:00",
+  "generated_at": "2026-04-22T11:59:53.717039+00:00",
   "source_ok": true,
   "source_report": {
     "ok": true,
@@ -154,6 +154,8 @@
     "textbook_corpus_docs": 55,
     "exam_corpus_docs": 52,
     "textbook_notes": 490,
+    "textbook_content_notes": 488,
+    "textbook_function_notes": 2,
     "challenge_counts": {
       "xuci_pair_compare": 16,
       "function_gloss": 13,
@@ -1270,6 +1272,9 @@
   "corpus": {
     "textbook_doc_count": 55,
     "exam_doc_count": 52,
+    "textbook_note_count": 490,
+    "textbook_content_note_count": 488,
+    "textbook_function_note_count": 2,
     "textbook_token_count": 2051,
     "exam_token_count": 2352,
     "union_token_count": 3104,
@@ -1433,6 +1438,88 @@
       {
         "token": "时",
         "frequency": 126
+      }
+    ],
+    "top_textbook_note_titles": [
+      {
+        "source_title": "燕歌行并序",
+        "count": 26
+      },
+      {
+        "source_title": "氓",
+        "count": 25
+      },
+      {
+        "source_title": "孔雀东南飞并序",
+        "count": 25
+      },
+      {
+        "source_title": "琵琶行并序",
+        "count": 24
+      },
+      {
+        "source_title": "屈原列传",
+        "count": 22
+      },
+      {
+        "source_title": "劝学",
+        "count": 20
+      },
+      {
+        "source_title": "促织",
+        "count": 20
+      },
+      {
+        "source_title": "答司马谏议书",
+        "count": 19
+      },
+      {
+        "source_title": "赤壁赋",
+        "count": 19
+      },
+      {
+        "source_title": "庖丁解牛",
+        "count": 18
+      },
+      {
+        "source_title": "蜀道难",
+        "count": 18
+      },
+      {
+        "source_title": "苏武传",
+        "count": 17
+      },
+      {
+        "source_title": "阿房宫赋",
+        "count": 12
+      },
+      {
+        "source_title": "短歌行",
+        "count": 12
+      },
+      {
+        "source_title": "石钟山记",
+        "count": 12
+      },
+      {
+        "source_title": "师说",
+        "count": 12
+      },
+      {
+        "source_title": "子路、曾皙、冉有、公西华侍坐",
+        "count": 11
+      },
+      {
+        "source_title": "将进酒",
+        "count": 11
+      },
+      {
+        "source_title": "归园田居（其一）",
+        "count": 11
+      },
+      {
+        "source_title": "梦游天姥吟留别",
+        "count": 11
       }
     ]
   },

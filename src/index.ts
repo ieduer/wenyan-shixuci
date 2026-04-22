@@ -194,6 +194,7 @@ interface RuntimeManifest {
 interface DataQualitySummary {
   generated_at: string;
   source_ok: boolean;
+  manifest_stats?: Record<string, unknown>;
   content: {
     term_count: number;
     core_term_count: number;
@@ -359,6 +360,7 @@ async function handleBootstrap(request: Request, env: Env): Promise<Response> {
   const leaderboard = await loadLeaderboard(env, "content_word");
   const contentState = await getPlayerState(env, owner.ownerId, "content_word");
   const functionState = await getPlayerState(env, owner.ownerId, "function_word");
+  const manifestStats = runtime.dataQuality?.manifest_stats || {};
   const response = json(
     {
       ok: true,
@@ -382,6 +384,9 @@ async function handleBootstrap(request: Request, env: Env): Promise<Response> {
       stats: {
         functionTerms: runtime.termsFunction.length,
         contentTerms: runtime.termsContent.length,
+        textbookNotes: Number(manifestStats["textbook_notes"] || 0),
+        textbookContentNotes: Number(manifestStats["textbook_content_notes"] || 0),
+        textbookFunctionNotes: Number(manifestStats["textbook_function_notes"] || 0),
         functionChallenges: ["xuci_pair_compare", "function_gloss"].reduce(
           (sum, questionType) => sum + (runtime.examQuestions.challenge_bank[questionType as QuestionType]?.length || 0),
           0

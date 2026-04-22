@@ -155,6 +155,7 @@ def build_summary_report() -> dict[str, Any]:
     exam_frequency_table = load_json(PUBLIC_RUNTIME_DIR / "exam_frequency_table.json")
     union_frequency_table = load_json(PUBLIC_RUNTIME_DIR / "union_frequency_table.json")
     function_usage_table = load_json(PUBLIC_RUNTIME_DIR / "function_usage_table.json")
+    textbook_note_stats = load_json(PUBLIC_RUNTIME_DIR / "textbook_note_stats.json")
     answer_keys = load_json(PRIVATE_RUNTIME_DIR / "answer_keys.json")
 
     challenge_bank = exam_questions["challenge_bank"]
@@ -207,10 +208,14 @@ def build_summary_report() -> dict[str, Any]:
         "corpus": {
             "textbook_doc_count": len(corpus_indexes.get("textbook", [])),
             "exam_doc_count": len(corpus_indexes.get("exam", [])),
+            "textbook_note_count": int(textbook_note_stats.get("total_notes") or 0),
+            "textbook_content_note_count": int(textbook_note_stats.get("content_notes") or 0),
+            "textbook_function_note_count": int(textbook_note_stats.get("function_notes") or 0),
             "textbook_token_count": len(textbook_frequency_table),
             "exam_token_count": len(exam_frequency_table),
             "union_token_count": len(union_frequency_table),
             "top_union_tokens": union_frequency_table[:40],
+            "top_textbook_note_titles": list(textbook_note_stats.get("top_titles") or [])[:20],
         },
         "runtime": {
             "challenge_counts": {key: len(value) for key, value in challenge_bank.items()},
@@ -252,6 +257,9 @@ def write_reports(report: dict[str, Any]) -> None:
         "",
         "## 语料与切分",
         f"- 教材篇目数：{report['corpus']['textbook_doc_count']}",
+        f"- 教材注释数：{report['corpus']['textbook_note_count']}",
+        f"- 教材实词注释数：{report['corpus']['textbook_content_note_count']}",
+        f"- 教材虚词注释数：{report['corpus']['textbook_function_note_count']}",
         f"- 真题文段数：{report['corpus']['exam_doc_count']}",
         f"- 教材切分词数：{report['corpus']['textbook_token_count']}",
         f"- 真题切分词数：{report['corpus']['exam_token_count']}",
