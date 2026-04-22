@@ -297,6 +297,7 @@ def write_reports(report: dict[str, Any]) -> None:
     quality = {
         "generated_at": report["generated_at"],
         "source_ok": report["source_ok"],
+        "manifest_stats": report["manifest_stats"],
         "content": {
             "term_count": report["content"]["term_count"],
             "core_term_count": report["content"]["core_term_count"],
@@ -309,6 +310,9 @@ def write_reports(report: dict[str, Any]) -> None:
         "corpus": {
             "textbook_doc_count": report["corpus"]["textbook_doc_count"],
             "exam_doc_count": report["corpus"]["exam_doc_count"],
+            "textbook_note_count": report["corpus"]["textbook_note_count"],
+            "textbook_content_note_count": report["corpus"]["textbook_content_note_count"],
+            "textbook_function_note_count": report["corpus"]["textbook_function_note_count"],
             "union_token_count": report["corpus"]["union_token_count"],
         },
         "runtime": {
