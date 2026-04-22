@@ -6,6 +6,8 @@ const state = {
   bootstrap: null,
   theme: loadTheme(),
   kind: "",
+  mode: "ladder",
+  sourceRunId: "",
   run: null,
   currentItem: null,
   answered: false,
@@ -16,7 +18,6 @@ const state = {
   roundComplete: null,
   player: null,
   leaderboard: null,
-  autoAdvanceTimer: 0,
 };
 
 const els = {
@@ -41,8 +42,6 @@ els.themeSelect?.addEventListener("change", (event) => {
   const value = event.target instanceof HTMLSelectElement ? event.target.value : "parchment";
   setTheme(value);
 });
-
-window.addEventListener("pagehide", clearAdvanceTimer);
 
 applyTheme(state.theme);
 
@@ -72,9 +71,10 @@ async function refreshBootstrap() {
   syncEntryButtons();
 }
 
-async function startChallenge(kind) {
-  clearAdvanceTimer();
+async function startChallenge(kind, mode = "ladder", sourceRunId = "") {
   state.kind = kind;
+  state.mode = mode;
+  state.sourceRunId = sourceRunId;
   state.run = null;
   state.currentItem = null;
   state.answered = false;
@@ -101,11 +101,16 @@ async function loadNextQuestion() {
     return;
   }
   const search = new URLSearchParams({ kind: state.kind });
+  search.set("mode", state.mode || "ladder");
   if (state.run?.id && !state.roundComplete) {
     search.set("runId", state.run.id);
   }
+  if (!state.run?.id && state.sourceRunId) {
+    search.set("sourceRunId", state.sourceRunId);
+  }
   const payload = await api(`/api/challenge/next?${search.toString()}`);
   state.run = payload.run || null;
+  state.mode = payload.run?.mode || state.mode || "ladder";
   state.currentItem = payload.item || null;
   state.answered = false;
   state.submitting = false;
@@ -133,11 +138,12 @@ function renderStatus() {
   const kindLabelText = kindLabel(state.kind || player?.kind || "content_word");
   els.rankKicker.textContent = kindLabelText;
   els.rankName.textContent = player?.tierName || "工蜂";
-  els.rankMode.textContent = player?.modeName || "常規排位";
+  els.rankMode.textContent = state.mode === "review" ? "錯題回看" : player?.modeName || "常規排位";
   const answeredCount = Number(state.run?.answeredCount || state.roundMarks.length || 0);
+  const targetCount = Number(state.run?.targetCount || state.roundComplete?.targetCount || ROUND_SIZE);
   const correctCount = Number(state.run?.correctCount || countTrue(state.roundMarks) || 0);
-  els.roundFraction.textContent = `${answeredCount} / ${ROUND_SIZE}`;
-  els.roundGoal.textContent = `${correctCount} / ${ROUND_SIZE}`;
+  els.roundFraction.textContent = `${answeredCount} / ${targetCount}`;
+  els.roundGoal.textContent = `${correctCount} / ${targetCount}`;
   els.rankBadge.dataset.kind = state.kind || player?.kind || "";
 }
 
@@ -224,8 +230,14 @@ function renderQuestion() {
   els.questionRoot.querySelectorAll("[data-option]").forEach((button) => {
     button.addEventListener("click", () => submitAnswer(button.dataset.option || ""));
   });
+  els.questionRoot.querySelector("#continue-btn")?.addEventListener("click", () => {
+    void loadNextQuestion();
+  });
+  els.questionRoot.querySelector("#redo-mistakes-btn")?.addEventListener("click", () => {
+    void startChallenge(state.kind, "review", state.run?.id || "");
+  });
   els.questionRoot.querySelector("#next-round-btn")?.addEventListener("click", () => {
-    void startChallenge(state.kind);
+    void startChallenge(state.kind, "ladder");
   });
 }
 
@@ -267,6 +279,11 @@ function renderAnalysisCard() {
               .join("")}</div>`
           : ""
       }
+      ${
+        !state.roundComplete
+          ? `<div class="analysis-actions"><button id="continue-btn" class="next-round-btn" type="button">下一題</button></div>`
+          : ""
+      }
     </section>
   `;
 }
@@ -276,14 +293,39 @@ function renderCompletionCard() {
   const promoted = Boolean(state.roundComplete.promoted);
   const toTier = state.roundComplete.toTier || {};
   const fromTier = state.roundComplete.fromTier || {};
+  const reviewAvailable = Boolean(state.roundComplete.reviewAvailable);
+  const reviewCount = Number(state.roundComplete.reviewCount || 0);
+  const isReview = (state.roundComplete.mode || state.mode) === "review";
+  const authNote = state.bootstrap?.auth?.authenticated
+    ? `<p class="completion-note">已登入，本輪結果已自動寫入用戶系統。</p>`
+    : "";
   return `
     <section class="completion-card ${promoted ? "up" : "hold"}">
       <div class="completion-crest">${escapeHtml(toTier.tierName || fromTier.tierName || "工蜂")}</div>
       <div class="completion-copy">
-        <strong>${promoted ? "本輪全對，段位晉升" : "本輪未全對，段位保持"}</strong>
-        <span>${state.roundComplete.correctCount} / ${ROUND_SIZE}</span>
+        <strong>${
+          isReview
+            ? "這輪錯題回看已完成"
+            : promoted
+              ? "本輪全對，段位晉升"
+              : "本輪未全對，段位保持"
+        }</strong>
+        <span>${state.roundComplete.correctCount} / ${state.roundComplete.targetCount || ROUND_SIZE}</span>
+        ${
+          reviewAvailable
+            ? `<p class="completion-note">要不要把做錯的題再來一遍？目前還有 ${reviewCount} 題待回看。</p>`
+            : ""
+        }
+        ${authNote}
       </div>
-      <button id="next-round-btn" class="next-round-btn" type="button">再來一輪</button>
+      <div class="completion-actions">
+        ${
+          reviewAvailable
+            ? `<button id="redo-mistakes-btn" class="ghost-btn" type="button">錯題再來一遍</button>`
+            : ""
+        }
+        <button id="next-round-btn" class="next-round-btn" type="button">${isReview ? "返回常規題" : "再來一輪"}</button>
+      </div>
     </section>
   `;
 }
@@ -294,15 +336,20 @@ function renderRoundCompletion() {
       <p>本輪已結束，點擊詞類開始下一輪。</p>
     </div>
   `;
+  els.questionRoot.querySelector("#redo-mistakes-btn")?.addEventListener("click", () => {
+    void startChallenge(state.kind, "review", state.run?.id || "");
+  });
   els.questionRoot.querySelector("#next-round-btn")?.addEventListener("click", () => {
-    void startChallenge(state.kind);
+    void startChallenge(state.kind, "ladder");
   });
 }
 
 function renderRoundTrack() {
-  const marks = state.roundMarks.slice(0, ROUND_SIZE);
-  const currentIndex = state.currentItem?.prompt && !state.roundComplete ? Math.min(marks.length, ROUND_SIZE - 1) : -1;
-  els.roundTrack.innerHTML = Array.from({ length: ROUND_SIZE }, (_, index) => {
+  const targetCount = Number(state.run?.targetCount || state.roundComplete?.targetCount || ROUND_SIZE);
+  const marks = state.roundMarks.slice(0, targetCount);
+  const currentIndex = state.currentItem?.prompt && !state.roundComplete ? Math.min(marks.length, targetCount - 1) : -1;
+  els.roundTrack.style.gridTemplateColumns = `repeat(${targetCount}, minmax(0, 1fr))`;
+  els.roundTrack.innerHTML = Array.from({ length: targetCount }, (_, index) => {
     const status =
       index < marks.length ? (marks[index] ? "hit" : "miss") : index === currentIndex ? "current" : "pending";
     return `<span class="track-slot ${status}" aria-label="slot-${index + 1}"></span>`;
@@ -369,11 +416,6 @@ async function submitAnswer(label) {
       await loadLeaderboard(state.kind);
       return;
     }
-    clearAdvanceTimer();
-    state.autoAdvanceTimer = window.setTimeout(() => {
-      state.autoAdvanceTimer = 0;
-      void loadNextQuestion();
-    }, correct ? 2800 : 3400);
   } catch (error) {
     console.error(error);
     renderError(error.message || String(error));
@@ -455,13 +497,6 @@ function renderError(message) {
 
 function countTrue(values) {
   return values.filter(Boolean).length;
-}
-
-function clearAdvanceTimer() {
-  if (state.autoAdvanceTimer) {
-    window.clearTimeout(state.autoAdvanceTimer);
-    state.autoAdvanceTimer = 0;
-  }
 }
 
 function cleanInline(value) {

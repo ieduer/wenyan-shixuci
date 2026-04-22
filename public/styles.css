@@ -481,6 +481,13 @@ select {
   gap: 0.55rem;
 }
 
+.analysis-actions,
+.completion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
 .support-chip {
   display: inline-flex;
   align-items: center;
@@ -533,12 +540,28 @@ select {
   color: var(--muted);
 }
 
+.completion-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
 .next-round-btn {
   border: 0;
   border-radius: 999px;
   padding: 0.88rem 1.18rem;
   background: linear-gradient(135deg, var(--accent), var(--accent-strong));
   color: #fff9f2;
+  cursor: pointer;
+}
+
+.ghost-btn {
+  border: 1px solid color-mix(in srgb, var(--line) 92%, transparent);
+  border-radius: 999px;
+  padding: 0.88rem 1.18rem;
+  background: color-mix(in srgb, var(--surface-soft) 94%, transparent);
+  color: var(--ink);
   cursor: pointer;
 }
 
@@ -737,5 +760,10 @@ select {
 
   .completion-crest {
     margin: 0 auto;
+  }
+
+  .analysis-actions,
+  .completion-actions {
+    justify-content: center;
   }
 }

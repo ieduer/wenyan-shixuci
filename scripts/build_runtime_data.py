@@ -482,6 +482,18 @@ def stable_pick(items: list[str], seed: str, count: int) -> list[str]:
     return picked
 
 
+def stable_shuffle(items: list[str], seed: str) -> list[str]:
+    pool = [item for item in items if item]
+    if len(pool) <= 1:
+        return pool
+    keyed = []
+    for index, item in enumerate(pool):
+        digest = hashlib.sha1(f"{seed}:{index}:{item}".encode("utf-8")).hexdigest()
+        keyed.append((digest, index, item))
+    keyed.sort(key=lambda entry: (entry[0], entry[1]))
+    return [item for _digest, _index, item in keyed]
+
+
 def split_sentences(text: str) -> list[str]:
     prepared = clean_text(text)
     chunks = re.split(r"(?<=[。！？；!?])|(?<=/)", prepared)
@@ -1257,6 +1269,12 @@ def build_function_question_bank(
         profiles = [profile for profile in record.get("usage_relations", []) if format_usage_profile(profile)]
         if not profiles:
             continue
+        direct_evidence = sum(
+            int(record.get("question_type_counts", {}).get(subtype, 0))
+            for subtype in ("xuci_compare_same", "xuci_compare_diff", "xuci_explanation")
+        )
+        if direct_evidence <= 0:
+            continue
         term_id = str(record["term_id"])
         headword = str(record["headword"])
         seed = f"profile:{term_id}"
@@ -1267,7 +1285,7 @@ def build_function_question_bank(
         picked = stable_pick(distractors, seed, 3)
         if len(picked) < 3:
             continue
-        option_texts = stable_pick([correct_text, *picked], seed + ":options", 4)
+        option_texts = stable_shuffle([correct_text, *picked], seed + ":options")
         option_labels = ["A", "B", "C", "D"]
         correct_label = option_labels[option_texts.index(correct_text)]
         support = first_support_snippet(record)
@@ -1364,6 +1382,9 @@ def build_content_question_bank(
         selected_occurrences: dict[tuple[str, str, int, str], dict[str, Any]] = {}
         passage_candidates: dict[tuple[str, str, int, str], dict[str, Any]] = {}
         for index, occurrence in enumerate(term.get("occurrences", [])):
+            subtype = str(occurrence.get("question_subtype") or "")
+            if subtype not in {"shici_explanation", "national_raw_gloss_option"}:
+                continue
             gloss = clean_gloss(raw_headword, str(occurrence.get("gloss") or ""), str(occurrence.get("excerpt") or ""))
             paper_key = str(occurrence.get("paper_key") or "")
             qdoc = question_docs.get(paper_key, {})
@@ -1418,7 +1439,7 @@ def build_content_question_bank(
             distractors = choose_gloss_distractors(same_term_glosses, all_glosses, gloss, seed)
             if len(distractors) < 3:
                 continue
-            gloss_options = stable_pick([gloss, *distractors], seed + ":gloss", 4)
+            gloss_options = stable_shuffle([gloss, *distractors], seed + ":gloss")
             correct_label = option_labels[gloss_options.index(gloss)]
             source_label = f"{occurrence.get('year')} 年 {occurrence.get('paper')} 第 {occurrence.get('question_number')} 题"
 

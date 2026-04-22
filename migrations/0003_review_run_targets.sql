@@ -1,0 +1,2 @@
+ALTER TABLE challenge_runs ADD COLUMN target_count INTEGER NOT NULL DEFAULT 10;
+ALTER TABLE challenge_runs ADD COLUMN source_run_id TEXT DEFAULT NULL;

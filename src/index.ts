@@ -1,7 +1,7 @@
 import answerKeysData from "./generated/answer_keys.json";
 
 type Kind = "function_word" | "content_word";
-type Mode = "ladder";
+type Mode = "ladder" | "review";
 type QuestionType =
   | "xuci_pair_compare"
   | "function_gloss"
@@ -402,28 +402,55 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
   }
 
   const kind = canonicalKind(url.searchParams.get("kind"));
-  const mode: Mode = "ladder";
+  const mode = canonicalMode(url.searchParams.get("mode"));
   let runId = cleanString(url.searchParams.get("runId"), 80);
   let runRow = runId ? await getRun(env, runId, owner.ownerId) : null;
   if (!runRow) {
-    runRow = await findActiveRun(env, owner.ownerId, kind);
+    runRow = await findActiveRun(env, owner.ownerId, kind, mode);
     runId = runRow ? String(runRow.id || "") : "";
   }
   const playerState = await getPlayerState(env, owner.ownerId, kind);
   if (!runRow) {
+    const targetCount =
+      mode === "review" ? Math.min(ROUND_SIZE, await countPendingReview(env, owner.ownerId, kind)) : ROUND_SIZE;
+    if (mode === "review" && targetCount <= 0) {
+      return json(
+        {
+          ok: true,
+          run: null,
+          item: null,
+          roundCompleted: true,
+          round: {
+            mode,
+            answeredCount: 0,
+            correctCount: 0,
+            targetCount: 0,
+            reviewAvailable: false,
+            reviewCount: 0,
+            promoted: false,
+            perfect: false,
+            fromTier: getTierInfo(playerState.tier_index),
+            toTier: getTierInfo(playerState.tier_index),
+          },
+          player: summarizePlayerState(playerState),
+        },
+        200
+      );
+    }
     runId = crypto.randomUUID();
+    const sourceRunId = cleanString(url.searchParams.get("sourceRunId"), 80) || null;
     await env.DB.prepare(
-      `INSERT INTO challenge_runs (id, session_id, kind, mode, status, started_at, updated_at)
-       VALUES (?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+      `INSERT INTO challenge_runs (id, session_id, kind, mode, status, started_at, updated_at, target_count, source_run_id)
+       VALUES (?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?)`
     )
-      .bind(runId, owner.ownerId, kind, mode)
+      .bind(runId, owner.ownerId, kind, mode, targetCount, sourceRunId)
       .run();
     runRow = await getRun(env, runId, owner.ownerId);
   }
   if (!runRow) {
     return json({ error: "Unable to establish challenge run" }, 500);
   }
-  if (Number(runRow.answered_count || 0) >= ROUND_SIZE || String(runRow.status || "") === "finished") {
+  if (Number(runRow.answered_count || 0) >= getRunTargetCount(runRow) || String(runRow.status || "") === "finished") {
     return json(
       {
         ok: true,
@@ -437,9 +464,29 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
   }
 
   const usedChallengeIds = await listRunChallengeIds(env, runId, owner.ownerId);
-  const reviewItem = await peekReviewTarget(env, owner.ownerId);
-  const bankItem = selectBankItem(runtime, owner.ownerId, runRow, kind, playerState, usedChallengeIds, reviewItem);
+  const reviewTargets = mode === "review" ? await listPendingReviewTargets(env, owner.ownerId, kind) : [];
+  const bankItem = selectBankItem(runtime, owner.ownerId, runRow, kind, mode, playerState, usedChallengeIds, reviewTargets);
   if (!bankItem) {
+    if (mode === "review" && String(runRow.status || "") === "active") {
+      const roundSummary = await finalizeRound(env, owner.ownerId, runRow);
+      const finalizedRun = await getRun(env, runId, owner.ownerId);
+      const finalizedPlayer = await getPlayerState(env, owner.ownerId, kind);
+      const reportInfo = finalizedRun
+        ? await finalizeRunReport(env, owner.ownerId, finalizedRun, auth, auth?.cookieHeader || "")
+        : null;
+      return json(
+        {
+          ok: true,
+          run: finalizedRun ? summarizeRun(finalizedRun) : summarizeRun(runRow),
+          item: null,
+          roundCompleted: true,
+          round: roundSummary,
+          player: summarizePlayerState(finalizedPlayer),
+          report: reportInfo,
+        },
+        200
+      );
+    }
     return json({ error: "No challenge item available" }, 404);
   }
   const answerKey = runtime.answerKeys[bankItem.challenge_id];
@@ -586,16 +633,17 @@ async function handleChallengeAnswer(request: Request, env: Env): Promise<Respon
   await updateReviewQueue(env, owner.ownerId, relevantTermIds, String(row.sense_key), prompt.questionType, correct, String(row.id));
 
   let run = await getRun(env, String(row.run_id), owner.ownerId);
-  const pendingReviewCount = await countPendingReview(env, owner.ownerId);
+  const itemKind = String(row.kind || prompt.kind || "content_word") as Kind;
+  const pendingReviewCount = await countPendingReview(env, owner.ownerId, itemKind);
   const newlyUnlocked = run ? await unlockBadges(env, owner.ownerId, run, pendingReviewCount) : [];
-  let playerState = run ? await getPlayerState(env, owner.ownerId, String(run.kind || "content_word") as Kind) : null;
+  let playerState = run ? await getPlayerState(env, owner.ownerId, itemKind) : null;
   let roundSummary: Record<string, unknown> | null = null;
   let reportInfo: Record<string, unknown> | null = null;
 
-  if (run && Number(run.answered_count || 0) >= ROUND_SIZE && String(run.status || "") === "active") {
+  if (run && Number(run.answered_count || 0) >= getRunTargetCount(run) && String(run.status || "") === "active") {
     roundSummary = await finalizeRound(env, owner.ownerId, run);
     run = await getRun(env, String(row.run_id), owner.ownerId);
-    playerState = run ? await getPlayerState(env, owner.ownerId, String(run.kind || "content_word") as Kind) : playerState;
+    playerState = run ? await getPlayerState(env, owner.ownerId, itemKind) : playerState;
     if (run) {
       reportInfo = await finalizeRunReport(env, owner.ownerId, run, auth, auth?.cookieHeader || "");
     }
@@ -936,22 +984,31 @@ function selectBankItem(
   ownerId: string,
   runRow: Record<string, unknown>,
   kind: Kind,
+  mode: Mode,
   playerState: PlayerStateRow,
   usedChallengeIds: Set<string>,
-  reviewItem: Record<string, unknown> | null
+  reviewTargets: Array<Record<string, unknown>>
 ): BankItem | null {
   const bank = runtime.examQuestions.challenge_bank;
   const answeredCount = Number(runRow.answered_count || 0);
-  if (reviewItem) {
-    const reviewTermId = String(reviewItem.term_id || "");
-    const reviewQuestionType = String(reviewItem.question_type || "") as QuestionType;
-    const candidates = (bank[reviewQuestionType] || []).filter((item) =>
-      !usedChallengeIds.has(String(item.challenge_id || "")) &&
-      ((item.term_ids && item.term_ids.includes(reviewTermId)) || item.term_id === reviewTermId)
-    );
-    if (candidates.length) {
-      return candidates[answeredCount % candidates.length] || null;
+  if (mode === "review") {
+    for (const reviewTarget of reviewTargets) {
+      const reviewTermId = String(reviewTarget.term_id || "");
+      const reviewQuestionType = String(reviewTarget.question_type || "") as QuestionType;
+      const candidates = (bank[reviewQuestionType] || []).filter((item) =>
+        !usedChallengeIds.has(String(item.challenge_id || "")) &&
+        ((item.term_ids && item.term_ids.includes(reviewTermId)) || item.term_id === reviewTermId)
+      );
+      const selected = chooseUnusedItem(
+        candidates,
+        usedChallengeIds,
+        `${ownerId}:${String(runRow.id)}:${reviewQuestionType}:${reviewTermId}:${answeredCount}`
+      );
+      if (selected) {
+        return selected;
+      }
     }
+    return null;
   }
 
   const rotation = kind === "function_word" ? QUESTION_TYPE_ORDER_FUNCTION : QUESTION_TYPE_ORDER_CONTENT;
@@ -1155,6 +1212,25 @@ async function updateReviewQueue(
   }
 
   for (const termId of uniqueTermIds) {
+    const existing = await env.DB.prepare(
+      `SELECT id
+       FROM review_queue
+       WHERE session_id = ? AND term_id = ? AND sense_key = ? AND question_type = ? AND status = 'pending'
+       ORDER BY created_at ASC
+       LIMIT 1`
+    )
+      .bind(sessionId, termId, senseKey, questionType)
+      .first<Record<string, unknown>>();
+    if (existing?.id) {
+      await env.DB.prepare(
+        `UPDATE review_queue
+         SET priority = ?, due_at = ?, source_item_id = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      )
+        .bind(10, new Date().toISOString(), sourceItemId, String(existing.id))
+        .run();
+      continue;
+    }
     await env.DB.prepare(
       `INSERT INTO review_queue
        (id, session_id, term_id, sense_key, question_type, priority, due_at, source_item_id, status, created_at, updated_at)
@@ -1174,27 +1250,35 @@ async function updateReviewQueue(
   }
 }
 
-async function peekReviewTarget(env: Env, sessionId: string): Promise<Record<string, unknown> | null> {
-  return (
-    (await env.DB.prepare(
-      `SELECT id, term_id, sense_key, question_type
-       FROM review_queue
-       WHERE session_id = ? AND status = 'pending' AND due_at <= ?
-       ORDER BY priority DESC, created_at ASC
-       LIMIT 1`
-    )
-      .bind(sessionId, new Date().toISOString())
-      .first<Record<string, unknown>>()) || null
-  );
+async function listPendingReviewTargets(
+  env: Env,
+  sessionId: string,
+  kind?: Kind
+): Promise<Array<Record<string, unknown>>> {
+  const { results } = await env.DB.prepare(
+    `SELECT id, term_id, sense_key, question_type, priority, source_item_id, created_at
+     FROM review_queue
+     WHERE session_id = ? AND status = 'pending' AND due_at <= ?
+     ORDER BY priority DESC, created_at ASC
+     LIMIT 200`
+  )
+    .bind(sessionId, new Date().toISOString())
+    .all<Record<string, unknown>>();
+  const deduped = new Map<string, Record<string, unknown>>();
+  for (const row of results || []) {
+    const questionType = String(row.question_type || "") as QuestionType;
+    const rowKind = kindForQuestionType(questionType);
+    if (kind && rowKind !== kind) continue;
+    const key = buildReviewTargetKey(String(row.term_id || ""), String(row.sense_key || ""), questionType);
+    if (!deduped.has(key)) {
+      deduped.set(key, row);
+    }
+  }
+  return [...deduped.values()];
 }
 
-async function countPendingReview(env: Env, sessionId: string): Promise<number> {
-  const row = await env.DB.prepare(
-    `SELECT COUNT(*) AS c FROM review_queue WHERE session_id = ? AND status = 'pending'`
-  )
-    .bind(sessionId)
-    .first<Record<string, unknown>>();
-  return Number(row?.c || 0);
+async function countPendingReview(env: Env, sessionId: string, kind?: Kind): Promise<number> {
+  return (await listPendingReviewTargets(env, sessionId, kind)).length;
 }
 
 async function listMasteredTerms(env: Env, sessionId: string): Promise<string[]> {
@@ -1247,7 +1331,7 @@ async function unlockBadges(
 async function getRun(env: Env, runId: string, sessionId: string): Promise<Record<string, unknown> | null> {
   return (
     (await env.DB.prepare(
-      `SELECT id, session_id, kind, mode, status, started_at, updated_at, finished_at, score, correct_count, answered_count, streak, max_streak, rating_delta, report_id
+      `SELECT id, session_id, kind, mode, status, started_at, updated_at, finished_at, score, correct_count, answered_count, streak, max_streak, rating_delta, report_id, target_count, source_run_id
        FROM challenge_runs WHERE id = ? AND session_id = ?`
     )
       .bind(runId, sessionId)
@@ -1255,16 +1339,16 @@ async function getRun(env: Env, runId: string, sessionId: string): Promise<Recor
   );
 }
 
-async function findActiveRun(env: Env, sessionId: string, kind: Kind): Promise<Record<string, unknown> | null> {
+async function findActiveRun(env: Env, sessionId: string, kind: Kind, mode: Mode): Promise<Record<string, unknown> | null> {
   return (
     (await env.DB.prepare(
-      `SELECT id, session_id, kind, mode, status, started_at, updated_at, finished_at, score, correct_count, answered_count, streak, max_streak, rating_delta, report_id
+      `SELECT id, session_id, kind, mode, status, started_at, updated_at, finished_at, score, correct_count, answered_count, streak, max_streak, rating_delta, report_id, target_count, source_run_id
        FROM challenge_runs
-       WHERE session_id = ? AND kind = ? AND status = 'active'
+       WHERE session_id = ? AND kind = ? AND mode = ? AND status = 'active'
        ORDER BY updated_at DESC
        LIMIT 1`
     )
-      .bind(sessionId, kind)
+      .bind(sessionId, kind, mode)
       .first<Record<string, unknown>>()) || null
   );
 }
@@ -1293,6 +1377,8 @@ function summarizeRun(run: Record<string, unknown>): Record<string, unknown> {
     streak: Number(run.streak || 0),
     maxStreak: Number(run.max_streak || 0),
     reportId: run.report_id || null,
+    targetCount: getRunTargetCount(run),
+    sourceRunId: run.source_run_id || null,
   };
 }
 
@@ -1486,32 +1572,45 @@ async function listRunChallengeIds(env: Env, runId: string, sessionId: string): 
 
 async function finalizeRound(env: Env, sessionId: string, run: Record<string, unknown>): Promise<Record<string, unknown>> {
   const kind = String(run.kind || "content_word") as Kind;
+  const mode = canonicalMode(run.mode);
   const currentState = await getPlayerState(env, sessionId, kind);
   const answeredCount = Number(run.answered_count || 0);
   const correctCount = Number(run.correct_count || 0);
-  const perfect = answeredCount >= ROUND_SIZE && correctCount === ROUND_SIZE;
-  const promotedTierIndex = perfect ? Math.min(IDV_TIERS.length, currentState.tier_index + 1) : currentState.tier_index;
-  const nextPerfectStreak = perfect ? currentState.perfect_streak + 1 : 0;
-  await env.DB.prepare(
-    `UPDATE player_kind_state
-     SET tier_index = ?, highest_tier_index = ?, rounds_played = rounds_played + 1, perfect_rounds = perfect_rounds + ?, total_answered = total_answered + ?, total_correct = total_correct + ?, perfect_streak = ?, last_run_id = ?, last_round_answered = ?, last_round_correct = ?, last_result = ?, updated_at = CURRENT_TIMESTAMP
-     WHERE session_id = ? AND kind = ?`
-  )
-    .bind(
-      promotedTierIndex,
-      Math.max(currentState.highest_tier_index, promotedTierIndex),
-      perfect ? 1 : 0,
-      answeredCount,
-      correctCount,
-      nextPerfectStreak,
-      String(run.id),
-      answeredCount,
-      correctCount,
-      perfect ? "promoted" : "held",
-      sessionId,
-      kind
+  const targetCount = getRunTargetCount(run);
+  const perfect = answeredCount >= targetCount && correctCount === targetCount;
+  const promotedTierIndex =
+    mode === "ladder" && perfect ? Math.min(IDV_TIERS.length, currentState.tier_index + 1) : currentState.tier_index;
+  const nextPerfectStreak = mode === "ladder" ? (perfect ? currentState.perfect_streak + 1 : 0) : currentState.perfect_streak;
+  if (mode === "ladder") {
+    await env.DB.prepare(
+      `UPDATE player_kind_state
+       SET tier_index = ?, highest_tier_index = ?, rounds_played = rounds_played + 1, perfect_rounds = perfect_rounds + ?, total_answered = total_answered + ?, total_correct = total_correct + ?, perfect_streak = ?, last_run_id = ?, last_round_answered = ?, last_round_correct = ?, last_result = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE session_id = ? AND kind = ?`
     )
-    .run();
+      .bind(
+        promotedTierIndex,
+        Math.max(currentState.highest_tier_index, promotedTierIndex),
+        perfect ? 1 : 0,
+        answeredCount,
+        correctCount,
+        nextPerfectStreak,
+        String(run.id),
+        answeredCount,
+        correctCount,
+        perfect ? "promoted" : "held",
+        sessionId,
+        kind
+      )
+      .run();
+  } else {
+    await env.DB.prepare(
+      `UPDATE player_kind_state
+       SET last_run_id = ?, last_round_answered = ?, last_round_correct = ?, last_result = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE session_id = ? AND kind = ?`
+    )
+      .bind(String(run.id), answeredCount, correctCount, "reviewed", sessionId, kind)
+      .run();
+  }
   await env.DB.prepare(
     `UPDATE challenge_runs
      SET status = 'finished', finished_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
@@ -1519,13 +1618,18 @@ async function finalizeRound(env: Env, sessionId: string, run: Record<string, un
   )
     .bind(String(run.id), sessionId)
     .run();
+  const reviewCount = await countPendingReview(env, sessionId, kind);
   return {
+    mode,
     answeredCount,
     correctCount,
+    targetCount,
     perfect,
     promoted: promotedTierIndex > currentState.tier_index,
     fromTier: getTierInfo(currentState.tier_index),
     toTier: getTierInfo(promotedTierIndex),
+    reviewAvailable: reviewCount > 0,
+    reviewCount,
   };
 }
 
@@ -1755,6 +1859,7 @@ function buildProgressSyncPayload(run: Record<string, unknown>, accuracy: number
       answeredCount: Number(run.answered_count || 0),
       correctCount: Number(run.correct_count || 0),
       runMode: String(run.mode || ""),
+      targetCount: getRunTargetCount(run),
     },
   };
 }
@@ -1796,6 +1901,24 @@ function buildDownloadSyncPayload(reportId: string, format: "markdown" | "json")
       sourceSessionKey: `report:${reportId}`,
     },
   };
+}
+
+function getRunTargetCount(run: Record<string, unknown>): number {
+  return Math.max(1, Number(run.target_count || ROUND_SIZE));
+}
+
+function canonicalMode(rawMode: unknown): Mode {
+  return String(rawMode || "").trim().toLowerCase() === "review" ? "review" : "ladder";
+}
+
+function kindForQuestionType(questionType: QuestionType): Kind {
+  return questionType === "xuci_pair_compare" || questionType === "function_gloss" || questionType === "function_profile"
+    ? "function_word"
+    : "content_word";
+}
+
+function buildReviewTargetKey(termId: string, senseKey: string, questionType: QuestionType): string {
+  return `${termId}::${senseKey}::${questionType}`;
 }
 
 async function ensureAnonSession(request: Request, env: Env): Promise<SessionState> {
@@ -2006,11 +2129,6 @@ function canonicalKind(value: unknown): Kind {
   const raw = cleanString(value, 40).toLowerCase();
   if (raw === "xuci" || raw === "function_word") return "function_word";
   return "content_word";
-}
-
-function canonicalMode(value: unknown): Mode {
-  void value;
-  return "ladder";
 }
 
 function cleanString(value: unknown, maxLength: number): string {

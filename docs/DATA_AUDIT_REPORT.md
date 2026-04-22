@@ -1,22 +1,22 @@
 # 数据审计报告
 
-- 生成时间：2026-04-22T05:03:33.582632+00:00
+- 生成时间：2026-04-22T08:06:25.450175+00:00
 - 源数据检查：通过
 
 ## 实词题库
 - 实词条目：211
 - 重点实词：46
 - 次重点实词：165
-- 题目数量：{'content_gloss': 187, 'sentence_meaning': 187, 'passage_meaning': 152}
+- 题目数量：{'content_gloss': 73, 'sentence_meaning': 73, 'passage_meaning': 62}
 
 ## 虚词题库
 - 虚词条目：22
 - 教材联动核心虚词：8
-- 题目数量：{'xuci_pair_compare': 5, 'function_gloss': 0, 'function_profile': 22}
+- 题目数量：{'xuci_pair_compare': 5, 'function_gloss': 0, 'function_profile': 17}
 
 ## 运行时验证
-- 题库总量：{'xuci_pair_compare': 5, 'function_gloss': 0, 'function_profile': 22, 'content_gloss': 187, 'sentence_meaning': 187, 'passage_meaning': 152}
-- 答案键总量：553
+- 题库总量：{'xuci_pair_compare': 5, 'function_gloss': 0, 'function_profile': 17, 'content_gloss': 73, 'sentence_meaning': 73, 'passage_meaning': 62}
+- 答案键总量：230
 - 问题计数：{}
 
 ## 已过滤的原始脏数据样例
