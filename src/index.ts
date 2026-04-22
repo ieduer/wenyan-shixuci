@@ -287,6 +287,7 @@ interface PlayerStateRow {
 const SESSION_COOKIE = "wy_session";
 const DEV_SIGNING_SECRET = "local-dev-only-not-for-production";
 const ROUND_SIZE = 10;
+const ACTIVE_RUN_REUSE_MS = 12 * 60 * 60 * 1000;
 const EXAM_TYPE_PRIORITY: Record<Kind, QuestionType[]> = {
   content_word: ["content_gloss"],
   function_word: ["xuci_pair_compare", "function_gloss"],
@@ -420,10 +421,15 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
 
   const kind = canonicalKind(url.searchParams.get("kind"));
   const mode = canonicalMode(url.searchParams.get("mode"));
-  let runId = cleanString(url.searchParams.get("runId"), 80);
+  const requestedRunId = cleanString(url.searchParams.get("runId"), 80);
+  let runId = requestedRunId;
   let runRow = runId ? await getRun(env, runId, owner.ownerId) : null;
   if (!runRow) {
     runRow = await findActiveRun(env, owner.ownerId, kind, mode);
+    if (runRow && !requestedRunId && !isReusableActiveRun(runRow)) {
+      await retireRun(env, String(runRow.id || ""), owner.ownerId);
+      runRow = null;
+    }
     runId = runRow ? String(runRow.id || "") : "";
   }
   const playerState = await getPlayerState(env, owner.ownerId, kind);
@@ -480,7 +486,17 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
     );
   }
 
-  const pendingItem = await getLatestPendingRunItem(env, runId, owner.ownerId);
+  let pendingItem = await getLatestPendingRunItem(env, runId, owner.ownerId);
+  let discardedPendingCount = 0;
+  while (
+    pendingItem &&
+    !runtime.answerKeys[pendingItem.prompt.challengeId] &&
+    discardedPendingCount < 12
+  ) {
+    await discardPendingRunItem(env, pendingItem.id, owner.ownerId);
+    discardedPendingCount += 1;
+    pendingItem = await getLatestPendingRunItem(env, runId, owner.ownerId);
+  }
   if (pendingItem) {
     const answerToken = await signToken(env, request, {
       type: "answer",
@@ -676,7 +692,23 @@ async function handleChallengeAnswer(request: Request, env: Env): Promise<Respon
   const answer = safeParseObject(row.answer_json) as unknown as BankAnswer;
   const answerKey = runtime.answerKeys[prompt.challengeId];
   if (!answerKey) {
-    return json({ error: `Answer key missing for ${prompt.challengeId}` }, 500);
+    await discardPendingRunItem(env, String(row.id), owner.ownerId);
+    const run = await getRun(env, String(row.run_id), owner.ownerId);
+    const playerState = await getPlayerState(env, owner.ownerId, String(row.kind || prompt.kind || "content_word") as Kind);
+    return json(
+      {
+        ok: true,
+        staleItem: true,
+        result: null,
+        run: run ? summarizeRun(run) : null,
+        badges: [],
+        roundCompleted: false,
+        round: null,
+        player: summarizePlayerState(playerState),
+        report: null,
+      },
+      200
+    );
   }
   if (row.answered_at) {
     const storedSubmitted = safeParseObject(row.submitted_answer_json) as unknown as ChallengeAnswerPayload;
@@ -1004,7 +1036,7 @@ async function loadRuntime(env: Env, request: Request): Promise<RuntimeData> {
       const manifest = (await fetchRuntimeAsset<RuntimeManifest>(env, request, "manifest.json")) as RuntimeManifest;
       const termsFunction = await loadShardedAsset<TermRecord[]>(env, request, manifest, "terms_function");
       const termsContent = await loadShardedAsset<TermRecord[]>(env, request, manifest, "terms_content");
-      const examQuestions = await loadShardedAsset<ExamQuestionsPayload>(env, request, manifest, "exam_questions");
+      const rawExamQuestions = await loadShardedAsset<ExamQuestionsPayload>(env, request, manifest, "exam_questions");
       const textbookExamples = await loadShardedAsset<Record<string, TextbookRef[]>>(
         env,
         request,
@@ -1018,6 +1050,19 @@ async function loadRuntime(env: Env, request: Request): Promise<RuntimeData> {
         "dict_links"
       );
       const dataQuality = await fetchOptionalRuntimeAsset<DataQualitySummary>(env, request, "data_quality.json");
+      const answerKeyMap = answerKeysData as Record<string, AnswerKeyRecord>;
+      const filteredChallengeBank = Object.fromEntries(
+        Object.entries(rawExamQuestions.challenge_bank || {}).map(([questionType, items]) => [
+          questionType,
+          Array.isArray(items)
+            ? items.filter((item) => Boolean(answerKeyMap[String(item?.challenge_id || "")]))
+            : [],
+        ])
+      ) as ExamQuestionsPayload["challenge_bank"];
+      const examQuestions = {
+        ...rawExamQuestions,
+        challenge_bank: filteredChallengeBank,
+      };
       const termMap = new Map<string, TermRecord>();
       [...termsFunction, ...termsContent].forEach((term) => termMap.set(term.term_id, term));
       return {
@@ -1025,7 +1070,7 @@ async function loadRuntime(env: Env, request: Request): Promise<RuntimeData> {
         termsFunction,
         termsContent,
         examQuestions,
-        answerKeys: answerKeysData as Record<string, AnswerKeyRecord>,
+        answerKeys: answerKeyMap,
         textbookExamples,
         dictLinks,
         termMap,
@@ -1488,6 +1533,23 @@ async function findActiveRun(env: Env, sessionId: string, kind: Kind, mode: Mode
   );
 }
 
+function isReusableActiveRun(run: Record<string, unknown>): boolean {
+  const updatedAt = Date.parse(String(run.updated_at || ""));
+  if (!Number.isFinite(updatedAt)) return false;
+  return Date.now() - updatedAt <= ACTIVE_RUN_REUSE_MS;
+}
+
+async function retireRun(env: Env, runId: string, sessionId: string): Promise<void> {
+  if (!runId) return;
+  await env.DB.prepare(
+    `UPDATE challenge_runs
+     SET status = 'finished', finished_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND session_id = ? AND status = 'active'`
+  )
+    .bind(runId, sessionId)
+    .run();
+}
+
 async function listRunItems(env: Env, runId: string, sessionId: string): Promise<Array<Record<string, unknown>>> {
   const { results } = await env.DB.prepare(
     `SELECT question_type, term_id, prompt_json, submitted_answer_json, correct, score
@@ -1751,6 +1813,15 @@ async function getLatestPendingRunItem(
     id: String(row.id),
     prompt,
   };
+}
+
+async function discardPendingRunItem(env: Env, itemId: string, sessionId: string): Promise<void> {
+  if (!itemId) return;
+  await env.DB.prepare(
+    `DELETE FROM challenge_items WHERE id = ? AND session_id = ? AND answered_at IS NULL`
+  )
+    .bind(itemId, sessionId)
+    .run();
 }
 
 async function getLastRunPrompt(env: Env, runId: string, sessionId: string): Promise<ChallengePromptPayload | null> {

@@ -164,20 +164,32 @@ function renderQuestion() {
 
   const prompt = state.currentItem.prompt;
   const headword = termHeadword(prompt.termId);
+  const visibleContext = prompt.sourceKind === "textbook" ? buildVisibleContext(prompt) : [];
   const parts = [
     `<article class="question-card">`,
     prompt.sourceLabel ? `<div class="question-source">${escapeHtml(prompt.sourceLabel)}</div>` : "",
     `<h2 class="question-stem">${escapeHtml(prompt.stem)}</h2>`,
   ];
 
-  if (prompt.sentence) {
+  if (visibleContext.length) {
     parts.push(
-      `<div class="question-context" title="${escapeAttr(contextTooltip(prompt.contextWindow || []))}">${highlightTerm(prompt.sentence, headword)}</div>`
+      `<div class="question-context context-preview" title="${escapeAttr(contextTooltip(prompt.contextWindow || [], prompt.sentence || prompt.passage || ""))}">
+        ${visibleContext
+          .map((line) => {
+            const focus = isFocusContextLine(line, prompt.sentence || prompt.passage || "");
+            return `<p class="context-line ${focus ? "is-focus" : ""}">${highlightTerm(line, headword)}</p>`;
+          })
+          .join("")}
+      </div>`
+    );
+  } else if (prompt.sentence) {
+    parts.push(
+      `<div class="question-context" title="${escapeAttr(contextTooltip(prompt.contextWindow || [], prompt.sentence || ""))}">${highlightTerm(prompt.sentence, headword)}</div>`
     );
   }
   if (prompt.passage) {
     parts.push(
-      `<div class="question-passage" title="${escapeAttr(contextTooltip(prompt.contextWindow || []))}">${highlightTerm(prompt.passage, headword)}</div>`
+      `<div class="question-passage" title="${escapeAttr(contextTooltip(prompt.contextWindow || [], prompt.passage || ""))}">${highlightTerm(prompt.passage, headword)}</div>`
     );
   }
 
@@ -200,7 +212,7 @@ function renderQuestion() {
         ? option.sentences
             .map((sentence, index) => {
               const contexts = Array.isArray(option.sentence_contexts) ? option.sentence_contexts[index] || [] : [];
-              return `<div class="pair-sentence" title="${escapeAttr(contextTooltip(contexts))}">${highlightTerm(sentence, option.headword || headword)}</div>`;
+              return `<div class="pair-sentence" title="${escapeAttr(contextTooltip(contexts, sentence))}">${highlightTerm(sentence, option.headword || headword)}</div>`;
             })
             .join("")
         : "";
@@ -217,7 +229,7 @@ function renderQuestion() {
     }
 
     parts.push(`
-      <button class="${classes}" type="button" data-option="${escapeAttr(key)}" title="${escapeAttr(contextTooltip(option.context_window || []))}" ${state.answered ? "disabled" : ""}>
+      <button class="${classes}" type="button" data-option="${escapeAttr(key)}" title="${escapeAttr(contextTooltip(option.context_window || [], option.sentence || option.text || ""))}" ${state.answered ? "disabled" : ""}>
         <div class="option-head">
           <span class="option-tag">${escapeHtml(key)}</span>
         </div>
@@ -416,6 +428,16 @@ async function submitAnswer(label) {
         answer: { label },
       }),
     });
+    if (payload?.staleItem) {
+      state.currentItem = null;
+      state.answered = false;
+      state.submitting = false;
+      state.answerReveal = null;
+      state.answerCard = null;
+      renderShell();
+      await loadNextQuestion();
+      return;
+    }
     const correct = Boolean(payload?.result?.correct);
     state.run = payload.run || state.run;
     state.answered = true;
@@ -520,12 +542,41 @@ function cleanInline(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
-function contextTooltip(items) {
+function contextTooltip(items, focusText = "") {
+  const lines = pickContextLines(items, focusText);
+  return lines.join("\n");
+}
+
+function pickContextLines(items, focusText = "") {
   const lines = (Array.isArray(items) ? items : [])
     .map((item) => cleanInline(item))
-    .filter(Boolean)
-    .slice(0, 7);
-  return lines.join("\n");
+    .filter(Boolean);
+  if (lines.length <= 3) return lines;
+  const focus = cleanInline(focusText);
+  const compactFocus = compactText(focus);
+  let index = lines.findIndex((line) => {
+    const compactLine = compactText(line);
+    return (focus && line.includes(focus)) || (compactFocus && compactLine.includes(compactFocus));
+  });
+  if (index < 0) index = Math.min(1, lines.length - 1);
+  let start = Math.max(0, index - 1);
+  let end = Math.min(lines.length, start + 3);
+  start = Math.max(0, end - 3);
+  return lines.slice(start, end);
+}
+
+function buildVisibleContext(prompt) {
+  return pickContextLines(prompt.contextWindow || [], prompt.sentence || prompt.passage || "");
+}
+
+function isFocusContextLine(line, focusText) {
+  const focus = cleanInline(focusText);
+  if (!focus) return false;
+  return cleanInline(line).includes(focus) || compactText(line).includes(compactText(focus));
+}
+
+function compactText(value) {
+  return cleanInline(value).replace(/\s+/g, "");
 }
 
 async function api(url, init = {}) {
