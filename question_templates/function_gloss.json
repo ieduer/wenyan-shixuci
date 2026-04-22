@@ -1,0 +1,10 @@
+{
+  "question_type": "function_gloss",
+  "required_fields": ["stem", "options", "answer.label", "term_id"],
+  "distractor_rules": ["保留真题原始四选项结构", "只收录存在明确标准答案的题目", "答案只接受 A-D 单选"],
+  "grading_rule": "selected_label == answer.label",
+  "explanation_fields": ["explanation", "option_analyses"],
+  "minimum_evidence": ["beijing_exam_direct_choice"],
+  "auto_generation_allowed": true,
+  "manual_review_required": false
+}

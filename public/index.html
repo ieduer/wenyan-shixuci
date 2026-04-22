@@ -10,105 +10,60 @@
     <script type="module" src="/app.js" defer></script>
   </head>
   <body>
-    <div class="page-aura page-aura-a"></div>
-    <div class="page-aura page-aura-b"></div>
+    <div class="page-glow page-glow-a"></div>
+    <div class="page-glow page-glow-b"></div>
     <main class="shell">
       <header class="topbar">
-        <div class="top-controls">
-          <div class="segmented-control" aria-label="挑戰模式">
-            <button class="mode-chip active" data-mode="warmup" type="button">熱身</button>
-            <button class="mode-chip" data-mode="ranked" type="button">排位</button>
-            <button class="mode-chip" data-mode="review" type="button">追擊</button>
-          </div>
-          <div class="theme-switch" aria-label="配色主題">
-            <button class="theme-chip active" data-theme="parchment" type="button">宣紙</button>
-            <button class="theme-chip" data-theme="forest" type="button">松墨</button>
-            <button class="theme-chip" data-theme="ink" type="button">夜硯</button>
-          </div>
+        <div class="entry-strip">
+          <button class="entry-tile" data-kind="content_word" type="button">實詞</button>
+          <button class="entry-tile" data-kind="function_word" type="button">虛詞</button>
         </div>
-      </header>
 
-      <section class="entry-strip">
-        <button class="entry-tile" data-kind="function_word" type="button">
-          <strong>虛詞</strong>
-        </button>
-        <button class="entry-tile" data-kind="content_word" type="button">
-          <strong>實詞</strong>
-        </button>
-      </section>
+        <label class="theme-picker" for="theme-select">
+          <span>配色</span>
+          <select id="theme-select">
+            <option value="parchment">宣紙</option>
+            <option value="forest">松墨</option>
+            <option value="ink">夜硯</option>
+          </select>
+        </label>
+      </header>
 
       <section class="arena-grid">
         <article class="battle-stage">
           <header class="stage-head">
-            <div class="stage-copy">
-              <p class="stage-kicker" id="stage-kicker">熱身</p>
-              <h2 id="stage-title">選擇實詞或虛詞開始</h2>
+            <div class="rank-badge" id="rank-badge">
+              <span class="rank-kicker" id="rank-kicker">未開局</span>
+              <strong id="rank-name">工蜂</strong>
+              <em id="rank-mode">常規排位</em>
             </div>
-            <div class="stage-score">
-              <span id="score-label">0 分</span>
-              <div class="score-track">
-                <div class="score-fill" id="score-fill"></div>
+            <div class="stage-meta">
+              <div class="meta-chip">
+                <span class="meta-label">本輪</span>
+                <strong id="round-fraction">0 / 10</strong>
+              </div>
+              <div class="meta-chip">
+                <span class="meta-label">全對晉級</span>
+                <strong id="round-goal">10 / 10</strong>
               </div>
             </div>
           </header>
 
-          <div class="stage-body" id="question-root">
+          <section class="question-root" id="question-root">
             <div class="empty-state">
-              <p>選一種詞類，直接進場。</p>
-            </div>
-          </div>
-
-          <div class="stage-note" id="stage-note" hidden></div>
-        </article>
-
-        <aside class="arena-side">
-          <section class="status-panel">
-            <div class="panel-head">
-              <p class="panel-label">戰況</p>
-              <div class="badge-strip" id="badge-strip"></div>
-            </div>
-
-            <div class="rank-card">
-              <div class="rank-summary">
-                <span class="rank-caption">階位</span>
-                <strong id="rank-name">未開局</strong>
-              </div>
-              <div class="combo-card">
-                <span>連勝</span>
-                <strong id="streak-count">0</strong>
-              </div>
-            </div>
-
-            <div class="meter-list">
-              <div class="meter-row">
-                <div class="meter-meta">
-                  <span>已答</span>
-                  <strong id="answered-count">0</strong>
-                </div>
-                <div class="meter-track"><div class="meter-fill meter-fill-a" id="answered-fill"></div></div>
-              </div>
-              <div class="meter-row">
-                <div class="meter-meta">
-                  <span>答對</span>
-                  <strong id="correct-count">0</strong>
-                </div>
-                <div class="meter-track"><div class="meter-fill meter-fill-b" id="correct-fill"></div></div>
-              </div>
-              <div class="meter-row">
-                <div class="meter-meta">
-                  <span>追擊</span>
-                  <strong id="review-count">0</strong>
-                </div>
-                <div class="meter-track"><div class="meter-fill meter-fill-c" id="review-fill"></div></div>
-              </div>
+              <p>選擇實詞或虛詞後直接進題。</p>
             </div>
           </section>
 
+          <div class="round-track" id="round-track" aria-label="本輪作答進度"></div>
+        </article>
+
+        <aside class="side-panel">
           <section class="leaderboard-panel">
-            <div class="panel-head">
-              <p class="panel-label">對戰榜</p>
-              <span class="panel-subtle">今日</span>
-            </div>
+            <header class="panel-head">
+              <p>榜單</p>
+              <span id="leaderboard-kind">實詞</span>
+            </header>
             <div class="leaderboard-root" id="leaderboard-root"></div>
           </section>
         </aside>

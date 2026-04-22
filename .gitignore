@@ -11,6 +11,7 @@ __pycache__/
 tmp/
 data/cache/
 data/private/
+data/runtime_private/
 data/runtime/*.json
 public/runtime/
 !.gitkeep

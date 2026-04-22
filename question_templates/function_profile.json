@@ -1,0 +1,10 @@
+{
+  "question_type": "function_profile",
+  "required_fields": ["stem", "options", "answer.label", "term_id"],
+  "distractor_rules": ["干扰项来自其他虚词的意义和用法画像", "正确项必须对应本词高频考法", "答案只接受 A-D 单选"],
+  "grading_rule": "selected_label == answer.label",
+  "explanation_fields": ["explanation", "option_analyses"],
+  "minimum_evidence": ["exam_term_plus_profile_mapping"],
+  "auto_generation_allowed": true,
+  "manual_review_required": false
+}

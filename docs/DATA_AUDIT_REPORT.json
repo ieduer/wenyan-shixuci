@@ -1,5 +1,6 @@
 {
-  "generated_at": "2026-04-22T03:13:16.384248+00:00",
+  "generated_at": "2026-04-22T05:03:33.582632+00:00",
+  "source_ok": true,
   "source_report": {
     "ok": true,
     "failures": [],
@@ -116,1076 +117,211 @@
       }
     }
   },
-  "xuci": {
-    "raw_group_count": 17,
-    "complete_function_option_group_count": 8,
-    "emitted_count": 5,
-    "status_counts": {
-      "emitted": 5,
-      "missing_answer": 7,
-      "incomplete_option_set": 5
+  "manifest_stats": {
+    "terms_function": 22,
+    "terms_content": 211,
+    "question_docs": 52,
+    "textbook_term_refs": 158,
+    "dict_term_refs": 233,
+    "answer_keys": 553
+  },
+  "content": {
+    "term_count": 211,
+    "core_term_count": 46,
+    "secondary_term_count": 165,
+    "challenge_counts": {
+      "content_gloss": 187,
+      "sentence_meaning": 187,
+      "passage_meaning": 152
     },
-    "groups": [
+    "support_miss_count": 51,
+    "filtered_raw_examples": [
       {
-        "paper_key": "beijing-2002-None",
-        "year": 2002,
-        "paper": "北京卷",
-        "question_number": 9,
-        "question_subtype": "xuci_compare_same",
-        "status": "emitted",
-        "parsed_answer": "B",
-        "option_labels_present": [
-          "A",
-          "B",
-          "C",
-          "D"
-        ],
-        "segmentation_failures": [],
-        "content_compare_occurrences": {},
-        "option_examples": {
-          "A": {
-            "headwords": [
-              "于"
-            ],
-            "sentences": [
-              "过于荆,至江上。",
-              "苛政猛于虎也。"
-            ]
-          },
-          "B": {
-            "headwords": [
-              "因"
-            ],
-            "sentences": [
-              "”因如吴。",
-              "秦伏兵绝其后,因留怀王以求割地。"
-            ]
-          },
-          "C": {
-            "headwords": [
-              "之"
-            ],
-            "sentences": [
-              "此有道者之所以异乎俗也。",
-              "宋何罪之有?"
-            ]
-          },
-          "D": {
-            "headwords": [
-              "以"
-            ],
-            "sentences": [
-              "知不以利为利矣。",
-              "为秦人积威之所劫,日削月割,以趋于亡。"
-            ]
-          }
-        }
-      },
-      {
-        "paper_key": "beijing-2003-None",
-        "year": 2003,
-        "paper": "北京卷",
-        "question_number": 13,
-        "question_subtype": "xuci_compare_same",
-        "status": "missing_answer",
-        "parsed_answer": null,
-        "option_labels_present": [
-          "A",
-          "B",
-          "C",
-          "D"
-        ],
-        "segmentation_failures": [],
-        "content_compare_occurrences": {},
-        "option_examples": {
-          "A": {
-            "headwords": [
-              "而"
-            ],
-            "sentences": [
-              "原过其旁而泣",
-              "子路拱而立"
-            ]
-          },
-          "B": {
-            "headwords": [
-              "其"
-            ],
-            "sentences": [
-              "一则羡其不孤",
-              "秦贪,负其强"
-            ]
-          },
-          "C": {
-            "headwords": [
-              "之"
-            ],
-            "sentences": [
-              "岂可谓登山者不知海之深,入海者不知山之高哉",
-              "盖叹郦元之简而笑李渤·之陋也"
-            ]
-          },
-          "D": {
-            "headwords": [
-              "以"
-            ],
-            "sentences": [
-              "当以书相分",
-              "斧斤以时入山林"
-            ]
-          }
-        }
-      },
-      {
-        "paper_key": "beijing-2004-None",
-        "year": 2004,
-        "paper": "北京卷",
-        "question_number": 10,
-        "question_subtype": "xuci_compare_same",
-        "status": "emitted",
-        "parsed_answer": "D",
-        "option_labels_present": [
-          "A",
-          "B",
-          "C",
-          "D"
-        ],
-        "segmentation_failures": [],
-        "content_compare_occurrences": {},
-        "option_examples": {
-          "A": {
-            "headwords": [
-              "为"
-            ],
-            "sentences": [
-              "为母氏所养身死人手",
-              "为天下笑者,何也"
-            ]
-          },
-          "B": {
-            "headwords": [
-              "若"
-            ],
-            "sentences": [
-              "若一人有疾,即合家避之",
-              "若人前为寿,寿毕,请以剑舞"
-            ]
-          },
-          "C": {
-            "headwords": [
-              "因"
-            ],
-            "sentences": [
-              "因留养之",
-              "因宾客至蔺相如门谢罪"
-            ]
-          },
-          "D": {
-            "headwords": [
-              "乎"
-            ],
-            "sentences": [
-              "岂有禁人在狱而心自安乎",
-              "王之好乐甚,则齐其庶几乎"
-            ]
-          }
-        }
-      },
-      {
-        "paper_key": "beijing-2005-None",
-        "year": 2005,
-        "paper": "北京卷",
-        "question_number": 7,
-        "question_subtype": "xuci_compare_same",
-        "status": "incomplete_option_set",
-        "parsed_answer": "A",
-        "option_labels_present": [
-          "B",
-          "C"
-        ],
-        "segmentation_failures": [],
-        "content_compare_occurrences": {},
-        "option_examples": {
-          "B": {
-            "headwords": [
-              "之"
-            ],
-            "sentences": [
-              "得庆封,负之斧质",
-              "譬若以肉投馁虎,何功之有哉"
-            ]
-          },
-          "C": {
-            "headwords": [
-              "以"
-            ],
-            "sentences": [
-              "后世以为法程",
-              "夫夷以近,则游者众"
-            ]
-          }
-        }
-      },
-      {
-        "paper_key": "beijing-2010-None",
-        "year": 2010,
-        "paper": "北京卷",
-        "question_number": 7,
-        "question_subtype": "xuci_compare_same",
-        "status": "incomplete_option_set",
-        "parsed_answer": "A",
-        "option_labels_present": [
-          "A",
-          "B",
-          "C"
-        ],
-        "segmentation_failures": [],
-        "content_compare_occurrences": {},
-        "option_examples": {
-          "A": {
-            "headwords": [
-              "之"
-            ],
-            "sentences": [
-              "清优主之",
-              "不害清之富也"
-            ]
-          },
-          "B": {
-            "headwords": [
-              "以"
-            ],
-            "sentences": [
-              "市人以其异,皆笑之",
-              "清不以怠遇其人"
-            ]
-          },
-          "C": {
-            "headwords": [
-              "其"
-            ],
-            "sentences": [
-              "清其有道者欤",
-              "执其道不废"
-            ]
-          }
-        }
-      },
-      {
-        "paper_key": "beijing-2011-None",
-        "year": 2011,
-        "paper": "北京卷",
-        "question_number": 7,
-        "question_subtype": "xuci_compare_same",
-        "status": "incomplete_option_set",
-        "parsed_answer": "D",
-        "option_labels_present": [
-          "A",
-          "B"
-        ],
-        "segmentation_failures": [],
-        "content_compare_occurrences": {},
-        "option_examples": {
-          "A": {
-            "headwords": [
-              "而"
-            ],
-            "sentences": [
-              "事有可行而不可言者",
-              "圣人之所独见而留意也"
-            ]
-          },
-          "B": {
-            "headwords": [
-              "为"
-            ],
-            "sentences": [
-              "昔者,曹子为鲁将兵",
-              "则终身为破军擒将矣"
-            ]
-          }
-        }
-      },
-      {
-        "paper_key": "beijing-2012-None",
-        "year": 2012,
-        "paper": "北京卷",
-        "question_number": 7,
-        "question_subtype": "xuci_compare_same",
-        "status": "missing_answer",
-        "parsed_answer": null,
-        "option_labels_present": [
-          "B",
-          "C",
-          "D"
-        ],
-        "segmentation_failures": [],
-        "content_compare_occurrences": {},
-        "option_examples": {
-          "B": {
-            "headwords": [
-              "然"
-            ],
-            "sentences": [
-              "然独好周人急",
-              "然其行最著"
-            ]
-          },
-          "C": {
-            "headwords": [
-              "为"
-            ],
-            "sentences": [
-              "恐为他人得",
-              "倘育而为风露所感"
-            ]
-          },
-          "D": {
-            "headwords": [
-              "以"
-            ],
-            "sentences": [
-              "何以为报",
-              "妻卧草中以号"
-            ]
-          }
-        }
-      },
-      {
+        "term_id": "content::典",
         "paper_key": "beijing-2013-None",
-        "year": 2013,
-        "paper": "北京卷",
-        "question_number": 7,
-        "question_subtype": "xuci_compare_same",
-        "status": "emitted",
-        "parsed_answer": "D",
-        "option_labels_present": [
-          "A",
-          "B",
-          "C",
-          "D"
-        ],
-        "segmentation_failures": [],
-        "content_compare_occurrences": {},
-        "option_examples": {
-          "A": {
-            "headwords": [
-              "以"
-            ],
-            "sentences": [
-              "以百玩之具罗于席",
-              "吴越人以轻舟追遣之"
-            ]
-          },
-          "B": {
-            "headwords": [
-              "所"
-            ],
-            "sentences": [
-              "观其所取",
-              "一无所受"
-            ]
-          },
-          "C": {
-            "headwords": [
-              "何"
-            ],
-            "sentences": [
-              "汝何故疏我",
-              "吾何功哉"
-            ]
-          },
-          "D": {
-            "headwords": [
-              "之"
-            ],
-            "sentences": [
-              "彬之总师也",
-              "上临哭之恸"
-            ]
-          }
-        }
+        "question_number": 6,
+        "raw_gloss": "主管,掌管",
+        "cleaned_gloss": "主管,掌管",
+        "excerpt": "太祖典禁旅典:主管,掌管"
       },
       {
-        "paper_key": "beijing-2015-None",
-        "year": 2015,
-        "paper": "北京卷",
-        "question_number": 10,
-        "question_subtype": "xuci_compare_diff",
-        "status": "missing_answer",
-        "parsed_answer": null,
-        "option_labels_present": [
-          "C",
-          "D"
-        ],
-        "segmentation_failures": [],
-        "content_compare_occurrences": {},
-        "option_examples": {
-          "C": {
-            "headwords": [
-              "遂"
-            ],
-            "sentences": [
-              "而遂杀之",
-              "后遂无问津者"
-            ]
-          },
-          "D": {
-            "headwords": [
-              "者"
-            ],
-            "sentences": [
-              "伤人者刑",
-              "同予者何人"
-            ]
-          }
-        }
-      },
-      {
-        "paper_key": "beijing-2016-None",
-        "year": 2016,
-        "paper": "北京卷",
-        "question_number": 10,
-        "question_subtype": "xuci_compare_diff",
-        "status": "missing_answer",
-        "parsed_answer": null,
-        "option_labels_present": [
-          "A",
-          "B",
-          "D"
-        ],
-        "segmentation_failures": [],
-        "content_compare_occurrences": {},
-        "option_examples": {
-          "A": {
-            "headwords": [
-              "之"
-            ],
-            "sentences": [
-              "使人之楚买生鹿",
-              "载粟而之齐"
-            ]
-          },
-          "B": {
-            "headwords": [
-              "之"
-            ],
-            "sentences": [
-              "其人民习战斗之道",
-              "公其令人贵买衡山之械器"
-            ]
-          },
-          "D": {
-            "headwords": [
-              "以"
-            ],
-            "sentences": [
-              "今齐以其重宝贵买吾群害",
-              "楚以生鹿藏钱五倍"
-            ]
-          }
-        }
-      },
-      {
-        "paper_key": "beijing-2017-None",
-        "year": 2017,
-        "paper": "北京卷",
-        "question_number": 10,
-        "question_subtype": "xuci_compare_diff",
-        "status": "emitted",
-        "parsed_answer": "C",
-        "option_labels_present": [
-          "A",
-          "B",
-          "C",
-          "D"
-        ],
-        "segmentation_failures": [],
-        "content_compare_occurrences": {},
-        "option_examples": {
-          "A": {
-            "headwords": [
-              "以"
-            ],
-            "sentences": [
-              "以有侯王",
-              "争必以利"
-            ]
-          },
-          "B": {
-            "headwords": [
-              "之"
-            ],
-            "sentences": [
-              "三代之兴",
-              "知诸侯之不可复"
-            ]
-          },
-          "C": {
-            "headwords": [
-              "而"
-            ],
-            "sentences": [
-              "而学士大夫多非之",
-              "而诸子之论废矣"
-            ]
-          },
-          "D": {
-            "headwords": [
-              "者"
-            ],
-            "sentences": [
-              "袭封而争位者",
-              "君臣父子相贼虐者"
-            ]
-          }
-        }
-      },
-      {
+        "term_id": "content::戚",
         "paper_key": "beijing-2018-None",
-        "year": 2018,
-        "paper": "北京卷",
-        "question_number": 9,
-        "question_subtype": "xuci_compare_diff",
-        "status": "incomplete_option_set",
-        "parsed_answer": "C",
-        "option_labels_present": [
-          "C",
-          "D"
-        ],
-        "segmentation_failures": [],
-        "content_compare_occurrences": {},
-        "option_examples": {
-          "C": {
-            "headwords": [
-              "之"
-            ],
-            "sentences": [
-              "此之谓也",
-              "若白垩之与黑漆"
-            ]
-          },
-          "D": {
-            "headwords": [
-              "其"
-            ],
-            "sentences": [
-              "察其秋毫",
-              "其人拜之以牛"
-            ]
-          }
-        }
+        "question_number": 8,
+        "raw_gloss": "为......悲伤",
+        "cleaned_gloss": "为......悲伤",
+        "excerpt": "仅存之国危而后戚之 戚:为......悲伤"
       },
       {
-        "paper_key": "beijing-2021-None",
-        "year": 2021,
-        "paper": "北京卷",
-        "question_number": 7,
-        "question_subtype": "xuci_compare_same",
-        "status": "emitted",
-        "parsed_answer": "B",
-        "option_labels_present": [
-          "A",
-          "B",
-          "C",
-          "D"
-        ],
-        "segmentation_failures": [],
-        "content_compare_occurrences": {},
-        "option_examples": {
-          "A": {
-            "headwords": [
-              "而"
-            ],
-            "sentences": [
-              "上下乱而阴阳谬",
-              "故事或无益,而益者须之"
-            ]
-          },
-          "B": {
-            "headwords": [
-              "以"
-            ],
-            "sentences": [
-              "以旧礼为无补而去之",
-              "以此二子解沮齐众"
-            ]
-          },
-          "C": {
-            "headwords": [
-              "者"
-            ],
-            "sentences": [
-              "此礼义为业者也",
-              "国之所以存者"
-            ]
-          },
-          "D": {
-            "headwords": [
-              "为"
-            ],
-            "sentences": [
-              "人民为善",
-              "开不为上用之路"
-            ]
-          }
-        }
+        "term_id": "content::矜",
+        "paper_key": "national-2021-50fc7fcdf5a1",
+        "question_number": 13,
+        "raw_gloss": "怜悯,怜惜",
+        "cleaned_gloss": "怜悯,怜惜",
+        "excerpt": "“矜”,怜悯,怜 惜"
       },
       {
-        "paper_key": "beijing-2022-None",
-        "year": 2022,
-        "paper": "北京卷",
-        "question_number": 7,
-        "question_subtype": "xuci_compare_same",
-        "status": "incomplete_option_set",
-        "parsed_answer": "C",
-        "option_labels_present": [
-          "B",
-          "C",
-          "D"
-        ],
-        "segmentation_failures": [],
-        "content_compare_occurrences": {},
-        "option_examples": {
-          "B": {
-            "headwords": [
-              "之"
-            ],
-            "sentences": [
-              "是故法之所用易见",
-              "秦王之欲尊宗庙而安子孙"
-            ]
-          },
-          "C": {
-            "headwords": [
-              "而"
-            ],
-            "sentences": [
-              "使民日迁善远罪而不自知也",
-              "世主欲民之善同,而所以使民善者或异"
-            ]
-          },
-          "D": {
-            "headwords": [
-              "或"
-            ],
-            "sentences": [
-              "而所以使民善者或异",
-              "今或言礼义之不如法令"
-            ]
-          }
-        }
+        "term_id": "content::矜",
+        "paper_key": "national-2021-50fc7fcdf5a1",
+        "question_number": 13,
+        "raw_gloss": "怜悯,怜",
+        "cleaned_gloss": "怜悯,怜",
+        "excerpt": "关键词句:第一句省略主语;“覆视”,查看;“当”,判处;“矜”,怜悯,怜 惜;“状”,情况;“可”,值得;“闻”,使......知道。"
       },
       {
-        "paper_key": "beijing-2023-None",
-        "year": 2023,
-        "paper": "北京卷",
-        "question_number": 7,
-        "question_subtype": "xuci_compare_same",
-        "status": "missing_answer",
-        "parsed_answer": null,
-        "option_labels_present": [
-          "A",
-          "B",
-          "C",
-          "D"
-        ],
-        "segmentation_failures": [],
-        "content_compare_occurrences": {},
-        "option_examples": {
-          "A": {
-            "headwords": [
-              "之"
-            ],
-            "sentences": [
-              "无不属之豪绅",
-              "行一切之变"
-            ]
-          },
-          "B": {
-            "headwords": [
-              "以"
-            ],
-            "sentences": [
-              "是以天下奢侈",
-              "相沿以为常事矣"
-            ]
-          },
-          "C": {
-            "headwords": [
-              "则"
-            ],
-            "sentences": [
-              "则择便巧史书......者",
-              "则争尽力为善"
-            ]
-          },
-          "D": {
-            "headwords": [
-              "于"
-            ],
-            "sentences": [
-              "数十年于此矣",
-              "今日之变,有甚于此"
-            ]
-          }
-        }
+        "term_id": "content::绝",
+        "paper_key": "national-2022-d68a9af04174",
+        "question_number": 13,
+        "raw_gloss": "动词,断绝",
+        "cleaned_gloss": "动词,断绝",
+        "excerpt": "“绝”,动词,断绝"
       },
       {
-        "paper_key": "beijing-2024-None",
-        "year": 2024,
-        "paper": "北京卷",
-        "question_number": 7,
-        "question_subtype": "xuci_compare_same",
-        "status": "missing_answer",
-        "parsed_answer": null,
-        "option_labels_present": [
-          "A",
-          "B",
-          "C",
-          "D"
-        ],
-        "segmentation_failures": [],
-        "content_compare_occurrences": {},
-        "option_examples": {
-          "A": {
-            "headwords": [
-              "之"
-            ],
-            "sentences": [
-              "下以阻百姓之从事 /",
-              "是灭天下之人也"
-            ]
-          },
-          "B": {
-            "headwords": [
-              "者"
-            ],
-            "sentences": [
-              "故执有命者不仁 /",
-              "而强执此者"
-            ]
-          },
-          "C": {
-            "headwords": [
-              "以"
-            ],
-            "sentences": [
-              "或以命为有 /",
-              "所以听狱制罪者,刑也"
-            ]
-          },
-          "D": {
-            "headwords": [
-              "而"
-            ],
-            "sentences": [
-              "此上之所赏而百姓之所誉也 /",
-              "欲天下之治而恶其乱"
-            ]
-          }
-        }
+        "term_id": "content::致",
+        "paper_key": "beijing-2006-None",
+        "question_number": 6,
+        "raw_gloss": "使......到来",
+        "cleaned_gloss": "使......到来",
+        "excerpt": "致能歌者 致:使......到来"
       },
       {
-        "paper_key": "beijing-2025-None",
-        "year": 2025,
-        "paper": "北京卷",
-        "question_number": 7,
-        "question_subtype": "xuci_compare_same",
-        "status": "missing_answer",
-        "parsed_answer": null,
-        "option_labels_present": [
-          "A",
-          "B",
-          "D"
-        ],
-        "segmentation_failures": [],
-        "content_compare_occurrences": {},
-        "option_examples": {
-          "A": {
-            "headwords": [
-              "与"
-            ],
-            "sentences": [
-              "耳目遗俗而可与定世 /",
-              "赵以伯阳邑与之"
-            ]
-          },
-          "B": {
-            "headwords": [
-              "以"
-            ],
-            "sentences": [
-              "难动以物而必不妄折 /",
-              "客出,田骈送之以目"
-            ]
-          },
-          "D": {
-            "headwords": [
-              "为"
-            ],
-            "sentences": [
-              "国虽大不为王 /",
-              "其故人为其兄请"
-            ]
-          }
-        }
+        "term_id": "content::踵",
+        "paper_key": "beijing-2007-None",
+        "question_number": 6,
+        "raw_gloss": "脚后跟(还中午,指后退)",
+        "cleaned_gloss": "脚后跟(还中午,指后退)",
+        "excerpt": "死不还踵 踵:脚后跟(还中午,指后退)"
+      },
+      {
+        "term_id": "content::预",
+        "paper_key": "beijing-2013-None",
+        "question_number": 6,
+        "raw_gloss": "参与,加入 D仍赐白金万两仍:于,又",
+        "cleaned_gloss": "参与,加入 D仍赐白金万两仍:于,又",
+        "excerpt": "副帅潘美预以为贺预:参与,加入 D仍赐白金万两仍:于,又"
+      },
+      {
+        "term_id": "content::伏阙",
+        "paper_key": "national-2014-5ec76e764288",
+        "question_number": 4,
+        "raw_gloss": "是",
+        "cleaned_gloss": "是",
+        "excerpt": "是“竭力抗争 ”之意. 2“偕”是“偕同 ”之意;“伏阙 ”是“匍匐在宫殿上 ”之意;“入”即“(奏章)送入皇宫 ” 之意; “不食 ”即吃不下饭."
+      },
+      {
+        "term_id": "content::何以",
+        "paper_key": "national-2017-b5925980f961",
+        "question_number": 4,
+        "raw_gloss": "为什么,哪里用得着",
+        "cleaned_gloss": "为什么,哪里用得着",
+        "excerpt": "何以:为什么,哪里用得着"
+      },
+      {
+        "term_id": "content::偕",
+        "paper_key": "national-2014-5ec76e764288",
+        "question_number": 4,
+        "raw_gloss": "是",
+        "cleaned_gloss": "是",
+        "excerpt": "姓的产业 ”;“力争 ” 是“竭力抗争 ”之意. 2“偕”是“偕同 ”之意;“伏阙 ”是“匍匐在宫殿上 ”之意;“入”即“(奏章)送入皇宫 ” 之意; “不食 ”即吃不下饭."
+      },
+      {
+        "term_id": "content::僭上",
+        "paper_key": "national-2020-eb245275d571",
+        "question_number": 13,
+        "raw_gloss": "越分冒用尊者的仪制或宫室、器物等",
+        "cleaned_gloss": "越分冒用尊者的仪制或宫室",
+        "excerpt": "关键词:僭上:越分冒用尊者的仪制或宫室、器物等"
+      },
+      {
+        "term_id": "content::入",
+        "paper_key": "national-2014-5ec76e764288",
+        "question_number": 4,
+        "raw_gloss": "即",
+        "cleaned_gloss": "即",
+        "excerpt": "”是“偕同 ”之意;“伏阙 ”是“匍匐在宫殿上 ”之意;“入”即“(奏章)送入皇宫 ” 之意; “不食 ”即吃不下饭."
+      },
+      {
+        "term_id": "content::军旅",
+        "paper_key": "national-2015-c62fd826a408",
+        "question_number": 4,
+        "raw_gloss": "指军队,也可指军事",
+        "cleaned_gloss": "指军队,也可指军事",
+        "excerpt": "1 “军旅 ”指军队,也可指军事;这里指军事、战事; “咨怨 ”指嗟叹怨恨; “ 游幸 ”指帝王或后妃出游;这里指炀帝出游。 2“凶逆 ”,凶恶悖逆,也指凶恶悖逆的人,这里"
+      },
+      {
+        "term_id": "content::力争",
+        "paper_key": "national-2014-5ec76e764288",
+        "question_number": 4,
+        "raw_gloss": "是",
+        "cleaned_gloss": "是",
+        "excerpt": "”之意; “复”即“又”;“民业 ”即“百姓的产业 ”;“力争 ” 是“竭力抗争 ”之意. 2“偕”是“偕同 ”之意;“伏阙 ”是“匍匐在宫殿上 ”之意;“入”即“(奏章)送入皇宫 ” 之意; “不食 ”即吃不"
+      },
+      {
+        "term_id": "content::善",
+        "paper_key": "national-2022-d68a9af04174",
+        "question_number": 13,
+        "raw_gloss": "形容词,妥当,好",
+        "cleaned_gloss": "形容词,妥当,好",
+        "excerpt": "“善”,形容词,妥当,好"
+      },
+      {
+        "term_id": "content::固",
+        "paper_key": "national-2016-12f0123dae6a",
+        "question_number": 4,
+        "raw_gloss": "结实,牢靠,这里活用为动词,义同",
+        "cleaned_gloss": "结实,牢靠",
+        "excerpt": "宴会,做这样的事能心安吗? 2尝:曾经;从容:严肃;固:结实,牢靠,这里活用为动词,义同 “持”,句子 翻译为:苏轼曾从容地责备公亮不能纠正弊端,世人讥讽他保持禄位加固宠 幸."
+      },
+      {
+        "term_id": "content::复",
+        "paper_key": "national-2014-5ec76e764288",
+        "question_number": 4,
+        "raw_gloss": "又",
+        "cleaned_gloss": "又",
+        "excerpt": "“复”即“又”"
+      },
+      {
+        "term_id": "content::复",
+        "paper_key": "national-2014-5ec76e764288",
+        "question_number": 4,
+        "raw_gloss": "即",
+        "cleaned_gloss": "即",
+        "excerpt": "1 “赐”是“皇帝赏赐的 ”之意; “复”即“又”;“民业 ”即“百姓的产业 ”;“力争 ” 是“竭力抗争 ”之意. 2“偕”是“偕同 ”之意;“伏阙 ”是“匍匐在宫殿上 ”之意;“入"
+      },
+      {
+        "term_id": "content::所欲",
+        "paper_key": "national-2017-0e3728cbab6a",
+        "question_number": 4,
+        "raw_gloss": "所字结构,想要的",
+        "cleaned_gloss": "所字结构,想要的",
+        "excerpt": "所欲:所字结构,想要的. 句子翻译为 : 皇帝说: “官吏依法行事,法律才不会白费,你说别的想要的吧. ”赵王不再 说话. 2辄:就"
       }
     ]
   },
-  "content": {
-    "raw_term_count": 211,
-    "normalized_term_count": 211,
-    "headword_replacements": [
-      {
-        "raw_headword": "之衣柜籍",
-        "canonical_headword": "籍",
-        "occurrence_count": 1,
-        "examples": [
-          "遂受而籍之衣柜籍:登记造册"
-        ]
-      },
-      {
-        "raw_headword": "以为贺预",
-        "canonical_headword": "预",
-        "occurrence_count": 1,
-        "examples": [
-          "副帅潘美预以为贺预:参与,加入 D仍赐白金万两仍:于,又"
-        ]
-      },
-      {
-        "raw_headword": "典禁旅典",
-        "canonical_headword": "典",
-        "occurrence_count": 1,
-        "examples": [
-          "太祖典禁旅典:主管,掌管"
-        ]
-      }
-    ],
-    "total_occurrences": 244,
-    "accepted_occurrences": 225,
-    "rejected_occurrence_counts": {
-      "invalid_context": 15,
-      "missing_gloss": 1,
-      "invalid_gloss": 3
-    },
-    "rejected_examples": [
-      {
-        "reason": "invalid_context",
-        "headword": "时",
-        "paper_key": "beijing-2018-None",
-        "question_number": 8,
-        "raw_excerpt": "时不胜月 时:季节",
-        "sanitized_context": "时不胜月"
-      },
-      {
-        "reason": "invalid_context",
-        "headword": "僭上",
-        "paper_key": "national-2020-eb245275d571",
-        "question_number": 13,
-        "raw_excerpt": "关键词:僭上:越分冒用尊者的仪制或宫室、器物等",
-        "sanitized_context": "关键词:僭上:越分冒用尊者的仪制或宫室、器物等"
-      },
-      {
-        "reason": "invalid_context",
-        "headword": "凶逆",
-        "paper_key": "national-2015-c62fd826a408",
-        "question_number": 4,
-        "raw_excerpt": "“ 游幸 ”指帝王或后妃出游;这里指炀帝出游。 2“凶逆 ”,凶恶悖逆,也指凶恶悖逆的人,这里指后者; “王室 ”,朝廷; “泉壤 ” 指黄泉之下,地下。",
-        "sanitized_context": "”护儿叹曰: “吾备位大臣,荷国重 任,不能肃清凶逆 ,遂今王室至此 ,抱恨泉壤 ,知复何言!"
-      },
-      {
-        "reason": "invalid_context",
-        "headword": "咨怨",
-        "paper_key": "national-2015-c62fd826a408",
-        "question_number": 4,
-        "raw_excerpt": "1 “军旅 ”指军队,也可指军事;这里指军事、战事; “咨怨 ”指嗟叹怨恨; “ 游幸 ”指帝王或后妃出游;这里指炀帝出游。 2“凶逆 ”,凶恶悖逆,也指凶恶悖逆的人,这里指后者; “王室 ”,朝廷; “泉壤 ”",
-        "sanitized_context": "”乃赐物两千石 ,并牛酒,令谒先人墓 ,宴乡里父老 ,仍今 三品已上并集其宅,酣饮尽日,朝野荣之,十二年,驾幸江都,护儿谏曰: 陛下兴军旅 ,百姓易咨怨 ,车架游幸 ,深恐非宜, ”伏愿驻驾洛阳伏愿驻驾洛 阳,与时休息 ,陛下今幸江都 ,…"
-      },
-      {
-        "reason": "invalid_context",
-        "headword": "固",
-        "paper_key": "national-2019-6c05cd475c67",
-        "question_number": 13,
-        "raw_excerpt": "固,陈规",
-        "sanitized_context": "固,陈规"
-      },
-      {
-        "reason": "invalid_context",
-        "headword": "恣",
-        "paper_key": "national-2013-1f7f91d3b1a3",
-        "question_number": 1,
-        "raw_excerpt": "经籍在此,请恣寻检 恣:任意。 (2)一下各组句子中,全部表明李揆深受朝廷器重的一组是 1献书阙下,诏中书试文章 2自此颇承恩遇,遂蒙天用 3遂制罢羽林之请 4后累年,揆量移歙州刺史 5奏为试秘书监,江淮养疾 6入拜国子祭酒、礼部尚书",
-        "sanitized_context": "其试进士文章,曰: “大国选士,但务得才,经籍在此,请恣寻检 。"
-      },
-      {
-        "reason": "invalid_context",
-        "headword": "所以",
-        "paper_key": "national-2019-8d7210da3a49",
-        "question_number": 13,
-        "raw_excerpt": "“所以”,......的原因",
-        "sanitized_context": "“所以”,......的原因"
-      },
-      {
-        "reason": "missing_gloss",
-        "headword": "持",
-        "paper_key": "national-2016-12f0123dae6a",
-        "question_number": 4,
-        "raw_excerpt": "曾经;从容:严肃;固:结实,牢靠,这里活用为动词,义同 “持”,句子 翻译为:苏轼曾从容地责备公亮不能纠正弊端,世人讥讽他保持禄位加固宠 幸."
-      },
-      {
-        "reason": "invalid_context",
-        "headword": "泉壤",
-        "paper_key": "national-2015-c62fd826a408",
-        "question_number": 4,
-        "raw_excerpt": "逆,也指凶恶悖逆的人,这里指后者; “王室 ”,朝廷; “泉壤 ” 指黄泉之下,地下。",
-        "sanitized_context": "”护儿叹曰: “吾备位大臣,荷国重 任,不能肃清凶逆 ,遂今王室至此 ,抱恨泉壤 ,知复何言!"
-      },
-      {
-        "reason": "invalid_context",
-        "headword": "游幸",
-        "paper_key": "national-2015-c62fd826a408",
-        "question_number": 4,
-        "raw_excerpt": "也可指军事;这里指军事、战事; “咨怨 ”指嗟叹怨恨; “ 游幸 ”指帝王或后妃出游;这里指炀帝出游。 2“凶逆 ”,凶恶悖逆,也指凶恶悖逆的人,这里指后者; “王室 ”,朝廷; “泉壤 ” 指黄泉之下,地下。",
-        "sanitized_context": "”乃赐物两千石 ,并牛酒,令谒先人墓 ,宴乡里父老 ,仍今 三品已上并集其宅,酣饮尽日,朝野荣之,十二年,驾幸江都,护儿谏曰: 陛下兴军旅 ,百姓易咨怨 ,车架游幸 ,深恐非宜, ”伏愿驻驾洛阳伏愿驻驾洛 阳,与时休息 ,陛下今幸江都 ,…"
-      },
-      {
-        "reason": "invalid_context",
-        "headword": "王室",
-        "paper_key": "national-2015-c62fd826a408",
-        "question_number": 4,
-        "raw_excerpt": "“王室 ”,朝廷",
-        "sanitized_context": "”护儿叹曰: “吾备位大臣,荷国重 任,不能肃清凶逆 ,遂今王室至此 ,抱恨泉壤 ,知复何言!"
-      },
-      {
-        "reason": "invalid_context",
-        "headword": "留",
-        "paper_key": "national-2016-12f0123dae6a",
-        "question_number": 4,
-        "raw_excerpt": "点,首先要找出 关键实词、虚词,查看有无特殊句式,运用 “留”“删”“调”“换”“补”的方法,直 译为主,意译为辅 .并按现代汉语的规范 ,将翻译过来的内容进行适当调整 , 达到词达句顺.此句中重点的词有:",
-        "sanitized_context": "点,首先要找出 关键实词、虚词,查看有无特殊句式,运用 “留”“删”“调”“换”“补”的方法,直 译为主,意译为辅 .并按现代汉语的规范 ,将翻译过来的内容进行适当调整 , 达到词达句顺.此句中重点的词有:"
-      }
-    ],
-    "salvaged_polluted_examples": [
-      {
-        "headword": "使",
-        "paper_key": "beijing-2014-None",
-        "question_number": 9,
-        "raw_excerpt": "使堤土石幸久不朽 使:假如",
-        "sanitized_context": "使堤土石幸久不朽"
-      },
-      {
-        "headword": "使",
-        "paper_key": "beijing-2021-None",
-        "question_number": 6,
-        "raw_excerpt": "使礼义废,纲纪败 使:假如",
-        "sanitized_context": "使礼义废,纲纪败"
-      },
-      {
-        "headword": "什",
-        "paper_key": "beijing-2016-None",
-        "question_number": 9,
-        "raw_excerpt": "什至而金千斤也 什:十倍",
-        "sanitized_context": "什至而金千斤也"
-      },
-      {
-        "headword": "典",
-        "paper_key": "beijing-2013-None",
-        "question_number": 6,
-        "raw_excerpt": "太祖典禁旅典:主管,掌管",
-        "sanitized_context": "初,太祖典禁旅,彬中立不倚,非风湿未尝造门,群居燕会,亦所罕预,由是器重焉,建隆二年,自平阳召归,胃曰:“我畸昔常欲新汝,汝何故疏我?"
-      },
-      {
-        "headword": "几",
-        "paper_key": "beijing-2022-None",
-        "question_number": 6,
-        "raw_excerpt": "祸几及身 几:大多",
-        "sanitized_context": "秦王置天下于法令刑罚,德泽亡一有,而怨毒盈于世,下憎恶之如仇雠,祸几及身,子孙诛绝,此天下之所共见也。"
-      },
-      {
-        "headword": "切",
-        "paper_key": "beijing-2023-None",
-        "question_number": 6,
-        "raw_excerpt": "则取勇猛能操切百姓者操 切:胁迫",
-        "sanitized_context": "则取勇猛能操切百姓者操"
-      },
-      {
-        "headword": "唱",
-        "paper_key": "beijing-2007-None",
-        "question_number": 6,
-        "raw_excerpt": "上唱而民和 唱:倡导",
-        "sanitized_context": "英俊豪杰,各以小大之材,处其位,得其宜,由本流末,以重制轻,上唱而民和,上动而下随,四海之内,一心同归,背贪鄙而向义理。"
-      },
-      {
-        "headword": "处",
-        "paper_key": "beijing-2025-None",
-        "question_number": 6,
-        "raw_excerpt": "临患涉难而处义不越 处:坚守",
-        "sanitized_context": "临患涉难而处义不越"
-      },
-      {
-        "headword": "委",
-        "paper_key": "beijing-2006-None",
-        "question_number": 6,
-        "raw_excerpt": "委之百姓 委:任命",
-        "sanitized_context": "寡人请奉齐国之粟米财货,委之百姓,多寡轻重,惟夫子之令。"
-      },
-      {
-        "headword": "察",
-        "paper_key": "beijing-2007-None",
-        "question_number": 6,
-        "raw_excerpt": "察其党与 察:仔细看",
-        "sanitized_context": "故观其所举而治乱可见也,察其党与而贤不肖可论也。"
-      },
-      {
-        "headword": "将",
-        "paper_key": "beijing-2016-None",
-        "question_number": 9,
-        "raw_excerpt": "令左司马伯公将白徒而铸钱于庄山 将:率领",
-        "sanitized_context": "令左司马伯公将白徒而铸钱于庄山"
-      },
-      {
-        "headword": "就",
-        "paper_key": "beijing-2025-None",
-        "question_number": 6,
-        "raw_excerpt": "富贵弗就而贫贱弗弃 就:接近",
-        "sanitized_context": "富贵弗就而贫贱弗弃"
-      }
-    ],
-    "runtime_non_simple_headwords": [
-      {
-        "headword": "好生之德",
-        "needs_manual_review": false,
-        "dict_ref_count": 1
-      }
-    ],
-    "runtime_question_counts": {
-      "content_gloss": 216,
-      "translation_keypoint": 216,
-      "sentence_meaning": 216,
-      "passage_meaning": 170,
-      "analysis_short": 216
+  "function": {
+    "term_count": 22,
+    "core_term_count": 8,
+    "challenge_counts": {
+      "xuci_pair_compare": 5,
+      "function_gloss": 0,
+      "function_profile": 22
     }
   },
   "runtime": {
     "challenge_counts": {
       "xuci_pair_compare": 5,
-      "content_gloss": 216,
-      "translation_keypoint": 216,
-      "sentence_meaning": 216,
-      "passage_meaning": 170,
-      "analysis_short": 216
+      "function_gloss": 0,
+      "function_profile": 22,
+      "content_gloss": 187,
+      "sentence_meaning": 187,
+      "passage_meaning": 152
     },
+    "answer_key_count": 553,
     "issue_counts": {},
-    "issues": {}
-  },
-  "architecture_reflection": [
-    "北京卷四选项八短句题不能假设所有原始 excerpt 都带完整句号；应优先按加点词标记位置切分，再用标点作回退。",
-    "北京卷比较题不能假设 question_docs.answer 一定存在。答案字段为空时，题面可保存，但不可进入可答题运行库。",
-    "“虚词比较题”不能直接等同于“所有选项都来自 xuci 词表”。当前原始索引里存在同题缺失部分选项的情况，运行时必须把缺项题标成证据不足，而不是拼凑四项。",
-    "实词题的原始 excerpt 不能直接信任。带“词:释义”“翻译为”“参考答案”等污染标记的 excerpt 必须先经语境回收，再决定是否可出题。",
-    "实词词头也不能直接信任。像“之衣柜籍”“以为贺预”“典禁旅典”这类污染词头需要在构建期规范化，否则会污染词表、词典映射和错题追踪。",
-    "本次真实审计后，纯功能词比较题从 5 / 17 可运行，未运行题主要由缺答案或缺完整选项引起。",
-    "实词侧共有 3 个污染词头被规范化，运行时仍保留的长词头仅剩 1 个，其中应视为合法词组单独处理。"
-  ]
+    "issue_examples": [],
+    "private_answer_key_paths": [
+      "/Users/ylsuen/CF/wenyan-shixuci/data/runtime_private/answer_keys.json",
+      "/Users/ylsuen/CF/wenyan-shixuci/src/generated/answer_keys.json"
+    ]
+  }
 }

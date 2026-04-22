@@ -1,12 +1,14 @@
+import answerKeysData from "./generated/answer_keys.json";
+
 type Kind = "function_word" | "content_word";
-type Mode = "warmup" | "ranked" | "review";
+type Mode = "ladder";
 type QuestionType =
   | "xuci_pair_compare"
+  | "function_gloss"
+  | "function_profile"
   | "content_gloss"
-  | "translation_keypoint"
   | "sentence_meaning"
-  | "passage_meaning"
-  | "analysis_short";
+  | "passage_meaning";
 
 interface Env {
   DB: D1Database;
@@ -94,6 +96,7 @@ interface TermRecord {
   textbook_refs: TextbookRef[];
   dict_refs: DictLink[];
   idiom_refs: DictLink[];
+  priority_level?: string;
   needs_manual_review: boolean;
 }
 
@@ -118,6 +121,7 @@ interface BankItem {
   kind: Kind;
   term_id: string;
   term_ids?: string[];
+  priority_level?: string;
   year?: number;
   paper?: string;
   paper_key?: string;
@@ -126,9 +130,34 @@ interface BankItem {
   sentence?: string;
   passage?: string;
   options: BankOption[];
-  answer: BankAnswer;
-  explanation: string;
   response_mode?: "single_select" | "multi_select";
+}
+
+interface AnswerKeyRecord {
+  challenge_id: string;
+  kind: Kind;
+  question_type: QuestionType;
+  term_id: string;
+  term_ids?: string[];
+  priority_level?: string;
+  source_type?: string;
+  source_ref?: {
+    year?: number | null;
+    paper?: string;
+    paper_key?: string;
+    question_number?: number | null;
+  };
+  correct_label?: string;
+  correct_text?: string;
+  explanation: string;
+  dict_support?: DictLink[];
+  textbook_support?: TextbookRef[];
+  option_analyses?: Array<{
+    label: string;
+    text: string;
+    is_correct: boolean;
+    analysis: string;
+  }>;
 }
 
 interface ExamQuestionsPayload {
@@ -180,6 +209,7 @@ interface RuntimeData {
   termsFunction: TermRecord[];
   termsContent: TermRecord[];
   examQuestions: ExamQuestionsPayload;
+  answerKeys: Record<string, AnswerKeyRecord>;
   textbookExamples: Record<string, TextbookRef[]>;
   dictLinks: Record<string, { revised_sense_links: DictLink[]; idiom_links: DictLink[] }>;
   termMap: Map<string, TermRecord>;
@@ -201,11 +231,11 @@ interface ChallengePromptPayload {
   termId: string;
   termIds: string[];
   senseKey: string;
+  priorityLevel?: string;
   stem: string;
   sentence?: string;
   passage?: string;
   options: BankOption[];
-  explanation: string;
   responseMode: "single_select" | "multi_select";
 }
 
@@ -219,21 +249,56 @@ interface AuthContext {
   cookieHeader: string;
 }
 
+interface PlayerStateRow {
+  session_id: string;
+  kind: Kind;
+  tier_index: number;
+  highest_tier_index: number;
+  rounds_played: number;
+  perfect_rounds: number;
+  total_answered: number;
+  total_correct: number;
+  perfect_streak: number;
+  last_run_id: string | null;
+  last_round_answered: number;
+  last_round_correct: number;
+  last_result: string;
+  updated_at: string;
+}
+
 const SESSION_COOKIE = "wy_session";
 const DEV_SIGNING_SECRET = "local-dev-only-not-for-production";
-const QUESTION_TYPE_ORDER_CONTENT: QuestionType[] = [
-  "content_gloss",
-  "translation_keypoint",
-  "sentence_meaning",
-  "passage_meaning",
-  "analysis_short",
+const ROUND_SIZE = 10;
+const QUESTION_TYPE_ORDER_CONTENT: QuestionType[] = ["content_gloss", "sentence_meaning", "passage_meaning"];
+const QUESTION_TYPE_ORDER_FUNCTION: QuestionType[] = [
+  "xuci_pair_compare",
+  "function_profile",
+  "function_profile",
+  "xuci_pair_compare",
+  "function_profile",
+  "function_profile",
+  "xuci_pair_compare",
+  "function_profile",
+  "function_profile",
+  "xuci_pair_compare",
 ];
 const BADGE_DEFS = [
   { key: "first-correct", title: "初鸣勋章", detail: "答对第一题" },
   { key: "streak-3", title: "三连破阵", detail: "连续答对 3 题" },
   { key: "review-tamer", title: "错题驯服者", detail: "清空当前错题追击" },
-  { key: "perfect-run", title: "满分抄手", detail: "单次挑战 5 题全对" },
+  { key: "perfect-run", title: "满分抄手", detail: "单次挑战 10 题全对" },
 ];
+
+const IDV_TIERS = [
+  { tierIndex: 1, tierName: "工蜂", modeName: "常規排位" },
+  { tierIndex: 2, tierName: "獵犬", modeName: "常規排位" },
+  { tierIndex: 3, tierName: "馴鹿", modeName: "常規排位" },
+  { tierIndex: 4, tierName: "猛獁", modeName: "常規排位" },
+  { tierIndex: 5, tierName: "獅鷲", modeName: "常規排位" },
+  { tierIndex: 6, tierName: "獨角獸", modeName: "常規排位" },
+  { tierIndex: 7, tierName: "殿堂勇士", modeName: "殿堂模式" },
+  { tierIndex: 8, tierName: "巔峰泰坦", modeName: "巔峰模式" },
+] as const;
 
 let runtimeCache: Promise<RuntimeData> | null = null;
 
@@ -275,10 +340,13 @@ async function handleBootstrap(request: Request, env: Env): Promise<Response> {
   const runtime = await loadRuntime(env, request);
   const sessionState = await ensureAnonSession(request, env);
   const auth = await getAuthContext(request, env);
+  const owner = await resolveOwnerSession(env, sessionState, auth?.user || null);
   if (auth) {
-    await flushSyncOutbox(env, sessionState.id, auth.user.slug, auth.cookieHeader);
+    await flushSyncOutbox(env, owner.ownerId, auth.user.slug, auth.cookieHeader);
   }
-  const leaderboard = await loadLeaderboard(env, "day");
+  const leaderboard = await loadLeaderboard(env, "content_word");
+  const contentState = await getPlayerState(env, owner.ownerId, "content_word");
+  const functionState = await getPlayerState(env, owner.ownerId, "function_word");
   const response = json(
     {
       ok: true,
@@ -288,21 +356,24 @@ async function handleBootstrap(request: Request, env: Env): Promise<Response> {
         turnstileEnabled: env.TURNSTILE_ENABLED === "1",
         turnstileSiteKey: env.TURNSTILE_SITE_KEY || "",
       },
-      session: {
-        id: sessionState.id,
-        alias: sessionState.alias,
-        displayName: sessionState.displayName,
-      },
       auth: auth
         ? {
             authenticated: true,
             user: auth.user,
           }
         : { authenticated: false, user: null },
+      player: {
+        ownerId: owner.ownerId,
+        content: summarizePlayerState(contentState),
+        function: summarizePlayerState(functionState),
+      },
       stats: {
         functionTerms: runtime.termsFunction.length,
         contentTerms: runtime.termsContent.length,
-        functionChallenges: runtime.examQuestions.challenge_bank.xuci_pair_compare.length,
+        functionChallenges: ["xuci_pair_compare", "function_gloss", "function_profile"].reduce(
+          (sum, questionType) => sum + (runtime.examQuestions.challenge_bank[questionType as QuestionType]?.length || 0),
+          0
+        ),
         contentChallenges: QUESTION_TYPE_ORDER_CONTENT.reduce(
           (sum, questionType) => sum + (runtime.examQuestions.challenge_bank[questionType]?.length || 0),
           0
@@ -325,32 +396,55 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
   const runtime = await loadRuntime(env, request);
   const sessionState = await ensureAnonSession(request, env);
   const auth = await getAuthContext(request, env);
+  const owner = await resolveOwnerSession(env, sessionState, auth?.user || null);
   if (auth) {
-    await flushSyncOutbox(env, sessionState.id, auth.user.slug, auth.cookieHeader);
+    await flushSyncOutbox(env, owner.ownerId, auth.user.slug, auth.cookieHeader);
   }
 
   const kind = canonicalKind(url.searchParams.get("kind"));
-  const mode = canonicalMode(url.searchParams.get("mode"));
+  const mode: Mode = "ladder";
   let runId = cleanString(url.searchParams.get("runId"), 80);
-  let runRow = runId ? await getRun(env, runId, sessionState.id) : null;
+  let runRow = runId ? await getRun(env, runId, owner.ownerId) : null;
+  if (!runRow) {
+    runRow = await findActiveRun(env, owner.ownerId, kind);
+    runId = runRow ? String(runRow.id || "") : "";
+  }
+  const playerState = await getPlayerState(env, owner.ownerId, kind);
   if (!runRow) {
     runId = crypto.randomUUID();
     await env.DB.prepare(
       `INSERT INTO challenge_runs (id, session_id, kind, mode, status, started_at, updated_at)
        VALUES (?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
     )
-      .bind(runId, sessionState.id, kind, mode)
+      .bind(runId, owner.ownerId, kind, mode)
       .run();
-    runRow = await getRun(env, runId, sessionState.id);
+    runRow = await getRun(env, runId, owner.ownerId);
   }
   if (!runRow) {
     return json({ error: "Unable to establish challenge run" }, 500);
   }
+  if (Number(runRow.answered_count || 0) >= ROUND_SIZE || String(runRow.status || "") === "finished") {
+    return json(
+      {
+        ok: true,
+        run: summarizeRun(runRow),
+        item: null,
+        roundCompleted: true,
+        player: summarizePlayerState(playerState),
+      },
+      200
+    );
+  }
 
-  const reviewItem = mode === "review" ? await claimReviewTarget(env, sessionState.id) : null;
-  const bankItem = selectBankItem(runtime, sessionState.id, runRow, kind, mode, reviewItem);
+  const usedChallengeIds = await listRunChallengeIds(env, runId, owner.ownerId);
+  const reviewItem = await peekReviewTarget(env, owner.ownerId);
+  const bankItem = selectBankItem(runtime, owner.ownerId, runRow, kind, playerState, usedChallengeIds, reviewItem);
   if (!bankItem) {
     return json({ error: "No challenge item available" }, 404);
+  }
+  const answerKey = runtime.answerKeys[bankItem.challenge_id];
+  if (!answerKey?.correct_label) {
+    return json({ error: `Missing answer key for ${bankItem.challenge_id}` }, 500);
   }
 
   const senseKey = buildSenseKey(bankItem);
@@ -361,14 +455,14 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
     termId: bankItem.term_id,
     termIds: bankItem.term_ids && bankItem.term_ids.length ? bankItem.term_ids : [bankItem.term_id],
     senseKey,
+    priorityLevel: bankItem.priority_level,
     stem: bankItem.stem,
     sentence: bankItem.sentence,
     passage: bankItem.passage,
     options: bankItem.options,
-    explanation: bankItem.explanation,
     responseMode: bankItem.response_mode || "single_select",
   };
-  const answer = bankItem.answer;
+  const answer: BankAnswer = { label: answerKey.correct_label };
   const itemId = crypto.randomUUID();
   await env.DB.prepare(
     `INSERT INTO challenge_items (id, run_id, session_id, question_type, kind, term_id, term_ids_json, sense_key, prompt_json, answer_json)
@@ -377,7 +471,7 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
     .bind(
       itemId,
       runId,
-      sessionState.id,
+      owner.ownerId,
       prompt.questionType,
       kind,
       prompt.termId,
@@ -391,13 +485,13 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
   const answerToken = await signToken(
     env,
     request,
-    {
-      type: "answer",
-      sid: sessionState.id,
-      rid: runId,
-      iid: itemId,
-      exp: Math.floor(Date.now() / 1000) + 10 * 60,
-    }
+      {
+        type: "answer",
+        sid: owner.ownerId,
+        rid: runId,
+        iid: itemId,
+        exp: Math.floor(Date.now() / 1000) + 10 * 60,
+      }
   );
 
   const response = json(
@@ -409,7 +503,8 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
         prompt,
         answerToken,
       },
-      reviewTarget: reviewItem,
+      roundCompleted: false,
+      player: summarizePlayerState(playerState),
     },
     200
   );
@@ -420,10 +515,12 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
 }
 
 async function handleChallengeAnswer(request: Request, env: Env): Promise<Response> {
+  const runtime = await loadRuntime(env, request);
   const sessionState = await ensureAnonSession(request, env);
   const auth = await getAuthContext(request, env);
+  const owner = await resolveOwnerSession(env, sessionState, auth?.user || null);
   if (auth) {
-    await flushSyncOutbox(env, sessionState.id, auth.user.slug, auth.cookieHeader);
+    await flushSyncOutbox(env, owner.ownerId, auth.user.slug, auth.cookieHeader);
   }
   const ipHash = await sha256Hex(request.headers.get("CF-Connecting-IP") || "");
   if (!(await enforceRateLimit(env, sessionState.id, auth?.user.slug || "", ipHash))) {
@@ -443,7 +540,7 @@ async function handleChallengeAnswer(request: Request, env: Env): Promise<Respon
   if (
     !tokenPayload ||
     tokenPayload.type !== "answer" ||
-    tokenPayload.sid !== sessionState.id ||
+    tokenPayload.sid !== owner.ownerId ||
     typeof tokenPayload.rid !== "string" ||
     typeof tokenPayload.iid !== "string"
   ) {
@@ -457,7 +554,7 @@ async function handleChallengeAnswer(request: Request, env: Env): Promise<Respon
     `SELECT id, run_id, question_type, kind, term_id, term_ids_json, sense_key, prompt_json, answer_json, answered_at
      FROM challenge_items WHERE id = ? AND run_id = ? AND session_id = ?`
   )
-    .bind(tokenPayload.iid, tokenPayload.rid, sessionState.id)
+    .bind(tokenPayload.iid, tokenPayload.rid, owner.ownerId)
     .first<Record<string, unknown>>();
   if (!row) {
     return json({ error: "Challenge item not found" }, 404);
@@ -468,6 +565,10 @@ async function handleChallengeAnswer(request: Request, env: Env): Promise<Respon
 
   const prompt = safeParseObject(row.prompt_json) as unknown as ChallengePromptPayload;
   const answer = safeParseObject(row.answer_json) as unknown as BankAnswer;
+  const answerKey = runtime.answerKeys[prompt.challengeId];
+  if (!answerKey) {
+    return json({ error: `Answer key missing for ${prompt.challengeId}` }, 500);
+  }
   const correct = evaluateAnswer(prompt.responseMode, answer, submitted);
   const relevantTermIds = resolveRelevantTermIds(prompt, answer, submitted);
   const scoreDelta = scoreForAnswer(prompt.questionType, correct);
@@ -481,12 +582,24 @@ async function handleChallengeAnswer(request: Request, env: Env): Promise<Respon
     .run();
 
   await updateRunAfterAnswer(env, String(row.run_id), scoreDelta, correct);
-  await updateMasteryRows(env, sessionState.id, relevantTermIds, String(row.sense_key), String(row.question_type), correct);
-  await updateReviewQueue(env, sessionState.id, relevantTermIds, String(row.sense_key), prompt.questionType, correct, String(row.id));
+  await updateMasteryRows(env, owner.ownerId, relevantTermIds, String(row.sense_key), String(row.question_type), correct);
+  await updateReviewQueue(env, owner.ownerId, relevantTermIds, String(row.sense_key), prompt.questionType, correct, String(row.id));
 
-  const run = await getRun(env, String(row.run_id), sessionState.id);
-  const pendingReviewCount = await countPendingReview(env, sessionState.id);
-  const newlyUnlocked = run ? await unlockBadges(env, sessionState.id, run, pendingReviewCount) : [];
+  let run = await getRun(env, String(row.run_id), owner.ownerId);
+  const pendingReviewCount = await countPendingReview(env, owner.ownerId);
+  const newlyUnlocked = run ? await unlockBadges(env, owner.ownerId, run, pendingReviewCount) : [];
+  let playerState = run ? await getPlayerState(env, owner.ownerId, String(run.kind || "content_word") as Kind) : null;
+  let roundSummary: Record<string, unknown> | null = null;
+  let reportInfo: Record<string, unknown> | null = null;
+
+  if (run && Number(run.answered_count || 0) >= ROUND_SIZE && String(run.status || "") === "active") {
+    roundSummary = await finalizeRound(env, owner.ownerId, run);
+    run = await getRun(env, String(row.run_id), owner.ownerId);
+    playerState = run ? await getPlayerState(env, owner.ownerId, String(run.kind || "content_word") as Kind) : playerState;
+    if (run) {
+      reportInfo = await finalizeRunReport(env, owner.ownerId, run, auth, auth?.cookieHeader || "");
+    }
+  }
 
   return json(
     {
@@ -497,14 +610,19 @@ async function handleChallengeAnswer(request: Request, env: Env): Promise<Respon
         encouragingFeedback: correct
           ? pickEncouragement(true, prompt.questionType)
           : pickEncouragement(false, prompt.questionType),
-        explanation: prompt.explanation,
+        explanation: answerKey.explanation,
         pendingReviewCount,
         relatedTerms: relevantTermIds,
         correctAnswer: answer,
         submittedAnswer: submitted,
+        answerKey,
       },
       run: run ? summarizeRun(run) : null,
       badges: newlyUnlocked,
+      roundCompleted: Boolean(roundSummary),
+      round: roundSummary,
+      player: playerState ? summarizePlayerState(playerState) : null,
+      report: reportInfo,
     },
     200
   );
@@ -534,28 +652,28 @@ async function handleTerm(request: Request, env: Env, rawTermId: string): Promis
 }
 
 async function handleLeaderboard(env: Env, url: URL): Promise<Response> {
-  const scopeParam = cleanString(url.searchParams.get("scope"), 12);
-  const scope = scopeParam === "week" ? "week" : scopeParam === "all" ? "all" : "day";
-  return json(await loadLeaderboard(env, scope), 200);
+  const kind = canonicalKind(url.searchParams.get("kind"));
+  return json(await loadLeaderboard(env, kind), 200);
 }
 
 async function handleReportFinalize(request: Request, env: Env): Promise<Response> {
   const sessionState = await ensureAnonSession(request, env);
   const auth = await getAuthContext(request, env);
+  const owner = await resolveOwnerSession(env, sessionState, auth?.user || null);
   if (auth) {
-    await flushSyncOutbox(env, sessionState.id, auth.user.slug, auth.cookieHeader);
+    await flushSyncOutbox(env, owner.ownerId, auth.user.slug, auth.cookieHeader);
   }
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const runId = cleanString(body?.runId, 80);
   if (!runId) {
     return json({ error: "runId required" }, 400);
   }
-  const run = await getRun(env, runId, sessionState.id);
+  const run = await getRun(env, runId, owner.ownerId);
   if (!run) {
     return json({ error: "Run not found" }, 404);
   }
   if (run.report_id) {
-    const existing = await buildExistingReportResponse(env, sessionState.id, String(run.report_id));
+    const existing = await buildExistingReportResponse(env, owner.ownerId, String(run.report_id));
     if (existing) {
       return json(
         {
@@ -567,16 +685,16 @@ async function handleReportFinalize(request: Request, env: Env): Promise<Respons
       );
     }
   }
-  const items = await listRunItems(env, runId, sessionState.id);
+  const items = await listRunItems(env, runId, owner.ownerId);
   if (!items.length) {
     return json({ error: "Run has no answered items yet" }, 400);
   }
 
   const reportId = crypto.randomUUID();
   const accuracy = Number(run.answered_count) > 0 ? Number(run.correct_count) / Number(run.answered_count) : 0;
-  const pendingReviewCount = await countPendingReview(env, sessionState.id);
+  const pendingReviewCount = await countPendingReview(env, owner.ownerId);
   const mistakeTerms = collectMistakeTerms(items);
-  const newMasteredTerms = await listMasteredTerms(env, sessionState.id);
+  const newMasteredTerms = await listMasteredTerms(env, owner.ownerId);
   const reportJsonPayload = {
     report_id: reportId,
     kind: String(run.kind),
@@ -613,7 +731,7 @@ async function handleReportFinalize(request: Request, env: Env): Promise<Respons
     .bind(
       reportId,
       runId,
-      sessionState.id,
+      owner.ownerId,
       String(run.kind),
       String(run.mode),
       Number(run.score),
@@ -633,20 +751,19 @@ async function handleReportFinalize(request: Request, env: Env): Promise<Respons
      SET status = 'finished', finished_at = ?, updated_at = ?, report_id = ?
      WHERE id = ? AND session_id = ?`
   )
-    .bind(reportJsonPayload.finished_at, reportJsonPayload.finished_at, reportId, runId, sessionState.id)
+    .bind(reportJsonPayload.finished_at, reportJsonPayload.finished_at, reportId, runId, owner.ownerId)
     .run();
 
   if (auth) {
-    await queueSyncEvent(env, sessionState.id, auth.user.slug, "progress_sync", buildProgressSyncPayload(run, accuracy));
+    await queueSyncEvent(env, owner.ownerId, auth.user.slug, "progress_sync", buildProgressSyncPayload(run, accuracy));
     await queueSyncEvent(
       env,
-      sessionState.id,
+      owner.ownerId,
       auth.user.slug,
       "mastery_report",
       buildMasterySyncPayload(run, accuracy, reportId)
     );
-    await updateLeaderboard(env, sessionState.id, auth.user.slug, auth.user.displayName || auth.user.slug, Number(run.score));
-    await flushSyncOutbox(env, sessionState.id, auth.user.slug, auth.cookieHeader);
+    await flushSyncOutbox(env, owner.ownerId, auth.user.slug, auth.cookieHeader);
   }
 
   return json(
@@ -664,14 +781,15 @@ async function handleReportFinalize(request: Request, env: Env): Promise<Respons
 async function handleReportGet(request: Request, env: Env, reportId: string, url: URL): Promise<Response> {
   const sessionState = await ensureAnonSession(request, env);
   const auth = await getAuthContext(request, env);
+  const owner = await resolveOwnerSession(env, sessionState, auth?.user || null);
   if (auth) {
-    await flushSyncOutbox(env, sessionState.id, auth.user.slug, auth.cookieHeader);
+    await flushSyncOutbox(env, owner.ownerId, auth.user.slug, auth.cookieHeader);
   }
   const report = await env.DB.prepare(
     `SELECT id, session_id, report_markdown_key, report_json_key, download_count
      FROM session_reports WHERE id = ? AND session_id = ?`
   )
-    .bind(reportId, sessionState.id)
+    .bind(reportId, owner.ownerId)
     .first<Record<string, unknown>>();
   if (!report) {
     return json({ error: "Report not found" }, 404);
@@ -693,12 +811,12 @@ async function handleReportGet(request: Request, env: Env, reportId: string, url
   if (auth) {
     await queueSyncEvent(
       env,
-      sessionState.id,
+      owner.ownerId,
       auth.user.slug,
       "download_record",
       buildDownloadSyncPayload(reportId, format)
     );
-    await flushSyncOutbox(env, sessionState.id, auth.user.slug, auth.cookieHeader);
+    await flushSyncOutbox(env, owner.ownerId, auth.user.slug, auth.cookieHeader);
   }
 
   const headers = new Headers();
@@ -766,6 +884,7 @@ async function loadRuntime(env: Env, request: Request): Promise<RuntimeData> {
         termsFunction,
         termsContent,
         examQuestions,
+        answerKeys: answerKeysData as Record<string, AnswerKeyRecord>,
         textbookExamples,
         dictLinks,
         termMap,
@@ -814,10 +933,11 @@ async function loadShardedAsset<T>(env: Env, request: Request, manifest: Runtime
 
 function selectBankItem(
   runtime: RuntimeData,
-  sessionId: string,
+  ownerId: string,
   runRow: Record<string, unknown>,
   kind: Kind,
-  mode: Mode,
+  playerState: PlayerStateRow,
+  usedChallengeIds: Set<string>,
   reviewItem: Record<string, unknown> | null
 ): BankItem | null {
   const bank = runtime.examQuestions.challenge_bank;
@@ -826,42 +946,34 @@ function selectBankItem(
     const reviewTermId = String(reviewItem.term_id || "");
     const reviewQuestionType = String(reviewItem.question_type || "") as QuestionType;
     const candidates = (bank[reviewQuestionType] || []).filter((item) =>
-      (item.term_ids && item.term_ids.includes(reviewTermId)) || item.term_id === reviewTermId
+      !usedChallengeIds.has(String(item.challenge_id || "")) &&
+      ((item.term_ids && item.term_ids.includes(reviewTermId)) || item.term_id === reviewTermId)
     );
     if (candidates.length) {
       return candidates[answeredCount % candidates.length] || null;
     }
   }
 
-  if (kind === "function_word") {
-    const items = bank.xuci_pair_compare || [];
-    if (!items.length) return null;
-    const offset = stableNumber(`${sessionId}:${String(runRow.id)}`, items.length);
-    return items[(offset + answeredCount) % items.length] || null;
+  const rotation = kind === "function_word" ? QUESTION_TYPE_ORDER_FUNCTION : QUESTION_TYPE_ORDER_CONTENT;
+  const desiredType = rotation[answeredCount % rotation.length];
+  const primaryItems = pickBankByPriority(bank[desiredType] || [], playerState);
+  const selectedPrimary = chooseUnusedItem(primaryItems, usedChallengeIds, `${ownerId}:${String(runRow.id)}:${desiredType}:${answeredCount}`);
+  if (selectedPrimary) {
+    return selectedPrimary;
   }
 
-  const questionTypes: QuestionType[] =
-    mode === "warmup" ? ["content_gloss", "translation_keypoint"] : QUESTION_TYPE_ORDER_CONTENT;
-  const start = answeredCount % questionTypes.length;
-  for (let step = 0; step < questionTypes.length; step += 1) {
-    const qType = questionTypes[(start + step) % questionTypes.length];
-    const sourceItems = bank[qType] || [];
-    const items =
-      mode === "warmup"
-        ? sourceItems.filter((item) => String(item.paper || "").includes("北京"))
-        : sourceItems;
-    if (!items.length) continue;
-    const offset = stableNumber(`${sessionId}:${String(runRow.id)}:${qType}`, items.length);
-    return items[(offset + answeredCount) % items.length] || null;
+  for (const qType of rotation) {
+    const items = pickBankByPriority(bank[qType] || [], playerState);
+    const selected = chooseUnusedItem(items, usedChallengeIds, `${ownerId}:${String(runRow.id)}:${qType}:${answeredCount}`);
+    if (selected) return selected;
   }
   return null;
 }
 
 function buildSenseKey(item: BankItem): string {
-  if (item.question_type === "analysis_short") return `analysis:${item.challenge_id}`;
-  if (item.answer.label) {
-    const correct = item.options.find((option) => option.label === item.answer.label);
-    return `${item.question_type}:${cleanString(correct?.text || correct?.headword || item.challenge_id, 80)}`;
+  if (item.options.length) {
+    const focus = item.options[0];
+    return `${item.question_type}:${cleanString(focus.text || focus.headword || item.challenge_id, 80)}`;
   }
   return `${item.question_type}:${item.challenge_id}`;
 }
@@ -898,8 +1010,8 @@ function resolveRelevantTermIds(
 
 function scoreForAnswer(questionType: QuestionType, correct: boolean): number {
   if (!correct) return -4;
-  if (questionType === "analysis_short") return 16;
   if (questionType === "xuci_pair_compare") return 14;
+  if (questionType === "passage_meaning") return 14;
   return 12;
 }
 
@@ -1055,14 +1167,14 @@ async function updateReviewQueue(
         senseKey,
         questionType,
         10,
-        new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+        new Date().toISOString(),
         sourceItemId
       )
       .run();
   }
 }
 
-async function claimReviewTarget(env: Env, sessionId: string): Promise<Record<string, unknown> | null> {
+async function peekReviewTarget(env: Env, sessionId: string): Promise<Record<string, unknown> | null> {
   return (
     (await env.DB.prepare(
       `SELECT id, term_id, sense_key, question_type
@@ -1107,7 +1219,7 @@ async function unlockBadges(
   if (Number(run.max_streak || 0) >= 3) conditions.add("streak-3");
   if (pendingReviewCount === 0 && Number(run.answered_count || 0) >= 4) conditions.add("review-tamer");
   if (
-    Number(run.answered_count || 0) >= 5 &&
+    Number(run.answered_count || 0) >= ROUND_SIZE &&
     Number(run.correct_count || 0) === Number(run.answered_count || 0)
   ) {
     conditions.add("perfect-run");
@@ -1139,6 +1251,20 @@ async function getRun(env: Env, runId: string, sessionId: string): Promise<Recor
        FROM challenge_runs WHERE id = ? AND session_id = ?`
     )
       .bind(runId, sessionId)
+      .first<Record<string, unknown>>()) || null
+  );
+}
+
+async function findActiveRun(env: Env, sessionId: string, kind: Kind): Promise<Record<string, unknown> | null> {
+  return (
+    (await env.DB.prepare(
+      `SELECT id, session_id, kind, mode, status, started_at, updated_at, finished_at, score, correct_count, answered_count, streak, max_streak, rating_delta, report_id
+       FROM challenge_runs
+       WHERE session_id = ? AND kind = ? AND status = 'active'
+       ORDER BY updated_at DESC
+       LIMIT 1`
+    )
+      .bind(sessionId, kind)
       .first<Record<string, unknown>>()) || null
   );
 }
@@ -1219,61 +1345,300 @@ function buildReportMarkdown(
   return lines.join("\n");
 }
 
-async function loadLeaderboard(env: Env, scope: "day" | "week" | "all"): Promise<Record<string, unknown>> {
-  const scopeKey = leaderboardScopeKey(scope);
-  const { results } = await env.DB.prepare(
-    `SELECT display_name, score, runs, updated_at
-     FROM leaderboard_scores
-     WHERE scope = ? AND scope_key = ?
-     ORDER BY score DESC, updated_at ASC
-     LIMIT 20`
+async function resolveOwnerSession(
+  env: Env,
+  sessionState: SessionState,
+  user: UserCenterUser | null
+): Promise<{ ownerId: string; displayName: string }> {
+  if (!user?.slug) {
+    await upsertOwnerSession(env, sessionState.id, sessionState.alias, sessionState.displayName);
+    return {
+      ownerId: sessionState.id,
+      displayName: sessionState.displayName || sessionState.alias,
+    };
+  }
+  const ownerId = `auth:${user.slug}`;
+  const displayName = cleanString(user.displayName || user.slug, 80) || user.slug;
+  await upsertOwnerSession(env, ownerId, user.slug, displayName);
+  return { ownerId, displayName };
+}
+
+async function upsertOwnerSession(env: Env, ownerId: string, alias: string, displayName: string): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO anon_sessions (id, alias, display_name, created_at, last_seen_at)
+     VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     ON CONFLICT(id) DO UPDATE SET alias = excluded.alias, display_name = excluded.display_name, last_seen_at = CURRENT_TIMESTAMP`
   )
-    .bind(scope, scopeKey)
-    .all<Record<string, unknown>>();
+    .bind(ownerId, alias || displayName || ownerId, displayName || alias || ownerId)
+    .run();
+}
+
+async function getPlayerState(env: Env, sessionId: string, kind: Kind): Promise<PlayerStateRow> {
+  const existing = await env.DB.prepare(
+    `SELECT session_id, kind, tier_index, highest_tier_index, rounds_played, perfect_rounds, total_answered, total_correct, perfect_streak, last_run_id, last_round_answered, last_round_correct, last_result, updated_at
+     FROM player_kind_state WHERE session_id = ? AND kind = ?`
+  )
+    .bind(sessionId, kind)
+    .first<PlayerStateRow>();
+  if (existing) return normalizePlayerState(existing, kind, sessionId);
+
+  await env.DB.prepare(
+    `INSERT INTO player_kind_state
+     (session_id, kind, tier_index, highest_tier_index, rounds_played, perfect_rounds, total_answered, total_correct, perfect_streak, last_result, created_at, updated_at)
+     VALUES (?, ?, 1, 1, 0, 0, 0, 0, 0, 'idle', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+  )
+    .bind(sessionId, kind)
+    .run();
+  const created = await env.DB.prepare(
+    `SELECT session_id, kind, tier_index, highest_tier_index, rounds_played, perfect_rounds, total_answered, total_correct, perfect_streak, last_run_id, last_round_answered, last_round_correct, last_result, updated_at
+     FROM player_kind_state WHERE session_id = ? AND kind = ?`
+  )
+    .bind(sessionId, kind)
+    .first<PlayerStateRow>();
+  return normalizePlayerState(created || ({} as PlayerStateRow), kind, sessionId);
+}
+
+function normalizePlayerState(row: PlayerStateRow, kind: Kind, sessionId: string): PlayerStateRow {
   return {
-    scope,
-    scopeKey,
-    entries: (results || []).map((row, index) => ({
-      rank: index + 1,
-      displayName: row.display_name,
-      score: Number(row.score || 0),
-      runs: Number(row.runs || 0),
-      updatedAt: row.updated_at,
-    })),
+    session_id: sessionId,
+    kind,
+    tier_index: Math.max(1, Number(row?.tier_index || 1)),
+    highest_tier_index: Math.max(1, Number(row?.highest_tier_index || row?.tier_index || 1)),
+    rounds_played: Number(row?.rounds_played || 0),
+    perfect_rounds: Number(row?.perfect_rounds || 0),
+    total_answered: Number(row?.total_answered || 0),
+    total_correct: Number(row?.total_correct || 0),
+    perfect_streak: Number(row?.perfect_streak || 0),
+    last_run_id: row?.last_run_id || null,
+    last_round_answered: Number(row?.last_round_answered || 0),
+    last_round_correct: Number(row?.last_round_correct || 0),
+    last_result: String(row?.last_result || "idle"),
+    updated_at: String(row?.updated_at || ""),
   };
 }
 
-async function updateLeaderboard(
-  env: Env,
-  sessionId: string,
-  authSubject: string,
-  displayName: string,
-  scoreDelta: number
-): Promise<void> {
-  const scopes: Array<"day" | "week" | "all"> = ["day", "week", "all"];
-  for (const scope of scopes) {
-    const scopeKey = leaderboardScopeKey(scope);
-    await env.DB.prepare(
-      `INSERT INTO leaderboard_scores (session_id, scope, scope_key, display_name, score, runs, updated_at)
-       VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
-       ON CONFLICT(session_id, scope, scope_key)
-       DO UPDATE SET
-         display_name = excluded.display_name,
-         score = leaderboard_scores.score + excluded.score,
-         runs = leaderboard_scores.runs + 1,
-         updated_at = CURRENT_TIMESTAMP`
-    )
-      .bind(sessionId, scope, scopeKey, displayName || authSubject, scoreDelta)
-      .run();
-  }
+function summarizePlayerState(row: PlayerStateRow): Record<string, unknown> {
+  const tier = getTierInfo(row.tier_index);
+  const accuracy = row.total_answered > 0 ? Math.round((row.total_correct / row.total_answered) * 100) : 0;
+  return {
+    kind: row.kind,
+    tierIndex: tier.tierIndex,
+    tierName: tier.tierName,
+    modeName: tier.modeName,
+    nextTierName: tier.nextTierName,
+    roundsPlayed: row.rounds_played,
+    perfectRounds: row.perfect_rounds,
+    totalAnswered: row.total_answered,
+    totalCorrect: row.total_correct,
+    accuracy,
+    perfectStreak: row.perfect_streak,
+    lastRunId: row.last_run_id,
+    lastRoundAnswered: row.last_round_answered,
+    lastRoundCorrect: row.last_round_correct,
+    lastResult: row.last_result,
+    progressPercent: tier.progressPercent,
+  };
 }
 
-function leaderboardScopeKey(scope: "day" | "week" | "all"): string {
-  if (scope === "all") return "all-time";
-  const now = new Date();
-  if (scope === "day") return now.toISOString().slice(0, 10);
-  const week = isoWeek(now);
-  return `${week.year}-W${String(week.week).padStart(2, "0")}`;
+function getTierInfo(tierIndex: number): Record<string, unknown> {
+  const normalized = clampNumber(Math.round(tierIndex || 1), 1, IDV_TIERS.length);
+  const current = IDV_TIERS[normalized - 1];
+  const next = IDV_TIERS[normalized] || null;
+  return {
+    tierIndex: current.tierIndex,
+    tierName: current.tierName,
+    modeName: current.modeName,
+    nextTierName: next?.tierName || null,
+    progressPercent: normalized >= IDV_TIERS.length ? 100 : Math.round((normalized / IDV_TIERS.length) * 100),
+  };
+}
+
+function pickBankByPriority(items: BankItem[], playerState: PlayerStateRow): BankItem[] {
+  const preferCore = playerState.tier_index <= 4;
+  return [...items].sort((left, right) => {
+    const leftScore = (preferCore && left.priority_level === "core" ? 0 : 1) + (left.year ? -left.year / 10000 : 0);
+    const rightScore = (preferCore && right.priority_level === "core" ? 0 : 1) + (right.year ? -right.year / 10000 : 0);
+    if (leftScore !== rightScore) return leftScore - rightScore;
+    return String(left.challenge_id).localeCompare(String(right.challenge_id));
+  });
+}
+
+function chooseUnusedItem(items: BankItem[], usedChallengeIds: Set<string>, seed: string): BankItem | null {
+  const candidates = items.filter((item) => !usedChallengeIds.has(String(item.challenge_id || "")));
+  if (!candidates.length) return null;
+  const offset = stableNumber(seed, candidates.length);
+  return candidates[offset] || null;
+}
+
+async function listRunChallengeIds(env: Env, runId: string, sessionId: string): Promise<Set<string>> {
+  const { results } = await env.DB.prepare(
+    `SELECT prompt_json FROM challenge_items WHERE run_id = ? AND session_id = ? ORDER BY created_at ASC`
+  )
+    .bind(runId, sessionId)
+    .all<Record<string, unknown>>();
+  const challengeIds = new Set<string>();
+  for (const row of results || []) {
+    const prompt = safeParseObject(row.prompt_json) as unknown as ChallengePromptPayload;
+    if (prompt.challengeId) challengeIds.add(prompt.challengeId);
+  }
+  return challengeIds;
+}
+
+async function finalizeRound(env: Env, sessionId: string, run: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const kind = String(run.kind || "content_word") as Kind;
+  const currentState = await getPlayerState(env, sessionId, kind);
+  const answeredCount = Number(run.answered_count || 0);
+  const correctCount = Number(run.correct_count || 0);
+  const perfect = answeredCount >= ROUND_SIZE && correctCount === ROUND_SIZE;
+  const promotedTierIndex = perfect ? Math.min(IDV_TIERS.length, currentState.tier_index + 1) : currentState.tier_index;
+  const nextPerfectStreak = perfect ? currentState.perfect_streak + 1 : 0;
+  await env.DB.prepare(
+    `UPDATE player_kind_state
+     SET tier_index = ?, highest_tier_index = ?, rounds_played = rounds_played + 1, perfect_rounds = perfect_rounds + ?, total_answered = total_answered + ?, total_correct = total_correct + ?, perfect_streak = ?, last_run_id = ?, last_round_answered = ?, last_round_correct = ?, last_result = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE session_id = ? AND kind = ?`
+  )
+    .bind(
+      promotedTierIndex,
+      Math.max(currentState.highest_tier_index, promotedTierIndex),
+      perfect ? 1 : 0,
+      answeredCount,
+      correctCount,
+      nextPerfectStreak,
+      String(run.id),
+      answeredCount,
+      correctCount,
+      perfect ? "promoted" : "held",
+      sessionId,
+      kind
+    )
+    .run();
+  await env.DB.prepare(
+    `UPDATE challenge_runs
+     SET status = 'finished', finished_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND session_id = ?`
+  )
+    .bind(String(run.id), sessionId)
+    .run();
+  return {
+    answeredCount,
+    correctCount,
+    perfect,
+    promoted: promotedTierIndex > currentState.tier_index,
+    fromTier: getTierInfo(currentState.tier_index),
+    toTier: getTierInfo(promotedTierIndex),
+  };
+}
+
+async function finalizeRunReport(
+  env: Env,
+  sessionId: string,
+  run: Record<string, unknown>,
+  auth: { user: UserCenterUser; cookieHeader: string } | null,
+  cookieHeader: string
+): Promise<Record<string, unknown> | null> {
+  if (run.report_id) {
+    return buildExistingReportResponse(env, sessionId, String(run.report_id));
+  }
+  const items = await listRunItems(env, String(run.id), sessionId);
+  if (!items.length) return null;
+  const reportId = crypto.randomUUID();
+  const accuracy = Number(run.answered_count) > 0 ? Number(run.correct_count) / Number(run.answered_count) : 0;
+  const pendingReviewCount = await countPendingReview(env, sessionId);
+  const mistakeTerms = collectMistakeTerms(items);
+  const newMasteredTerms = await listMasteredTerms(env, sessionId);
+  const reportJsonPayload = {
+    report_id: reportId,
+    kind: String(run.kind),
+    mode: String(run.mode),
+    started_at: String(run.started_at),
+    finished_at: new Date().toISOString(),
+    score: Number(run.score),
+    accuracy,
+    mistake_terms: mistakeTerms,
+    new_mastered_terms: newMasteredTerms.slice(0, 20),
+    queue_after_run: pendingReviewCount,
+    download_files: {
+      markdown: `/api/report/${reportId}?format=markdown`,
+      json: `/api/report/${reportId}?format=json`,
+    },
+  };
+  const reportMarkdown = buildReportMarkdown(run, items, reportJsonPayload);
+  const reportJson = JSON.stringify(reportJsonPayload, null, 2);
+  const reportMarkdownKey = `reports/${reportId}/report.md`;
+  const reportJsonKey = `reports/${reportId}/report.json`;
+  await env.REPORTS.put(reportMarkdownKey, reportMarkdown, {
+    httpMetadata: { contentType: "text/markdown; charset=utf-8" },
+  });
+  await env.REPORTS.put(reportJsonKey, reportJson, {
+    httpMetadata: { contentType: "application/json; charset=utf-8" },
+  });
+  await env.DB.prepare(
+    `INSERT INTO session_reports
+     (id, run_id, session_id, kind, mode, score, accuracy, summary_markdown, summary_json, report_markdown_key, report_json_key, content_hash, started_at, finished_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(
+      reportId,
+      String(run.id),
+      sessionId,
+      String(run.kind),
+      String(run.mode),
+      Number(run.score),
+      accuracy,
+      reportMarkdown.slice(0, 1200),
+      JSON.stringify({ mistake_terms: mistakeTerms, queue_after_run: pendingReviewCount }),
+      reportMarkdownKey,
+      reportJsonKey,
+      await sha256Hex(reportMarkdown + reportJson),
+      String(run.started_at),
+      reportJsonPayload.finished_at
+    )
+    .run();
+  await env.DB.prepare(
+    `UPDATE challenge_runs SET report_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND session_id = ?`
+  )
+    .bind(reportId, String(run.id), sessionId)
+    .run();
+  if (auth) {
+    await queueSyncEvent(env, sessionId, auth.user.slug, "progress_sync", buildProgressSyncPayload(run, accuracy));
+    await queueSyncEvent(env, sessionId, auth.user.slug, "mastery_report", buildMasterySyncPayload(run, accuracy, reportId));
+    await flushSyncOutbox(env, sessionId, auth.user.slug, cookieHeader);
+  }
+  return {
+    reportId,
+    markdownUrl: `/api/report/${reportId}?format=markdown`,
+    jsonUrl: `/api/report/${reportId}?format=json`,
+    summary: reportJsonPayload,
+  };
+}
+
+async function loadLeaderboard(env: Env, kind: Kind): Promise<Record<string, unknown>> {
+  const { results } = await env.DB.prepare(
+    `SELECT p.session_id, a.display_name, a.alias, p.tier_index, p.highest_tier_index, p.rounds_played, p.perfect_rounds, p.total_answered, p.total_correct, p.updated_at
+     FROM player_kind_state p
+     JOIN anon_sessions a ON a.id = p.session_id
+     WHERE p.kind = ?
+     ORDER BY p.tier_index DESC, p.perfect_rounds DESC, p.total_correct DESC, p.updated_at ASC
+     LIMIT 20`
+  )
+    .bind(kind)
+    .all<Record<string, unknown>>();
+  return {
+    kind,
+    entries: (results || []).map((row, index) => {
+      const tier = getTierInfo(Number(row.tier_index || 1));
+      return {
+        rank: index + 1,
+        displayName: String(row.display_name || row.alias || "佚名考生"),
+        tier,
+        roundsPlayed: Number(row.rounds_played || 0),
+        perfectRounds: Number(row.perfect_rounds || 0),
+        totalAnswered: Number(row.total_answered || 0),
+        totalCorrect: Number(row.total_correct || 0),
+        updatedAt: row.updated_at,
+      };
+    }),
+  };
 }
 
 function isoWeek(date: Date): { year: number; week: number } {
@@ -1644,10 +2009,8 @@ function canonicalKind(value: unknown): Kind {
 }
 
 function canonicalMode(value: unknown): Mode {
-  const raw = cleanString(value, 40).toLowerCase();
-  if (raw === "review") return "review";
-  if (raw === "ranked") return "ranked";
-  return "warmup";
+  void value;
+  return "ladder";
 }
 
 function cleanString(value: unknown, maxLength: number): string {

@@ -1,80 +1,54 @@
 const THEME_KEY = "wy-theme";
 const THEMES = ["parchment", "forest", "ink"];
+const ROUND_SIZE = 10;
 
 const state = {
   bootstrap: null,
-  mode: "warmup",
   theme: loadTheme(),
   kind: "",
   run: null,
   currentItem: null,
-  selectedLabel: "",
-  selectedKeys: new Set(),
   answered: false,
-  answerReveal: null,
-  latestFeedback: null,
-  latestBadges: [],
-  latestReport: null,
-  finalizingRunId: "",
   submitting: false,
+  answerReveal: null,
+  answerCard: null,
+  roundMarks: [],
+  roundComplete: null,
+  player: null,
+  leaderboard: null,
   autoAdvanceTimer: 0,
 };
 
 const els = {
   questionRoot: document.querySelector("#question-root"),
-  stageNote: document.querySelector("#stage-note"),
-  answeredCount: document.querySelector("#answered-count"),
-  correctCount: document.querySelector("#correct-count"),
-  streakCount: document.querySelector("#streak-count"),
-  reviewCount: document.querySelector("#review-count"),
-  answeredFill: document.querySelector("#answered-fill"),
-  correctFill: document.querySelector("#correct-fill"),
-  reviewFill: document.querySelector("#review-fill"),
-  badgeStrip: document.querySelector("#badge-strip"),
+  roundTrack: document.querySelector("#round-track"),
   leaderboardRoot: document.querySelector("#leaderboard-root"),
-  stageKicker: document.querySelector("#stage-kicker"),
-  stageTitle: document.querySelector("#stage-title"),
-  scoreLabel: document.querySelector("#score-label"),
-  scoreFill: document.querySelector("#score-fill"),
+  leaderboardKind: document.querySelector("#leaderboard-kind"),
+  rankBadge: document.querySelector("#rank-badge"),
+  rankKicker: document.querySelector("#rank-kicker"),
   rankName: document.querySelector("#rank-name"),
+  rankMode: document.querySelector("#rank-mode"),
+  roundFraction: document.querySelector("#round-fraction"),
+  roundGoal: document.querySelector("#round-goal"),
+  themeSelect: document.querySelector("#theme-select"),
 };
-
-document.querySelectorAll("[data-mode]").forEach((button) => {
-  button.addEventListener("click", async () => {
-    const nextMode = button.dataset.mode || "warmup";
-    if (state.mode === nextMode) return;
-    await maybeFinalizeCurrentRun();
-    state.mode = nextMode;
-    clearRoundState();
-    syncModeButtons();
-    renderModeHeader();
-    renderRun();
-    renderQuestion();
-    renderStageNote();
-  });
-});
 
 document.querySelectorAll("[data-kind]").forEach((button) => {
   button.addEventListener("click", () => startChallenge(button.dataset.kind || ""));
 });
 
-document.querySelectorAll("[data-theme]").forEach((button) => {
-  button.addEventListener("click", () => setTheme(button.dataset.theme || "parchment"));
+els.themeSelect?.addEventListener("change", (event) => {
+  const value = event.target instanceof HTMLSelectElement ? event.target.value : "parchment";
+  setTheme(value);
 });
-window.addEventListener("pagehide", finalizeRunWithBeacon);
+
+window.addEventListener("pagehide", clearAdvanceTimer);
 
 applyTheme(state.theme);
-syncModeButtons();
 
 boot().catch((error) => {
   console.error(error);
-  state.latestFeedback = {
-    correct: false,
-    encouragingFeedback: "初始化失敗",
-    explanation: error.message || String(error),
-    pendingReviewCount: 0,
-  };
-  renderStageNote();
+  renderError(error.message || String(error));
 });
 
 async function boot() {
@@ -87,167 +61,106 @@ async function boot() {
     });
   }
   await refreshBootstrap();
-  renderModeHeader();
-  renderRun();
-  renderQuestion();
-  renderStageNote();
+  renderShell();
 }
 
 async function refreshBootstrap() {
-  const payload = await api("/api/bootstrap");
-  state.bootstrap = payload;
-  syncEntryButtons();
-  renderLeaderboard(payload.leaderboard);
-}
-
-function clearRoundState() {
-  if (state.autoAdvanceTimer) {
-    window.clearTimeout(state.autoAdvanceTimer);
+  state.bootstrap = await api("/api/bootstrap");
+  if (state.kind) {
+    state.player = currentPlayerState();
   }
-  state.run = null;
-  state.currentItem = null;
-  state.selectedLabel = "";
-  state.selectedKeys = new Set();
-  state.answered = false;
-  state.answerReveal = null;
-  state.latestFeedback = null;
-  state.latestBadges = [];
-  state.submitting = false;
-  state.autoAdvanceTimer = 0;
+  syncEntryButtons();
 }
 
 async function startChallenge(kind) {
-  await maybeFinalizeCurrentRun();
-  if (!hasAvailableChallenges(kind)) {
-    state.kind = kind;
-    state.run = null;
-    state.currentItem = null;
-    state.answerReveal = null;
-    state.latestFeedback = {
-      correct: false,
-      encouragingFeedback: "題庫整理中",
-      explanation: `${kindLabel(kind)}目前沒有可驗證的題目可供出題。`,
-      pendingReviewCount: 0,
-    };
-    syncEntryButtons();
-    renderModeHeader();
-    renderRun();
-    renderQuestion();
-    renderStageNote();
-    return;
-  }
+  clearAdvanceTimer();
   state.kind = kind;
-  clearRoundState();
+  state.run = null;
+  state.currentItem = null;
+  state.answered = false;
+  state.submitting = false;
+  state.answerReveal = null;
+  state.answerCard = null;
+  state.roundMarks = [];
+  state.roundComplete = null;
+  state.player = currentPlayerState();
   syncEntryButtons();
-  renderModeHeader();
-  renderRun();
-  renderQuestion();
-  renderStageNote();
+  await loadLeaderboard(kind);
   await loadNextQuestion();
 }
 
+async function loadLeaderboard(kind) {
+  const payload = await api(`/api/leaderboard?kind=${encodeURIComponent(kind || "content_word")}`);
+  state.leaderboard = payload;
+  renderLeaderboard();
+}
+
 async function loadNextQuestion() {
-  if (!state.kind) return;
-  try {
-    const search = new URLSearchParams({
-      kind: state.kind,
-      mode: state.mode,
-    });
-    if (state.run?.id) {
-      search.set("runId", state.run.id);
-    }
-    const payload = await api(`/api/challenge/next?${search.toString()}`);
-    state.run = payload.run;
-    state.currentItem = payload.item;
-    state.selectedLabel = "";
-    state.selectedKeys = new Set();
-    state.answered = false;
-    state.answerReveal = null;
-    state.latestFeedback = null;
-    state.submitting = false;
-    renderModeHeader();
-    renderRun();
-    renderQuestion();
-    renderStageNote();
-  } catch (error) {
-    state.latestFeedback = {
-      correct: false,
-      encouragingFeedback: "抽題失敗",
-      explanation: error.message || String(error),
-      pendingReviewCount: Number(els.reviewCount.textContent || 0),
-    };
-    renderStageNote();
-  }
-}
-
-function renderModeHeader() {
-  const modeText = {
-    warmup: "熱身",
-    ranked: "排位",
-    review: "追擊",
-  };
-  els.stageKicker.textContent = modeText[state.mode];
-  if (state.currentItem?.prompt) return;
   if (!state.kind) {
-    els.stageTitle.textContent = "選擇實詞或虛詞開始";
+    renderShell();
     return;
   }
-  els.stageTitle.textContent = `${kindLabel(state.kind)}待命`;
+  const search = new URLSearchParams({ kind: state.kind });
+  if (state.run?.id && !state.roundComplete) {
+    search.set("runId", state.run.id);
+  }
+  const payload = await api(`/api/challenge/next?${search.toString()}`);
+  state.run = payload.run || null;
+  state.currentItem = payload.item || null;
+  state.answered = false;
+  state.submitting = false;
+  state.answerReveal = null;
+  state.answerCard = null;
+  state.roundComplete = payload.roundCompleted ? payload.round || null : null;
+  state.player = payload.player || currentPlayerState();
+  if (state.roundComplete && !state.currentItem) {
+    await refreshBootstrap();
+    state.player = currentPlayerState();
+    await loadLeaderboard(state.kind);
+  }
+  renderShell();
 }
 
-function renderRun() {
-  const run = state.run;
-  if (!run) {
-    els.scoreLabel.textContent = "0 分";
-    els.scoreFill.style.width = "0%";
-    els.answeredCount.textContent = "0";
-    els.correctCount.textContent = "0";
-    els.streakCount.textContent = "0";
-    els.reviewCount.textContent = "0";
-    els.answeredFill.style.width = "0%";
-    els.correctFill.style.width = "0%";
-    els.reviewFill.style.width = "0%";
-    els.rankName.textContent = "未開局";
-    renderBadges([]);
-    return;
-  }
+function renderShell() {
+  renderStatus();
+  renderQuestion();
+  renderRoundTrack();
+  renderLeaderboard();
+}
 
-  const answered = Number(run.answeredCount || 0);
-  const correct = Number(run.correctCount || 0);
-  const streak = Number(run.streak || 0);
-  const review = Number(state.latestFeedback?.pendingReviewCount || 0);
-  const score = Math.max(0, Math.round(run.score || 0));
-  const accuracy = answered > 0 ? Math.round((correct / answered) * 100) : 0;
-
-  els.stageTitle.textContent = `${kindLabel(run.kind)} · ${modeLabel(run.mode)}`;
-  els.scoreLabel.textContent = `${score} 分`;
-  els.scoreFill.style.width = `${clampPercent(answered * 11 + accuracy * 0.22)}%`;
-  els.answeredCount.textContent = String(answered);
-  els.correctCount.textContent = String(correct);
-  els.streakCount.textContent = String(streak);
-  els.reviewCount.textContent = String(review);
-  els.answeredFill.style.width = `${clampPercent(answered * 14)}%`;
-  els.correctFill.style.width = `${clampPercent(accuracy)}%`;
-  els.reviewFill.style.width = `${clampPercent(review * 24)}%`;
-  els.rankName.textContent = deriveRank(score, streak, accuracy);
-  renderBadges(state.latestBadges);
+function renderStatus() {
+  const player = state.player || currentPlayerState();
+  const kindLabelText = kindLabel(state.kind || player?.kind || "content_word");
+  els.rankKicker.textContent = kindLabelText;
+  els.rankName.textContent = player?.tierName || "工蜂";
+  els.rankMode.textContent = player?.modeName || "常規排位";
+  const answeredCount = Number(state.run?.answeredCount || state.roundMarks.length || 0);
+  const correctCount = Number(state.run?.correctCount || countTrue(state.roundMarks) || 0);
+  els.roundFraction.textContent = `${answeredCount} / ${ROUND_SIZE}`;
+  els.roundGoal.textContent = `${correctCount} / ${ROUND_SIZE}`;
+  els.rankBadge.dataset.kind = state.kind || player?.kind || "";
 }
 
 function renderQuestion() {
-  if (!state.currentItem?.prompt) {
+  if (!state.kind) {
     els.questionRoot.innerHTML = `
       <div class="empty-state">
-        <p>選一種詞類，直接進場。</p>
+        <p>選擇實詞或虛詞後直接進題。</p>
       </div>
     `;
+    return;
+  }
+
+  if (!state.currentItem?.prompt) {
+    renderRoundCompletion();
     return;
   }
 
   const prompt = state.currentItem.prompt;
   const headword = termHeadword(prompt.termId);
   const parts = [
-    `<div class="question-block">`,
-    `<h3>${escapeHtml(prompt.stem)}</h3>`,
+    `<article class="question-card">`,
+    `<h2 class="question-stem">${escapeHtml(prompt.stem)}</h2>`,
   ];
 
   if (prompt.sentence) {
@@ -260,222 +173,213 @@ function renderQuestion() {
   parts.push(`<div class="option-list">`);
   prompt.options.forEach((option) => {
     const key = option.label || option.key || "";
-    const status = optionVisualState(prompt, option, key);
-    const className = [
+    const visual = optionState(prompt, option, key);
+    const classes = [
       "option-card",
-      status.selected ? "selected" : "",
-      status.correct ? "correct" : "",
-      status.incorrect ? "incorrect" : "",
-      status.dimmed ? "dimmed" : "",
+      visual.selected ? "selected" : "",
+      visual.correct ? "correct" : "",
+      visual.incorrect ? "incorrect" : "",
+      visual.dimmed ? "dimmed" : "",
     ]
       .filter(Boolean)
       .join(" ");
-    const outcomeTag = status.correct
-      ? `<span class="option-result option-result-good">命中</span>`
-      : status.incorrect
-        ? `<span class="option-result option-result-bad">失手</span>`
-        : "";
 
     if (prompt.questionType === "xuci_pair_compare") {
-      const pairHtml = Array.isArray(option.sentences)
-        ? option.sentences
-            .map((sentence) => `<div class="pair-sentence">${highlightTerm(sentence, option.headword || headword)}</div>`)
-            .join("")
+      const sentences = Array.isArray(option.sentences)
+        ? option.sentences.map((sentence) => `<div class="pair-sentence">${highlightTerm(sentence, option.headword || headword)}</div>`).join("")
         : "";
       parts.push(`
-        <button class="${className}" type="button" data-option="${escapeAttr(key)}" ${state.answered ? "disabled" : ""}>
+        <button class="${classes}" type="button" data-option="${escapeAttr(key)}" ${state.answered ? "disabled" : ""}>
           <div class="option-head">
             <span class="option-tag">${escapeHtml(key)}</span>
             <strong>${escapeHtml(option.headword || "")}</strong>
-            ${outcomeTag}
           </div>
-          <div class="pair-sentences">${pairHtml}</div>
-        </button>
-      `);
-      return;
-    }
-
-    if (prompt.responseMode === "multi_select") {
-      parts.push(`
-        <button class="${className}" type="button" data-option="${escapeAttr(key)}" ${state.answered ? "disabled" : ""}>
-          <div class="multi-option">
-            <span class="option-tag">${escapeHtml(key)}</span>
-            <span>${highlightTerm(option.text || "", headword)}</span>
-            ${outcomeTag}
-          </div>
+          <div class="pair-sentences">${sentences}</div>
         </button>
       `);
       return;
     }
 
     parts.push(`
-      <button class="${className}" type="button" data-option="${escapeAttr(key)}" ${state.answered ? "disabled" : ""}>
+      <button class="${classes}" type="button" data-option="${escapeAttr(key)}" ${state.answered ? "disabled" : ""}>
         <div class="option-head">
           <span class="option-tag">${escapeHtml(key)}</span>
-          ${outcomeTag}
         </div>
         <p>${highlightTerm(option.text || "", headword)}</p>
       </button>
     `);
   });
-  parts.push(`</div></div>`);
+  parts.push(`</div>`);
+
+  if (state.answered && state.answerCard) {
+    parts.push(renderAnalysisCard());
+  }
+
+  if (state.roundComplete) {
+    parts.push(renderCompletionCard());
+  }
+
+  parts.push(`</article>`);
   els.questionRoot.innerHTML = parts.join("");
   els.questionRoot.querySelectorAll("[data-option]").forEach((button) => {
-    button.addEventListener("click", () => selectOption(button.dataset.option || ""));
+    button.addEventListener("click", () => submitAnswer(button.dataset.option || ""));
+  });
+  els.questionRoot.querySelector("#next-round-btn")?.addEventListener("click", () => {
+    void startChallenge(state.kind);
   });
 }
 
-function optionVisualState(prompt, option, key) {
-  const optionKey = option.key || key;
-  const selected =
-    prompt.responseMode === "multi_select"
-      ? state.selectedKeys.has(optionKey)
-      : state.selectedLabel === option.label;
-  if (!state.answered || !state.answerReveal) {
-    return { selected, correct: false, incorrect: false, dimmed: false };
-  }
-  const submitted = state.answerReveal.submitted.has(key);
-  const correct = state.answerReveal.correct.has(key);
-  return {
-    selected: selected || submitted || correct,
-    correct,
-    incorrect: submitted && !correct,
-    dimmed: !submitted && !correct,
-  };
+function renderAnalysisCard() {
+  const answerKey = state.answerCard;
+  if (!answerKey) return "";
+  const summaryTone = state.roundMarks[state.roundMarks.length - 1] ? "good" : "bad";
+  const analyses = Array.isArray(answerKey.option_analyses) ? answerKey.option_analyses : [];
+  const supports = [
+    ...(Array.isArray(answerKey.dict_support) ? answerKey.dict_support.slice(0, 1).map((item) => item.summary) : []),
+    ...(Array.isArray(answerKey.textbook_support) ? answerKey.textbook_support.slice(0, 1).map((item) => item.note_block || item.sentence) : []),
+  ]
+    .map((text) => cleanInline(text))
+    .filter(Boolean)
+    .slice(0, 2);
+  return `
+    <section class="analysis-card ${summaryTone}">
+      <header class="analysis-head">
+        <strong>正解 ${escapeHtml(answerKey.correct_label || "")}</strong>
+        <span>${escapeHtml(answerKey.correct_text || "")}</span>
+      </header>
+      <p class="analysis-summary">${escapeHtml(answerKey.explanation || "")}</p>
+      <div class="analysis-list">
+        ${analyses
+          .map(
+            (item) => `
+              <div class="analysis-item ${item.is_correct ? "is-correct" : ""}">
+                <span>${escapeHtml(item.label)}</span>
+                <p>${escapeHtml(item.analysis)}</p>
+              </div>
+            `
+          )
+          .join("")}
+      </div>
+      ${
+        supports.length
+          ? `<div class="analysis-support">${supports
+              .map((item) => `<span class="support-chip">${escapeHtml(item)}</span>`)
+              .join("")}</div>`
+          : ""
+      }
+    </section>
+  `;
 }
 
-function selectOption(value) {
-  const prompt = state.currentItem?.prompt;
-  if (!prompt || state.answered || state.submitting) return;
-  if (prompt.responseMode === "multi_select") {
-    if (state.selectedKeys.has(value)) {
-      state.selectedKeys.delete(value);
-    } else {
-      state.selectedKeys.add(value);
-    }
-  } else {
-    state.selectedLabel = value;
-  }
-  renderQuestion();
-  if (prompt.responseMode !== "multi_select") {
-    void submitAnswer();
-  }
+function renderCompletionCard() {
+  if (!state.roundComplete) return "";
+  const promoted = Boolean(state.roundComplete.promoted);
+  const toTier = state.roundComplete.toTier || {};
+  const fromTier = state.roundComplete.fromTier || {};
+  return `
+    <section class="completion-card ${promoted ? "up" : "hold"}">
+      <div class="completion-crest">${escapeHtml(toTier.tierName || fromTier.tierName || "工蜂")}</div>
+      <div class="completion-copy">
+        <strong>${promoted ? "本輪全對，段位晉升" : "本輪未全對，段位保持"}</strong>
+        <span>${state.roundComplete.correctCount} / ${ROUND_SIZE}</span>
+      </div>
+      <button id="next-round-btn" class="next-round-btn" type="button">再來一輪</button>
+    </section>
+  `;
 }
 
-async function submitAnswer() {
-  if (!state.currentItem?.answerToken || state.answered || state.submitting) return;
-  const prompt = state.currentItem.prompt;
-  const answer =
-    prompt.responseMode === "multi_select"
-      ? { keys: [...state.selectedKeys] }
-      : { label: state.selectedLabel };
+function renderRoundCompletion() {
+  els.questionRoot.innerHTML = renderCompletionCard() || `
+    <div class="empty-state">
+      <p>本輪已結束，點擊詞類開始下一輪。</p>
+    </div>
+  `;
+  els.questionRoot.querySelector("#next-round-btn")?.addEventListener("click", () => {
+    void startChallenge(state.kind);
+  });
+}
 
-  if ((prompt.responseMode === "multi_select" && !answer.keys.length) || (prompt.responseMode !== "multi_select" && !answer.label)) {
-    state.latestFeedback = {
-      correct: false,
-      encouragingFeedback: "先選答案",
-      explanation: "這題還沒有收到你的作答。",
-      pendingReviewCount: Number(els.reviewCount.textContent || 0),
-    };
-    renderStageNote();
+function renderRoundTrack() {
+  const marks = state.roundMarks.slice(0, ROUND_SIZE);
+  const currentIndex = state.currentItem?.prompt && !state.roundComplete ? Math.min(marks.length, ROUND_SIZE - 1) : -1;
+  els.roundTrack.innerHTML = Array.from({ length: ROUND_SIZE }, (_, index) => {
+    const status =
+      index < marks.length ? (marks[index] ? "hit" : "miss") : index === currentIndex ? "current" : "pending";
+    return `<span class="track-slot ${status}" aria-label="slot-${index + 1}"></span>`;
+  }).join("");
+}
+
+function renderLeaderboard() {
+  els.leaderboardKind.textContent = kindLabel(state.kind || state.leaderboard?.kind || "content_word");
+  const entries = Array.isArray(state.leaderboard?.entries) ? state.leaderboard.entries : [];
+  if (!entries.length) {
+    els.leaderboardRoot.innerHTML = `<div class="leaderboard-empty">暫無榜單資料。</div>`;
     return;
   }
+  const maxTier = Math.max(...entries.map((entry) => Number(entry.tier?.tierIndex || 1)), 1);
+  els.leaderboardRoot.innerHTML = entries
+    .slice(0, 8)
+    .map((entry) => {
+      const fill = Math.max(18, Math.round((Number(entry.tier?.tierIndex || 1) / maxTier) * 100));
+      return `
+        <div class="leaderboard-row">
+          <span class="leaderboard-rank">#${entry.rank}</span>
+          <div class="leaderboard-main">
+            <strong>${escapeHtml(entry.displayName || "")}</strong>
+            <div class="leaderboard-tier">${escapeHtml(entry.tier?.tierName || "工蜂")} · ${Number(entry.perfectRounds || 0)} 胜</div>
+            <div class="leaderboard-bar"><i style="width:${fill}%"></i></div>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
 
+function optionState(prompt, option, key) {
+  const selected = state.answerReveal ? state.answerReveal.submitted.has(key) : false;
+  const correct = state.answerReveal ? state.answerReveal.correct.has(key) : false;
+  const incorrect = state.answered && selected && !correct;
+  const dimmed = state.answered && !selected && !correct;
+  return { selected, correct, incorrect, dimmed };
+}
+
+async function submitAnswer(label) {
+  if (!state.currentItem?.answerToken || state.submitting || state.answered) return;
   try {
     state.submitting = true;
     const payload = await api("/api/challenge/answer", {
       method: "POST",
       body: JSON.stringify({
         answerToken: state.currentItem.answerToken,
-        answer,
+        answer: { label },
       }),
     });
-    state.run = payload.run;
+    const correct = Boolean(payload?.result?.correct);
+    state.run = payload.run || state.run;
     state.answered = true;
-    state.latestFeedback = payload.result;
-    state.answerReveal = buildAnswerReveal(payload.result.correctAnswer, payload.result.submittedAnswer);
-    state.latestBadges = mergeBadges(state.latestBadges, payload.badges || []);
-    renderRun();
-    renderQuestion();
-    renderStageNote();
-    if (state.autoAdvanceTimer) {
-      window.clearTimeout(state.autoAdvanceTimer);
+    state.answerReveal = buildAnswerReveal(payload?.result?.correctAnswer, payload?.result?.submittedAnswer);
+    state.answerCard = payload?.result?.answerKey || null;
+    state.player = payload?.player || state.player || currentPlayerState();
+    state.roundMarks.push(correct);
+    state.roundComplete = payload?.roundCompleted ? payload.round || null : null;
+    renderShell();
+    if (state.roundComplete) {
+      await refreshBootstrap();
+      state.player = currentPlayerState();
+      await loadLeaderboard(state.kind);
+      return;
     }
+    clearAdvanceTimer();
     state.autoAdvanceTimer = window.setTimeout(() => {
       state.autoAdvanceTimer = 0;
-      if (state.kind) {
-        void loadNextQuestion();
-      }
-    }, 720);
+      void loadNextQuestion();
+    }, correct ? 2800 : 3400);
   } catch (error) {
-    state.latestFeedback = {
-      correct: false,
-      encouragingFeedback: "提交失敗",
-      explanation: error.message || String(error),
-      pendingReviewCount: Number(els.reviewCount.textContent || 0),
-    };
-    renderStageNote();
+    console.error(error);
+    renderError(error.message || String(error));
   } finally {
     state.submitting = false;
   }
-}
-
-function renderStageNote() {
-  const result = state.latestFeedback;
-  if (!result) {
-    els.stageNote.hidden = true;
-    els.stageNote.innerHTML = "";
-    return;
-  }
-
-  const reviewCount = Number(result.pendingReviewCount || 0);
-  els.reviewCount.textContent = String(reviewCount);
-  els.reviewFill.style.width = `${clampPercent(reviewCount * 24)}%`;
-
-  const title = state.answered ? (result.correct ? "答對" : "加入追擊") : result.encouragingFeedback || "";
-  const detail = state.answered
-    ? result.correct
-      ? `+${Math.round(result.scoreDelta || 0)} 分`
-      : `本題已進入追擊佇列${reviewCount ? ` · 目前 ${reviewCount} 題待追擊` : ""}`
-    : result.explanation || "";
-  const tone = result.correct ? "good" : state.answered ? "bad" : "muted";
-
-  els.stageNote.hidden = false;
-  els.stageNote.innerHTML = `
-    <div class="stage-note-card ${tone}">
-      <strong>${escapeHtml(title)}</strong>
-      <span>${escapeHtml(detail)}</span>
-    </div>
-  `;
-}
-
-async function maybeFinalizeCurrentRun() {
-  if (!state.run?.id || Number(state.run.answeredCount || 0) === 0 || state.run.reportId || state.finalizingRunId === state.run.id) {
-    return;
-  }
-  state.finalizingRunId = state.run.id;
-  try {
-    state.latestReport = await api("/api/report/finalize", {
-      method: "POST",
-      body: JSON.stringify({ runId: state.run.id }),
-    });
-    if (state.run) {
-      state.run.reportId = state.latestReport.reportId;
-    }
-    await refreshBootstrap();
-  } catch (error) {
-    console.warn("silent finalize failed", error);
-  } finally {
-    state.finalizingRunId = "";
-  }
-}
-
-function finalizeRunWithBeacon() {
-  if (!navigator.sendBeacon || !state.run?.id || Number(state.run.answeredCount || 0) === 0 || state.run.reportId) {
-    return;
-  }
-  const payload = JSON.stringify({ runId: state.run.id });
-  navigator.sendBeacon("/api/report/finalize", new Blob([payload], { type: "application/json" }));
 }
 
 function buildAnswerReveal(correctAnswer, submittedAnswer) {
@@ -488,62 +392,9 @@ function buildAnswerReveal(correctAnswer, submittedAnswer) {
   return { correct, submitted };
 }
 
-function renderLeaderboard(payload) {
-  const entries = Array.isArray(payload?.entries) ? payload.entries : [];
-  if (!entries.length) {
-    els.leaderboardRoot.innerHTML = `<div class="leaderboard-empty">暫無可顯示榜單。</div>`;
-    return;
-  }
-
-  const maxScore = Math.max(...entries.map((entry) => Number(entry.score || 0)), 1);
-  const podium = entries.slice(0, 3);
-  const rest = entries.slice(3, 8);
-
-  const podiumHtml = podium
-    .map(
-      (entry) => `
-        <div class="podium-card rank-${entry.rank}">
-          <span class="podium-rank">#${entry.rank}</span>
-          <strong class="podium-name">${escapeHtml(entry.displayName || "")}</strong>
-          <span class="podium-score">${Math.round(entry.score || 0)} 分</span>
-        </div>
-      `
-    )
-    .join("");
-
-  const listHtml = rest
-    .map((entry) => {
-      const width = clampPercent((Number(entry.score || 0) / maxScore) * 100);
-      return `
-        <div class="leaderboard-row">
-          <span class="leaderboard-rank">#${entry.rank}</span>
-          <div class="leaderboard-name">
-            <strong>${escapeHtml(entry.displayName || "")}</strong>
-            <div class="leaderboard-bar"><i style="width:${width}%"></i></div>
-          </div>
-          <span class="leaderboard-score">${Math.round(entry.score || 0)}</span>
-        </div>
-      `;
-    })
-    .join("");
-
-  els.leaderboardRoot.innerHTML = `
-    <div class="leaderboard-podium">${podiumHtml}</div>
-    ${listHtml ? `<div class="leaderboard-list">${listHtml}</div>` : ""}
-  `;
-}
-
-function renderBadges(badges) {
-  els.badgeStrip.innerHTML = (badges || [])
-    .slice(0, 4)
-    .map((badge) => `<span class="badge-chip">${escapeHtml(badge.title || "")}</span>`)
-    .join("");
-}
-
-function syncModeButtons() {
-  document.querySelectorAll("[data-mode]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.mode === state.mode);
-  });
+function currentPlayerState() {
+  if (!state.bootstrap?.player) return null;
+  return state.kind === "function_word" ? state.bootstrap.player.function : state.bootstrap.player.content;
 }
 
 function syncEntryButtons() {
@@ -555,12 +406,8 @@ function syncEntryButtons() {
 
 function hasAvailableChallenges(kind) {
   const stats = state.bootstrap?.stats || {};
-  if (kind === "function_word") {
-    return Number(stats.functionChallenges || 0) > 0;
-  }
-  if (kind === "content_word") {
-    return Number(stats.contentChallenges || 0) > 0;
-  }
+  if (kind === "function_word") return Number(stats.functionChallenges || 0) > 0;
+  if (kind === "content_word") return Number(stats.contentChallenges || 0) > 0;
   return false;
 }
 
@@ -573,9 +420,9 @@ function setTheme(theme) {
 
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
-  document.querySelectorAll("[data-theme]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.theme === theme);
-  });
+  if (els.themeSelect) {
+    els.themeSelect.value = theme;
+  }
 }
 
 function loadTheme() {
@@ -583,24 +430,8 @@ function loadTheme() {
   return THEMES.includes(stored) ? stored : "parchment";
 }
 
-function deriveRank(score, streak, accuracy) {
-  if (score >= 120 || accuracy >= 92) return "壓卷";
-  if (score >= 80 || streak >= 5) return "爭衡";
-  if (score >= 45 || accuracy >= 70) return "入勢";
-  if (score >= 18 || streak >= 2) return "破題";
-  return "初鋒";
-}
-
 function kindLabel(kind) {
   return kind === "function_word" ? "虛詞" : "實詞";
-}
-
-function modeLabel(mode) {
-  return {
-    warmup: "熱身",
-    ranked: "排位",
-    review: "追擊",
-  }[mode] || mode;
 }
 
 function termHeadword(termId) {
@@ -610,54 +441,60 @@ function termHeadword(termId) {
 function highlightTerm(text, headword) {
   const safe = escapeHtml(text || "");
   if (!headword) return safe;
-  const escapedHeadword = escapeRegex(escapeHtml(headword));
-  return safe.replace(new RegExp(escapedHeadword, "g"), `<span class="term-hit">${escapeHtml(headword)}</span>`);
+  const escaped = escapeRegex(escapeHtml(headword));
+  return safe.replace(new RegExp(escaped, "g"), `<span class="term-hit">${escapeHtml(headword)}</span>`);
 }
 
-function clampPercent(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return 0;
-  return Math.max(0, Math.min(100, Math.round(numeric)));
+function renderError(message) {
+  els.questionRoot.innerHTML = `
+    <div class="empty-state error-state">
+      <p>${escapeHtml(message)}</p>
+    </div>
+  `;
 }
 
-function mergeBadges(existing, incoming) {
-  const merged = [...(existing || [])];
-  const seen = new Set(merged.map((badge) => badge?.key || badge?.title || ""));
-  (incoming || []).forEach((badge) => {
-    const key = badge?.key || badge?.title || "";
-    if (!key || seen.has(key)) return;
-    seen.add(key);
-    merged.push(badge);
-  });
-  return merged;
+function countTrue(values) {
+  return values.filter(Boolean).length;
 }
 
-async function api(path, options = {}) {
-  const response = await fetch(path, {
+function clearAdvanceTimer() {
+  if (state.autoAdvanceTimer) {
+    window.clearTimeout(state.autoAdvanceTimer);
+    state.autoAdvanceTimer = 0;
+  }
+}
+
+function cleanInline(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+async function api(url, init = {}) {
+  const response = await fetch(url, {
     credentials: "include",
-    ...options,
     headers: {
       "Content-Type": "application/json",
-      ...(options.headers || {}),
+      ...(init.headers || {}),
     },
+    ...init,
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.error || `HTTP ${response.status}`);
+    throw new Error(payload.detail || payload.error || `HTTP ${response.status}`);
   }
   return payload;
 }
 
 function escapeHtml(value) {
   return String(value || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function escapeAttr(value) {
-  return escapeHtml(value).replaceAll("'", "&#39;");
+  return escapeHtml(value);
 }
 
 function escapeRegex(value) {

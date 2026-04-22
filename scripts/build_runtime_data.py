@@ -36,29 +36,53 @@ ASSET_MAX_BYTES = int(os.environ.get("ASSET_MAX_BYTES", "26214400"))
 RUNTIME_MIRROR_DIR = REPO_ROOT / "data" / "runtime"
 PUBLIC_RUNTIME_DIR = REPO_ROOT / "public" / "runtime"
 QUESTION_TEMPLATES_DIR = REPO_ROOT / "question_templates"
+PRIVATE_RUNTIME_DIR = REPO_ROOT / "data" / "runtime_private"
+GENERATED_DIR = REPO_ROOT / "src" / "generated"
 
 
 QUESTION_TYPE_TO_BASIS = {
     "xuci_compare_same": "direct_choice",
     "xuci_compare_diff": "direct_choice",
+    "function_gloss": "direct_choice",
+    "function_profile": "direct_choice",
     "xuci_explanation": "direct_choice",
     "shici_explanation": "direct_choice",
     "national_raw_gloss_option": "direct_choice",
-    "national_raw_translation_keyword": "translation_keypoint",
-    "translation_keypoint": "translation_keypoint",
+    "national_raw_translation_keyword": "direct_choice",
     "sentence_meaning": "sentence_meaning",
     "passage_meaning": "passage_meaning",
-    "analysis_short": "analysis_short",
 }
 
 QUESTION_TYPES = [
     "xuci_pair_compare",
+    "function_gloss",
+    "function_profile",
     "content_gloss",
-    "translation_keypoint",
     "sentence_meaning",
     "passage_meaning",
-    "analysis_short",
 ]
+
+CONTENT_PRIORITY_CORE = "core"
+CONTENT_PRIORITY_SECONDARY = "secondary"
+FUNCTION_PRIORITY_SUPPORT = "support"
+BANNED_GLOSS_CANDIDATES = {
+    "是",
+    "有",
+    "又",
+    "来",
+    "去",
+    "即",
+    "指",
+    "这个",
+    "这样",
+    "这些",
+    "那个",
+    "那些",
+    "之",
+    "而",
+    "于",
+    "与",
+}
 
 GLOSS_BLOCK_MARKERS = (
     "翻译为",
@@ -166,6 +190,7 @@ def load_json(path: Path) -> Any:
 
 def clean_text(value: str) -> str:
     text = str(value or "")
+    text = text.replace("_x000D_", " ")
     text = text.replace("*", "")
     text = text.replace("\u3000", " ")
     text = re.sub(r"\s+", " ", text)
@@ -207,11 +232,26 @@ def looks_like_clean_gloss(gloss: str) -> bool:
     cleaned = clean_text(gloss)
     if not cleaned or len(cleaned) > 20:
         return False
+    if cleaned in BANNED_GLOSS_CANDIDATES:
+        return False
     if any(marker in cleaned for marker in GLOSS_BLOCK_MARKERS):
         return False
     if re.search(r"\d", cleaned):
         return False
     if re.search(r"[“”\"'‘’]", cleaned):
+        return False
+    if re.search(r"[A-Za-z]", cleaned):
+        return False
+    if any(mark in cleaned for mark in (":", "：", ";", "；", "/", "／", "D仍赐", "注意点", "可意译")):
+        return False
+    if cleaned.count("、") > 1:
+        return False
+    if cleaned.count(",") > 0 or cleaned.count("，") > 0:
+        return False
+    if re.search(r"[^\u4e00-\u9fff、（）()]", cleaned):
+        return False
+    cjk = "".join(re.findall(r"[\u4e00-\u9fff]", cleaned))
+    if not cjk or len(cjk) > 8:
         return False
     return True
 
@@ -413,6 +453,12 @@ def stable_slug(value: str) -> str:
 
 def hash_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def stable_number(seed: str, modulo: int) -> int:
+    if modulo <= 0:
+        return 0
+    return int(hashlib.sha1(seed.encode("utf-8")).hexdigest()[:8], 16) % modulo
 
 
 def answer_label_for_question(answer_text: str, question_number: int) -> str:
@@ -643,7 +689,7 @@ def infer_basis_records(raw_occurrence: dict[str, Any], headword: str) -> list[d
     }
     inferred: list[dict[str, Any]] = [base_record]
     if raw_occurrence.get("scope") == "beijing":
-        for basis_type in ("sentence_meaning", "passage_meaning", "analysis_short"):
+        for basis_type in ("sentence_meaning", "passage_meaning"):
             inferred.append(
                 {
                     "basis_type": basis_type,
@@ -659,9 +705,146 @@ def infer_basis_records(raw_occurrence: dict[str, Any], headword: str) -> list[d
     return inferred
 
 
-def choose_gloss_distractors(all_glosses: list[str], correct_gloss: str, seed: str) -> list[str]:
-    pool = sorted({item for item in all_glosses if item and item != correct_gloss})
-    return stable_pick(pool, seed, 3)
+def select_clean_glosses(headword: str, occurrences: list[dict[str, Any]]) -> list[str]:
+    ordered: list[tuple[int, str]] = []
+    seen: set[str] = set()
+    for occurrence in occurrences:
+        raw_gloss = str(occurrence.get("gloss") or "")
+        cleaned = clean_gloss(headword, raw_gloss, str(occurrence.get("excerpt") or ""))
+        if not looks_like_clean_gloss(cleaned):
+            continue
+        if cleaned in seen:
+            continue
+        seen.add(cleaned)
+        ordered.append((score_clean_gloss(raw_gloss, cleaned), cleaned))
+    ordered.sort(key=lambda item: (-item[0], len(item[1]), item[1]))
+    return [item[1] for item in ordered]
+
+
+def choose_gloss_distractors(
+    same_term_glosses: list[str],
+    all_glosses: list[str],
+    correct_gloss: str,
+    seed: str,
+) -> list[str]:
+    def valid(candidate: str) -> bool:
+        cleaned = clean_text(candidate)
+        if not looks_like_clean_gloss(cleaned):
+            return False
+        if cleaned == correct_gloss:
+            return False
+        if cleaned in BANNED_GLOSS_CANDIDATES:
+            return False
+        if cleaned in correct_gloss or correct_gloss in cleaned:
+            return False
+        return True
+
+    preferred = [item for item in same_term_glosses if valid(item)]
+    fallback = [item for item in all_glosses if valid(item) and item not in preferred]
+    picked = stable_pick(preferred, seed, 3)
+    if len(picked) < 3:
+        picked.extend(stable_pick(fallback, seed + ":fallback", 3 - len(picked)))
+    return unique_clean_strings(picked)
+
+
+def unique_clean_strings(values: list[str]) -> list[str]:
+    return list(dict.fromkeys(clean_text(value) for value in values if clean_text(value)))
+
+
+def priority_level_for_content_term(textbook_refs: list[dict[str, Any]], total_occurrences: int) -> str:
+    has_senior_note = any(
+        str(ref.get("school_stage") or "") == "高中" and clean_text(str(ref.get("note_block") or ""))
+        for ref in textbook_refs
+    )
+    if has_senior_note and total_occurrences > 0:
+        return CONTENT_PRIORITY_CORE
+    return CONTENT_PRIORITY_SECONDARY
+
+
+def priority_level_for_function_term(textbook_refs: list[dict[str, Any]], total_occurrences: int) -> str:
+    has_textbook_note = any(clean_text(str(ref.get("note_block") or "")) for ref in textbook_refs)
+    if has_textbook_note and total_occurrences > 0:
+        return CONTENT_PRIORITY_CORE
+    return FUNCTION_PRIORITY_SUPPORT
+
+
+def first_support_snippet(term_record: dict[str, Any]) -> dict[str, str]:
+    dict_summary = ""
+    textbook_note = ""
+    textbook_sentence = ""
+    if term_record.get("dict_refs"):
+        dict_summary = truncate_excerpt(str(term_record["dict_refs"][0].get("summary") or ""), 90)
+    if term_record.get("textbook_refs"):
+        textbook_note = truncate_excerpt(str(term_record["textbook_refs"][0].get("note_block") or ""), 84)
+        textbook_sentence = truncate_excerpt(str(term_record["textbook_refs"][0].get("sentence") or ""), 72)
+    return {
+        "dict_summary": dict_summary,
+        "textbook_note": textbook_note,
+        "textbook_sentence": textbook_sentence,
+    }
+
+
+def format_usage_profile(profile: dict[str, str]) -> str:
+    parts = [
+        clean_text(profile.get("part_of_speech") or ""),
+        clean_text(profile.get("semantic_value") or ""),
+        clean_text(profile.get("syntactic_function") or ""),
+    ]
+    relation = clean_text(profile.get("relation") or "")
+    if relation:
+        parts.append(f"关系偏向{relation}")
+    return "，".join(part for part in parts if part)
+
+
+def format_function_explanation(headword: str, profile: dict[str, str], support: dict[str, str]) -> str:
+    pieces = [f"“{headword}”常见考法可概括为：{format_usage_profile(profile)}。"]
+    if support["dict_summary"]:
+        pieces.append(f"辞典关联可参照：{support['dict_summary']}。")
+    elif support["textbook_note"]:
+        pieces.append(f"教材注释可参照：{support['textbook_note']}。")
+    return " ".join(piece for piece in pieces if piece)
+
+
+def format_content_explanation(
+    headword: str,
+    correct_gloss: str,
+    support: dict[str, str],
+    source_label: str,
+) -> str:
+    pieces = [f"“{headword}”在这里应解释为“{correct_gloss}”。"]
+    if support["dict_summary"]:
+        pieces.append(f"辞典可对到：{support['dict_summary']}。")
+    if support["textbook_note"]:
+        pieces.append(f"教材注释可参照：{support['textbook_note']}。")
+    pieces.append(f"依据题源：{source_label}。")
+    return " ".join(piece for piece in pieces if piece)
+
+
+def build_content_option_analysis(
+    headword: str,
+    correct_gloss: str,
+    option_text: str,
+    is_correct: bool,
+    support: dict[str, str],
+) -> str:
+    if is_correct:
+        return format_content_explanation(headword, correct_gloss, support, "本题标准答案")
+    support_text = f"；辞典和题源都更支持“{correct_gloss}”" if support["dict_summary"] else f"；题源应落实为“{correct_gloss}”"
+    return f"若释为“{option_text}”，则与本句语境不合{support_text}。"
+
+
+def build_function_option_analysis(
+    stem: str,
+    option_label: str,
+    option_text: str,
+    correct_label: str,
+    explanation: str,
+) -> str:
+    if option_label == correct_label:
+        return explanation
+    if "不同" in stem:
+        return f"本项不符合题干要求的“不同”判断，标准答案不是 {option_label}。"
+    return f"本项不符合题干要求的“相同”判断，标准答案不是 {option_label}。"
 
 
 def find_passage(qdoc_text: str, excerpt: str) -> str:
@@ -844,7 +1027,18 @@ def find_passage(qdoc_text: str, excerpt: str, headword: str) -> str:
     return truncate_around_headword(probe or clean_text(excerpt), headword, 240)
 
 
-def build_function_question_bank(function_terms: list[dict[str, Any]], question_docs: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+def build_function_question_bank(
+    function_terms: list[dict[str, Any]],
+    question_docs: dict[str, dict[str, Any]],
+    function_records: list[dict[str, Any]],
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, dict[str, Any]]]:
+    support_by_term_id = {record["term_id"]: record for record in function_records}
+    banks: dict[str, list[dict[str, Any]]] = {
+        "xuci_pair_compare": [],
+        "function_gloss": [],
+        "function_profile": [],
+    }
+    answer_keys: dict[str, dict[str, Any]] = {}
     grouped: dict[tuple[str, int, str], dict[str, Any]] = {}
     for term in function_terms:
         term_id = f"function::{term['headword']}"
@@ -875,7 +1069,6 @@ def build_function_question_bank(function_terms: list[dict[str, Any]], question_
             group["options"][option_label].append({**occurrence, "term_id": term_id})
             group["term_ids"].add(term_id)
 
-    bank: list[dict[str, Any]] = []
     for group in grouped.values():
         qdoc = question_docs.get(group["paper_key"], {})
         answer_label = answer_label_for_question(str(qdoc.get("answer") or ""), int(group["question_number"]))
@@ -906,43 +1099,268 @@ def build_function_question_bank(function_terms: list[dict[str, Any]], question_
             continue
         stem = "下列各组句子中，加点虚词的意义和用法相同的一项是" if group["question_subtype"] == "xuci_compare_same" else "下列各组句子中，加点虚词的意义和用法不同的一项是"
         challenge_id = f"xuci-{stable_slug(group['paper_key'])}-q{group['question_number']}"
-        bank.append(
+        banks["xuci_pair_compare"].append(
             {
                 "challenge_id": challenge_id,
                 "question_type": "xuci_pair_compare",
                 "kind": "function_word",
                 "term_id": options[0]["term_id"],
                 "term_ids": sorted(group["term_ids"]),
+                "priority_level": CONTENT_PRIORITY_CORE,
                 "paper_key": group["paper_key"],
                 "year": group["year"],
                 "paper": group["paper"],
                 "question_number": group["question_number"],
                 "stem": stem,
                 "options": options,
-                "answer": {"label": answer_label},
-                "explanation": f"依据 {group['year']} 年 {group['paper']} 第 {group['question_number']} 题答案 {answer_label}。",
             }
         )
-    return sorted(bank, key=lambda item: (item["year"], item["question_number"]))
+        correct_option = next((option for option in options if option["label"] == answer_label), options[0])
+        support = first_support_snippet(support_by_term_id.get(str(correct_option["term_id"]) or "", {}))
+        explanation = f"依据 {group['year']} 年 {group['paper']} 第 {group['question_number']} 题，正确答案为 {answer_label}。"
+        if support["dict_summary"]:
+            explanation += f" 可参照辞典：{support['dict_summary']}。"
+        answer_keys[challenge_id] = {
+            "challenge_id": challenge_id,
+            "kind": "function_word",
+            "question_type": "xuci_pair_compare",
+            "term_id": correct_option["term_id"],
+            "term_ids": sorted(group["term_ids"]),
+            "priority_level": CONTENT_PRIORITY_CORE,
+            "source_type": "gaokao_beijing_pair_compare",
+            "source_ref": {
+                "year": group["year"],
+                "paper": group["paper"],
+                "paper_key": group["paper_key"],
+                "question_number": group["question_number"],
+            },
+            "correct_label": answer_label,
+            "correct_text": correct_option["headword"],
+            "explanation": explanation,
+            "dict_support": support_by_term_id.get(str(correct_option["term_id"]) or "", {}).get("dict_refs", [])[:2],
+            "textbook_support": support_by_term_id.get(str(correct_option["term_id"]) or "", {}).get("textbook_refs", [])[:2],
+            "option_analyses": [
+                {
+                    "label": option["label"],
+                    "text": option["headword"],
+                    "is_correct": option["label"] == answer_label,
+                    "analysis": build_function_option_analysis(stem, option["label"], option["headword"], answer_label, explanation),
+                }
+                for option in options
+            ],
+        }
+
+    gloss_groups: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
+    for term in function_terms:
+        for occurrence in term.get("occurrences", []):
+            if str(occurrence.get("question_subtype") or "") != "xuci_explanation":
+                continue
+            paper_key = str(occurrence.get("paper_key") or "")
+            question_number = int(occurrence.get("question_number") or 0)
+            if not paper_key or not question_number:
+                continue
+            gloss_groups[(paper_key, question_number)].append({**occurrence, "headword": term["headword"], "term_id": f"function::{term['headword']}"})
+
+    for (paper_key, question_number), entries in gloss_groups.items():
+        labels = {str(entry.get("option_label") or "").strip().upper() for entry in entries if str(entry.get("option_label") or "").strip()}
+        if labels != {"A", "B", "C", "D"}:
+            continue
+        qdoc = question_docs.get(paper_key, {})
+        answer_label = answer_label_for_question(str(qdoc.get("answer") or ""), question_number)
+        if answer_label not in {"A", "B", "C", "D"}:
+            continue
+        ordered_entries = sorted(entries, key=lambda item: str(item.get("option_label") or ""))
+        term_id = str(ordered_entries[0]["term_id"])
+        headword = str(ordered_entries[0]["headword"])
+        challenge_id = f"function-gloss-{stable_slug(paper_key)}-{question_number}"
+        options = []
+        for entry in ordered_entries:
+            excerpt = strip_inline_gloss(str(entry.get("excerpt") or ""), headword)
+            gloss = clean_gloss(headword, str(entry.get("gloss") or ""), str(entry.get("excerpt") or ""))
+            if not excerpt or not gloss:
+                options = []
+                break
+            options.append(
+                {
+                    "label": str(entry.get("option_label") or "").strip().upper(),
+                    "text": f"{truncate_excerpt(excerpt, 52)}：{gloss}",
+                }
+            )
+        if len(options) != 4:
+            continue
+        support_record = support_by_term_id.get(term_id, {})
+        support = first_support_snippet(support_record)
+        explanation = f"依据 {qdoc.get('year')} 年 {qdoc.get('paper')} 第 {question_number} 题，正确答案为 {answer_label}。"
+        if support["dict_summary"]:
+            explanation += f" 相关辞典可参照：{support['dict_summary']}。"
+        banks["function_gloss"].append(
+            {
+                "challenge_id": challenge_id,
+                "question_type": "function_gloss",
+                "kind": "function_word",
+                "term_id": term_id,
+                "term_ids": [term_id],
+                "priority_level": CONTENT_PRIORITY_CORE,
+                "paper_key": paper_key,
+                "year": qdoc.get("year"),
+                "paper": qdoc.get("paper"),
+                "question_number": question_number,
+                "stem": f"下列对句中“{headword}”的解释，最恰当的一项是",
+                "options": options,
+            }
+        )
+        answer_keys[challenge_id] = {
+            "challenge_id": challenge_id,
+            "kind": "function_word",
+            "question_type": "function_gloss",
+            "term_id": term_id,
+            "term_ids": [term_id],
+            "priority_level": CONTENT_PRIORITY_CORE,
+            "source_type": "gaokao_beijing_direct_choice",
+            "source_ref": {
+                "year": qdoc.get("year"),
+                "paper": qdoc.get("paper"),
+                "paper_key": paper_key,
+                "question_number": question_number,
+            },
+            "correct_label": answer_label,
+            "correct_text": next((option["text"] for option in options if option["label"] == answer_label), ""),
+            "explanation": explanation,
+            "dict_support": support_record.get("dict_refs", [])[:2],
+            "textbook_support": support_record.get("textbook_refs", [])[:2],
+            "option_analyses": [
+                {
+                    "label": option["label"],
+                    "text": option["text"],
+                    "is_correct": option["label"] == answer_label,
+                    "analysis": build_function_option_analysis(
+                        f"下列对句中“{headword}”的解释，最恰当的一项是",
+                        option["label"],
+                        option["text"],
+                        answer_label,
+                        explanation,
+                    ),
+                }
+                for option in options
+            ],
+        }
+
+    all_profile_texts = unique_clean_strings(
+        [
+            format_usage_profile(profile)
+            for record in function_records
+            for profile in record.get("usage_relations", [])
+            if format_usage_profile(profile)
+        ]
+    )
+    for record in function_records:
+        profiles = [profile for profile in record.get("usage_relations", []) if format_usage_profile(profile)]
+        if not profiles:
+            continue
+        term_id = str(record["term_id"])
+        headword = str(record["headword"])
+        seed = f"profile:{term_id}"
+        profile_index = stable_number(seed, len(profiles))
+        correct_profile = profiles[profile_index]
+        correct_text = format_usage_profile(correct_profile)
+        distractors = [item for item in all_profile_texts if item != correct_text]
+        picked = stable_pick(distractors, seed, 3)
+        if len(picked) < 3:
+            continue
+        option_texts = stable_pick([correct_text, *picked], seed + ":options", 4)
+        option_labels = ["A", "B", "C", "D"]
+        correct_label = option_labels[option_texts.index(correct_text)]
+        support = first_support_snippet(record)
+        challenge_id = f"function-profile-{stable_slug(term_id)}"
+        example_sentence = clean_text(str(record.get("textbook_refs", [{}])[0].get("sentence") or ""))
+        if not example_sentence:
+            raw_term = next((item for item in function_terms if f"function::{item['headword']}" == term_id), None)
+            if raw_term and raw_term.get("occurrences"):
+                raw_occurrence = raw_term["occurrences"][0]
+                example_sentence = strip_inline_gloss(str(raw_occurrence.get("excerpt") or ""), headword)
+        explanation = format_function_explanation(headword, correct_profile, support)
+        banks["function_profile"].append(
+            {
+                "challenge_id": challenge_id,
+                "question_type": "function_profile",
+                "kind": "function_word",
+                "term_id": term_id,
+                "term_ids": [term_id],
+                "priority_level": str(record.get("priority_level") or FUNCTION_PRIORITY_SUPPORT),
+                "stem": f"关于虚词“{headword}”的常见意义和用法概括，最稳妥的一项是",
+                "sentence": truncate_excerpt(example_sentence, 96) if example_sentence else "",
+                "options": [{"label": label, "text": text} for label, text in zip(option_labels, option_texts)],
+            }
+        )
+        answer_keys[challenge_id] = {
+            "challenge_id": challenge_id,
+            "kind": "function_word",
+            "question_type": "function_profile",
+            "term_id": term_id,
+            "term_ids": [term_id],
+            "priority_level": str(record.get("priority_level") or FUNCTION_PRIORITY_SUPPORT),
+            "source_type": "derived_profile",
+            "source_ref": {
+                "year": record.get("year_range", [None, None])[1],
+                "paper": "",
+                "paper_key": "",
+                "question_number": None,
+            },
+            "correct_label": correct_label,
+            "correct_text": correct_text,
+            "explanation": explanation,
+            "dict_support": record.get("dict_refs", [])[:2],
+            "textbook_support": record.get("textbook_refs", [])[:2],
+            "option_analyses": [
+                {
+                    "label": label,
+                    "text": text,
+                    "is_correct": label == correct_label,
+                    "analysis": explanation if label == correct_label else f"这项概括不是“{headword}”在高考中最稳妥的常见考法。",
+                }
+                for label, text in zip(option_labels, option_texts)
+            ],
+        }
+
+    for question_type in list(banks):
+        banks[question_type] = sorted(
+            banks[question_type],
+            key=lambda item: (
+                0 if str(item.get("priority_level") or "") == CONTENT_PRIORITY_CORE else 1,
+                int(item.get("year") or 0),
+                str(item.get("challenge_id") or ""),
+            ),
+        )
+    return banks, answer_keys
 
 
-def build_content_question_bank(content_terms: list[dict[str, Any]], question_docs: dict[str, dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+def build_content_question_bank(
+    content_terms: list[dict[str, Any]],
+    question_docs: dict[str, dict[str, Any]],
+    content_records: list[dict[str, Any]],
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, dict[str, Any]]]:
     all_glosses = sorted(
         {
-            clean_gloss(str(term.get("headword") or ""), str(occ.get("gloss") or ""), str(occ.get("excerpt") or ""))
+            gloss
             for term in content_terms
-            for occ in term.get("occurrences", [])
-            if looks_like_clean_gloss(
-                clean_gloss(str(term.get("headword") or ""), str(occ.get("gloss") or ""), str(occ.get("excerpt") or ""))
-            )
+            for gloss in select_clean_glosses(str(term.get("headword") or ""), list(term.get("occurrences", [])))
         }
     )
-    bank: dict[str, list[dict[str, Any]]] = {question_type: [] for question_type in QUESTION_TYPES if question_type != "xuci_pair_compare"}
+    record_by_term_id = {record["term_id"]: record for record in content_records}
+    bank: dict[str, list[dict[str, Any]]] = {
+        "content_gloss": [],
+        "sentence_meaning": [],
+        "passage_meaning": [],
+    }
+    answer_keys: dict[str, dict[str, Any]] = {}
     option_labels = ["A", "B", "C", "D"]
 
     for term in content_terms:
         term_id = f"content::{term['headword']}"
+        term_record = record_by_term_id.get(term_id, {})
+        support = first_support_snippet(term_record)
         raw_headword = str(term["headword"])
+        same_term_glosses = select_clean_glosses(raw_headword, list(term.get("occurrences", [])))
         selected_occurrences: dict[tuple[str, str, int, str], dict[str, Any]] = {}
         passage_candidates: dict[tuple[str, str, int, str], dict[str, Any]] = {}
         for index, occurrence in enumerate(term.get("occurrences", [])):
@@ -997,15 +1415,17 @@ def build_content_question_bank(content_terms: list[dict[str, Any]], question_do
             excerpt = candidate["excerpt"]
             gloss = candidate["gloss"]
             seed = f"{term_id}:{paper_key}:{occurrence.get('question_number')}:{hash_text(excerpt)[:10]}"
-            distractors = choose_gloss_distractors(all_glosses, gloss, seed)
+            distractors = choose_gloss_distractors(same_term_glosses, all_glosses, gloss, seed)
             if len(distractors) < 3:
                 continue
             gloss_options = stable_pick([gloss, *distractors], seed + ":gloss", 4)
             correct_label = option_labels[gloss_options.index(gloss)]
+            source_label = f"{occurrence.get('year')} 年 {occurrence.get('paper')} 第 {occurrence.get('question_number')} 题"
 
             base_meta = {
                 "term_id": term_id,
                 "headword": headword,
+                "priority_level": str(term_record.get("priority_level") or CONTENT_PRIORITY_SECONDARY),
                 "paper_key": paper_key,
                 "year": occurrence.get("year"),
                 "paper": occurrence.get("paper"),
@@ -1013,51 +1433,93 @@ def build_content_question_bank(content_terms: list[dict[str, Any]], question_do
                 "evidence_excerpt": truncate_excerpt(excerpt, 120),
             }
 
+            gloss_challenge_id = f"content-{stable_slug(seed)}"
             bank["content_gloss"].append(
                 {
-                    "challenge_id": f"content-{stable_slug(seed)}",
+                    "challenge_id": gloss_challenge_id,
                     "question_type": "content_gloss",
                     "kind": "content_word",
                     **base_meta,
                     "stem": f"下列对句中“{headword}”的解释，最恰当的一项是",
                     "sentence": truncate_excerpt(excerpt, 120),
                     "options": [{"label": label, "text": option} for label, option in zip(option_labels, gloss_options)],
-                    "answer": {"label": correct_label},
-                    "explanation": f"{headword} 在这里应解释为“{gloss}”。",
                 }
             )
-
-            bank["translation_keypoint"].append(
-                {
-                    "challenge_id": f"translation-{stable_slug(seed)}",
-                    "question_type": "translation_keypoint",
-                    "kind": "content_word",
-                    **base_meta,
-                    "stem": f"如果把这句话译成现代汉语，“{headword}”最关键的意思是",
-                    "sentence": truncate_excerpt(excerpt, 120),
-                    "options": [{"label": label, "text": option} for label, option in zip(option_labels, gloss_options)],
-                    "answer": {"label": correct_label},
-                    "explanation": f"翻译时需要把“{headword}”落实为“{gloss}”。",
-                }
-            )
+            answer_keys[gloss_challenge_id] = {
+                "challenge_id": gloss_challenge_id,
+                "kind": "content_word",
+                "question_type": "content_gloss",
+                "term_id": term_id,
+                "term_ids": [term_id],
+                "priority_level": str(term_record.get("priority_level") or CONTENT_PRIORITY_SECONDARY),
+                "source_type": "gaokao_term",
+                "source_ref": {
+                    "year": occurrence.get("year"),
+                    "paper": occurrence.get("paper"),
+                    "paper_key": paper_key,
+                    "question_number": occurrence.get("question_number"),
+                },
+                "correct_label": correct_label,
+                "correct_text": gloss,
+                "explanation": format_content_explanation(headword, gloss, support, source_label),
+                "dict_support": term_record.get("dict_refs", [])[:2],
+                "textbook_support": term_record.get("textbook_refs", [])[:2],
+                "option_analyses": [
+                    {
+                        "label": label,
+                        "text": option,
+                        "is_correct": label == correct_label,
+                        "analysis": build_content_option_analysis(headword, gloss, option, label == correct_label, support),
+                    }
+                    for label, option in zip(option_labels, gloss_options)
+                ],
+            }
 
             meaning_options = [
-                f"这里的“{headword}”表示“{option}”，据此整句应这样理解。"
+                f"把“{headword}”理解为“{option}”，整句意思才会随之落定。"
                 for option in gloss_options
             ]
+            sentence_challenge_id = f"sentence-{stable_slug(seed)}"
             bank["sentence_meaning"].append(
                 {
-                    "challenge_id": f"sentence-{stable_slug(seed)}",
+                    "challenge_id": sentence_challenge_id,
                     "question_type": "sentence_meaning",
                     "kind": "content_word",
                     **base_meta,
                     "stem": f"结合语境，哪一项最能说明句中“{headword}”对句意的影响？",
                     "sentence": truncate_excerpt(excerpt, 120),
                     "options": [{"label": label, "text": option} for label, option in zip(option_labels, meaning_options)],
-                    "answer": {"label": correct_label},
-                    "explanation": f"词义定为“{gloss}”时，句意才与上下文一致。",
                 }
             )
+            answer_keys[sentence_challenge_id] = {
+                "challenge_id": sentence_challenge_id,
+                "kind": "content_word",
+                "question_type": "sentence_meaning",
+                "term_id": term_id,
+                "term_ids": [term_id],
+                "priority_level": str(term_record.get("priority_level") or CONTENT_PRIORITY_SECONDARY),
+                "source_type": "gaokao_term",
+                "source_ref": {
+                    "year": occurrence.get("year"),
+                    "paper": occurrence.get("paper"),
+                    "paper_key": paper_key,
+                    "question_number": occurrence.get("question_number"),
+                },
+                "correct_label": correct_label,
+                "correct_text": meaning_options[gloss_options.index(gloss)],
+                "explanation": format_content_explanation(headword, gloss, support, source_label),
+                "dict_support": term_record.get("dict_refs", [])[:2],
+                "textbook_support": term_record.get("textbook_refs", [])[:2],
+                "option_analyses": [
+                    {
+                        "label": label,
+                        "text": option,
+                        "is_correct": label == correct_label,
+                        "analysis": build_content_option_analysis(headword, gloss, gloss_option, label == correct_label, support),
+                    }
+                    for label, option, gloss_option in zip(option_labels, meaning_options, gloss_options)
+                ],
+            }
 
             passage = find_passage(str(qdoc.get("text") or ""), excerpt, headword)
             if passage and passage.count(headword) <= 1:
@@ -1076,7 +1538,7 @@ def build_content_question_bank(content_terms: list[dict[str, Any]], question_do
                     "gloss": gloss,
                     "passage": passage,
                     "gloss_options": gloss_options,
-                    "correct_label": correct_label,
+                        "correct_label": correct_label,
                 }
                 if existing_passage and (
                     existing_passage["score"] > passage_candidate["score"]
@@ -1088,49 +1550,66 @@ def build_content_question_bank(content_terms: list[dict[str, Any]], question_do
                     pass
                 else:
                     passage_candidates[passage_key] = passage_candidate
-
-            analysis_options = [
-                {"label": "A", "text": f"要先把“{headword}”落实为“{gloss}”，后面的句意和文意判断才站得住。"},
-                {"label": "B", "text": f"“{headword}”只管凑音节，删掉也不影响整句判断。"},
-                {"label": "C", "text": f"看见“{headword}”时只记字面，不必回到语境。"},
-                {"label": "D", "text": f"“{headword}”和上下文没有关系，不会影响人物或事件关系。"},
-            ]
-            bank["analysis_short"].append(
-                {
-                    "challenge_id": f"analysis-{stable_slug(seed)}",
-                    "question_type": "analysis_short",
-                    "kind": "content_word",
-                    **base_meta,
-                    "stem": f"关于“{headword}”，哪一项分析最稳妥？",
-                    "sentence": truncate_excerpt(excerpt, 120),
-                    "options": analysis_options,
-                    "answer": {"label": "A"},
-                    "explanation": f"至少要确认“{headword}”的词义，并知道它会牵动句意判断；本题词义为“{gloss}”。",
-                }
-            )
         for passage_candidate in passage_candidates.values():
             headword = str(passage_candidate["headword"])
             gloss = str(passage_candidate["gloss"])
             gloss_options = list(passage_candidate["gloss_options"])
             correct_label = str(passage_candidate["correct_label"])
             passage_options = [
-                f"这段文字中，“{headword}”可理解为“{option}”，因此相关文意判断成立。"
+                f"整段里“{headword}”若理解为“{option}”，文意判断才会随之成立。"
                 for option in gloss_options
             ]
+            passage_challenge_id = f"passage-{stable_slug(str(passage_candidate['seed']))}"
             bank["passage_meaning"].append(
                 {
-                    "challenge_id": f"passage-{stable_slug(str(passage_candidate['seed']))}",
+                    "challenge_id": passage_challenge_id,
                     "question_type": "passage_meaning",
                     "kind": "content_word",
                     **passage_candidate["base_meta"],
                     "stem": f"结合整段语境，哪一项对“{headword}”的理解最稳妥？",
                     "passage": passage_candidate["passage"],
                     "options": [{"label": label, "text": option} for label, option in zip(option_labels, passage_options)],
-                    "answer": {"label": correct_label},
-                    "explanation": f"整段语境仍要求把“{headword}”落实为“{gloss}”。",
                 }
             )
-    return bank
+            answer_keys[passage_challenge_id] = {
+                "challenge_id": passage_challenge_id,
+                "kind": "content_word",
+                "question_type": "passage_meaning",
+                "term_id": str(passage_candidate["base_meta"]["term_id"]),
+                "term_ids": [str(passage_candidate["base_meta"]["term_id"])],
+                "priority_level": str(passage_candidate["base_meta"]["priority_level"]),
+                "source_type": "gaokao_passage",
+                "source_ref": {
+                    "year": passage_candidate["base_meta"]["year"],
+                    "paper": passage_candidate["base_meta"]["paper"],
+                    "paper_key": passage_candidate["base_meta"]["paper_key"],
+                    "question_number": passage_candidate["base_meta"]["question_number"],
+                },
+                "correct_label": correct_label,
+                "correct_text": passage_options[gloss_options.index(gloss)],
+                "explanation": format_content_explanation(headword, gloss, support, f"{passage_candidate['base_meta']['year']} 年 {passage_candidate['base_meta']['paper']}"),
+                "dict_support": term_record.get("dict_refs", [])[:2],
+                "textbook_support": term_record.get("textbook_refs", [])[:2],
+                "option_analyses": [
+                    {
+                        "label": label,
+                        "text": option,
+                        "is_correct": label == correct_label,
+                        "analysis": build_content_option_analysis(headword, gloss, gloss_option, label == correct_label, support),
+                    }
+                    for label, option, gloss_option in zip(option_labels, passage_options, gloss_options)
+                ],
+            }
+    for question_type in list(bank):
+        bank[question_type] = sorted(
+            bank[question_type],
+            key=lambda item: (
+                0 if str(item.get("priority_level") or "") == CONTENT_PRIORITY_CORE else 1,
+                int(item.get("year") or 0),
+                str(item.get("challenge_id") or ""),
+            ),
+        )
+    return bank, answer_keys
 
 
 def query_revised_links(headwords: list[str]) -> dict[str, list[dict[str, Any]]]:
@@ -1230,19 +1709,22 @@ def build_term_records(
         term_dict_refs = revised_links.get(headword, [])
         term_idiom_refs = idiom_links.get(headword, [])
         manual_review = not (term_textbook_refs or term_dict_refs or term_idiom_refs)
+        cleaned_sample_glosses = select_clean_glosses(headword, list(term.get("occurrences", [])))
         usage_relations: list[dict[str, Any]]
         if kind == "function_word":
             usage_relations = FUNCTION_WORD_PROFILES.get(headword, [])
+            priority_level = priority_level_for_function_term(term_textbook_refs, int(term.get("total_occurrences") or 0))
         else:
             gloss_counter = Counter(
-                clean_text(str(item.get("gloss") or ""))
+                clean_gloss(headword, str(item.get("gloss") or ""), str(item.get("excerpt") or ""))
                 for item in term.get("occurrences", [])
-                if item.get("gloss")
+                if looks_like_clean_gloss(clean_gloss(headword, str(item.get("gloss") or ""), str(item.get("excerpt") or "")))
             )
             usage_relations = [
                 {"semantic_value": gloss, "evidence_count": count}
                 for gloss, count in gloss_counter.most_common(6)
             ]
+            priority_level = priority_level_for_content_term(term_textbook_refs, int(term.get("total_occurrences") or 0))
         records.append(
             {
                 "term_id": term_id,
@@ -1264,10 +1746,11 @@ def build_term_records(
                     "national": int(term.get("national_occurrences") or 0),
                 },
                 "usage_relations": usage_relations,
-                "sample_glosses": [clean_text(item) for item in term.get("sample_glosses", []) if clean_text(item)],
+                "sample_glosses": cleaned_sample_glosses[:6],
                 "textbook_refs": term_textbook_refs,
                 "dict_refs": term_dict_refs,
                 "idiom_refs": term_idiom_refs,
+                "priority_level": priority_level,
                 "needs_manual_review": manual_review,
             }
         )
@@ -1389,6 +1872,14 @@ def write_manifest(manifest: dict[str, Any]) -> None:
         (output_dir / "manifest.json").write_bytes(encoded)
 
 
+def write_private_answer_keys(answer_keys: dict[str, Any]) -> None:
+    encoded = json.dumps(answer_keys, ensure_ascii=False, indent=2).encode("utf-8")
+    PRIVATE_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+    (PRIVATE_RUNTIME_DIR / "answer_keys.json").write_bytes(encoded)
+    (GENERATED_DIR / "answer_keys.json").write_bytes(encoded)
+
+
 def clear_old_runtime_files() -> None:
     for output_dir in (RUNTIME_MIRROR_DIR, PUBLIC_RUNTIME_DIR):
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -1438,9 +1929,10 @@ def main() -> int:
         idiom_links,
     )
 
-    function_bank = build_function_question_bank(function_raw_terms, question_docs)
-    content_bank = build_content_question_bank(content_raw_terms, question_docs)
+    function_bank, function_answer_keys = build_function_question_bank(function_raw_terms, question_docs, function_records)
+    content_bank, content_answer_keys = build_content_question_bank(content_raw_terms, question_docs, content_records)
     exam_question_docs = build_exam_question_docs(question_docs, function_raw_terms, content_raw_terms)
+    answer_keys = {**function_answer_keys, **content_answer_keys}
 
     dict_links = {
         record["term_id"]: {
@@ -1462,17 +1954,18 @@ def main() -> int:
         "built_at": datetime.now(timezone.utc).isoformat(),
         "question_docs": exam_question_docs,
         "challenge_bank": {
-            "xuci_pair_compare": function_bank,
+            "xuci_pair_compare": function_bank["xuci_pair_compare"],
+            "function_gloss": function_bank["function_gloss"],
+            "function_profile": function_bank["function_profile"],
             "content_gloss": content_bank["content_gloss"],
-            "translation_keypoint": content_bank["translation_keypoint"],
             "sentence_meaning": content_bank["sentence_meaning"],
             "passage_meaning": content_bank["passage_meaning"],
-            "analysis_short": content_bank["analysis_short"],
         },
         "question_templates": templates,
     }
 
     clear_old_runtime_files()
+    write_private_answer_keys(answer_keys)
     manifest_payload = {
         "built_at": datetime.now(timezone.utc).isoformat(),
         "asset_max_bytes": ASSET_MAX_BYTES,
@@ -1483,6 +1976,7 @@ def main() -> int:
             "question_docs": len(exam_question_docs),
             "textbook_term_refs": len(textbook_examples),
             "dict_term_refs": len(dict_links),
+            "answer_keys": len(answer_keys),
         },
         "source_root": str(SOURCE_ROOT),
     }
