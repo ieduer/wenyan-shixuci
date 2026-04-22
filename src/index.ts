@@ -486,6 +486,7 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
     );
   }
 
+  await prunePendingRunItems(env, runId, owner.ownerId);
   let pendingItem = await getLatestPendingRunItem(env, runId, owner.ownerId);
   let discardedPendingCount = 0;
   while (
@@ -1813,6 +1814,24 @@ async function getLatestPendingRunItem(
     id: String(row.id),
     prompt,
   };
+}
+
+async function prunePendingRunItems(env: Env, runId: string, sessionId: string): Promise<void> {
+  await env.DB.prepare(
+    `DELETE FROM challenge_items
+     WHERE id IN (
+       SELECT id
+       FROM (
+         SELECT id,
+                ROW_NUMBER() OVER (PARTITION BY run_id ORDER BY created_at DESC, id DESC) AS rn
+         FROM challenge_items
+         WHERE run_id = ? AND session_id = ? AND answered_at IS NULL
+       ) ranked
+       WHERE rn > 1
+     )`
+  )
+    .bind(runId, sessionId)
+    .run();
 }
 
 async function discardPendingRunItem(env: Env, itemId: string, sessionId: string): Promise<void> {

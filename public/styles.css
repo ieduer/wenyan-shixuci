@@ -300,8 +300,8 @@ select {
 
 .question-stem {
   margin: 0;
-  font-size: clamp(1.42rem, 2.2vw, 2.04rem);
-  line-height: 1.28;
+  font-size: clamp(1.26rem, 1.86vw, 1.76rem);
+  line-height: 1.24;
 }
 
 .question-context,
@@ -310,8 +310,8 @@ select {
   border-radius: 1.4rem;
   border: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
   background: color-mix(in srgb, var(--surface-soft) 96%, transparent);
-  font-size: clamp(1.12rem, 1.55vw, 1.32rem);
-  line-height: 1.82;
+  font-size: clamp(1rem, 1.28vw, 1.16rem);
+  line-height: 1.72;
   word-break: break-word;
   cursor: help;
 }
@@ -782,25 +782,25 @@ select {
   }
 
   .question-stem {
-    font-size: clamp(1.24rem, 4.9vw, 1.6rem);
+    font-size: clamp(1.08rem, 4.3vw, 1.4rem);
   }
 
   .question-context,
   .question-passage {
-    font-size: 1rem;
-    line-height: 1.68;
+    font-size: 0.94rem;
+    line-height: 1.62;
   }
 
   .option-card p,
   .option-sentence,
   .pair-sentence {
-    font-size: 0.98rem;
-    line-height: 1.66;
+    font-size: 0.94rem;
+    line-height: 1.6;
   }
 
   .option-gloss {
-    font-size: 0.92rem;
-    line-height: 1.6;
+    font-size: 0.88rem;
+    line-height: 1.54;
   }
 
   .completion-card {
