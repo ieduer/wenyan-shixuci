@@ -8,6 +8,7 @@ import re
 import shutil
 import sqlite3
 import tempfile
+import csv
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -231,6 +232,9 @@ FUNCTION_PROFILE_DISTRACTOR_FALLBACK = [
     "语气词，表示感叹或疑问",
 ]
 FUNCTION_PROFILE_BAD_RE = re.compile(r"(其谁|其孰|用千|小旬|旬之前|前或代词后|一分句|…|[A-Za-z])")
+DICT_SENSE_NUMBERED_RE = re.compile(r"(?:\[[^\]]+\]\s*)?\d+\.\s*([^\[\]]+?)(?=(?:\s*(?:\[[^\]]+\]\s*)?\d+\.)|\s*\[[^\]]+\]|$)")
+DICT_SENSE_TAGGED_RE = re.compile(r"\[([^\]]+)\]\s*([^。\[\]]+)")
+DICT_META_NOISE_RE = re.compile(r"(部首外筆畫數|總筆畫數|部首字|部首外笔画数|总笔画数)")
 
 FUNCTION_USAGE_POS = {"代词", "副词", "连词", "助词", "介词", "语气词", "动词"}
 CHINESE_CHAR_RE = re.compile(r"[\u4e00-\u9fff]")
@@ -679,6 +683,122 @@ def textbook_content_ref_style(ref: dict[str, Any]) -> str:
     return "word"
 
 
+def derive_textbook_dict_headwords(ref: dict[str, Any], fallback_headword: str = "") -> list[str]:
+    candidates: list[str] = []
+    raw_values = [
+        fallback_headword,
+        str(ref.get("headword") or ""),
+        str(ref.get("label_text") or ""),
+    ]
+    for raw in raw_values:
+        normalized = normalize_label_headword(raw)
+        if not normalized:
+            continue
+        if len(normalized) <= 4:
+            candidates.append(normalized)
+        fragments: list[str] = []
+        current = ""
+        for char in normalized:
+            if char in COMMON_XUCI_HEADWORDS and len(normalized) > 1:
+                if current:
+                    fragments.append(current)
+                    current = ""
+                continue
+            current += char
+        if current:
+            fragments.append(current)
+        for fragment in fragments:
+            if 1 <= len(fragment) <= 4:
+                candidates.append(fragment)
+                continue
+            for size in range(min(4, len(fragment)), 1, -1):
+                candidates.append(fragment[:size])
+                candidates.append(fragment[-size:])
+                for start in range(0, len(fragment) - size + 1):
+                    candidates.append(fragment[start : start + size])
+        if len(normalized) > 1:
+            candidates.extend(char for char in normalized if char not in COMMON_XUCI_HEADWORDS)
+    return unique_clean_strings(candidates)
+
+
+def clean_dict_gloss_candidate(value: str) -> str:
+    text = clean_text(value)
+    if not text or DICT_META_NOISE_RE.search(text):
+        return ""
+    text = re.sub(r"《[^》]+》[^。；;]*", "", text)
+    text = re.sub(r"^[如若]\s*[:：]\s*", "", text)
+    text = re.split(r"[。；;（(]", text, maxsplit=1)[0]
+    text = text.strip("，,；;、。:： ")
+    if "如" in text and "：" in text:
+        text = text.split("：", 1)[0]
+    return clean_text(text)
+
+
+def extract_revised_sense_candidates(links: list[dict[str, Any]]) -> list[str]:
+    candidates: list[str] = []
+    for link in links:
+        summary = clean_text(str(link.get("summary") or ""))
+        if not summary:
+            continue
+        numbered = [clean_dict_gloss_candidate(match.group(1)) for match in DICT_SENSE_NUMBERED_RE.finditer(summary)]
+        if numbered:
+            candidates.extend(item for item in numbered if item)
+            continue
+        for match in DICT_SENSE_TAGGED_RE.finditer(summary):
+            pos = clean_text(str(match.group(1) or ""))
+            sense = clean_dict_gloss_candidate(str(match.group(2) or ""))
+            if not sense:
+                continue
+            if pos:
+                candidates.append(f"{pos}，{sense}")
+            else:
+                candidates.append(sense)
+    return filter_valid_content_glosses(candidates)
+
+
+def select_textbook_dict_links(
+    headword: str,
+    refs: list[dict[str, Any]],
+    revised_links: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    seen_entry_ids: set[str] = set()
+
+    def append_links(candidate_headword: str) -> None:
+        for link in revised_links.get(candidate_headword, []):
+            entry_id = str(link.get("entry_id") or "")
+            if not entry_id or entry_id in seen_entry_ids:
+                continue
+            seen_entry_ids.add(entry_id)
+            selected.append(link)
+
+    append_links(headword)
+    for ref in refs:
+        for candidate in ref.get("dict_headwords") or derive_textbook_dict_headwords(ref, headword):
+            append_links(clean_text(str(candidate)))
+    return selected[:4]
+
+
+def build_distractor_variants(pool: list[str], seed: str, max_variants: int) -> list[list[str]]:
+    cleaned_pool = unique_clean_strings(pool)
+    if len(cleaned_pool) < 3:
+        return []
+    variants: list[list[str]] = []
+    seen: set[tuple[str, ...]] = set()
+    for attempt in range(max_variants * 8):
+        picks = stable_shuffle(cleaned_pool, f"{seed}:variant:{attempt}")[:3]
+        if len(picks) < 3:
+            continue
+        key = tuple(sorted(picks))
+        if key in seen:
+            continue
+        seen.add(key)
+        variants.append(picks)
+        if len(variants) >= max_variants:
+            break
+    return variants
+
+
 def textbook_phrase_gloss_ok(value: str) -> bool:
     cleaned = clean_text(value)
     if len(cleaned) < 6 or len(cleaned) > 120:
@@ -698,29 +818,15 @@ def group_textbook_refs_by_source(textbook_refs: dict[str, list[dict[str, Any]]]
 
 
 def build_content_distractor_pool(
-    term_id: str,
     ref: dict[str, Any],
     record: dict[str, Any],
-    textbook_refs: dict[str, list[dict[str, Any]]],
-    refs_by_source: dict[tuple[str, str], list[dict[str, Any]]],
 ) -> list[str]:
     current_gloss = clean_text(str(ref.get("answer_text") or ref.get("gloss") or ref.get("note_block") or ""))
-    style = textbook_content_ref_style(ref)
-    pool: list[str] = []
-    same_term_refs = textbook_refs.get(term_id, [])
-    pool.extend(str(item.get("answer_text") or item.get("gloss") or item.get("note_block") or "") for item in same_term_refs)
-    if style != "phrase":
-        pool.extend(str(item) for item in list(record.get("sample_glosses") or []))
-    if style == "phrase":
-        source_key = (str(ref.get("book_key") or ""), str(ref.get("title") or ""))
-        same_source_refs = refs_by_source.get(source_key, [])
-        pool.extend(
-            str(item.get("answer_text") or item.get("gloss") or item.get("note_block") or "")
-            for item in same_source_refs
-            if str(item.get("ref_id") or "") != str(ref.get("ref_id") or "")
-        )
-        return [item for item in filter_valid_content_glosses(pool) if textbook_phrase_gloss_ok(item) and item != current_gloss]
-    return [item for item in filter_valid_content_glosses(pool) if item != current_gloss]
+    pool = extract_revised_sense_candidates(list(record.get("dict_refs") or []))
+    filtered = [item for item in filter_valid_content_glosses(pool) if item != current_gloss]
+    if textbook_content_ref_style(ref) == "phrase":
+        return [item for item in filtered if textbook_phrase_gloss_ok(item)]
+    return filtered
 
 
 def build_function_distractor_pool(
@@ -1838,6 +1944,10 @@ def build_textbook_sections() -> tuple[list[dict[str, Any]], dict[str, list[dict
                             "label_text": note["label_text"],
                             "gloss": note["gloss"],
                             "answer_text": build_textbook_answer_text(note["label_text"], note["note_text"], note["gloss"]),
+                            "dict_headwords": derive_textbook_dict_headwords(
+                                {"headword": note["headword"], "label_text": note["label_text"]},
+                                note["headword"],
+                            ),
                         }
                     )
                 continue
@@ -1977,6 +2087,7 @@ def build_union_term_records(
         else:
             priority_level = CONTENT_PRIORITY_CORE if beijing_occurrences and any(ref.get("school_stage") == "高中" for ref in term_textbook_refs) else FUNCTION_PRIORITY_SUPPORT
             usage_relations = function_usage_catalog.get(headword, []) or [{"semantic_value": gloss, "evidence_count": 1} for gloss in sample_glosses[:8]]
+        dict_refs = select_textbook_dict_links(headword, term_textbook_refs, revised_links)
         records.append(
             {
                 "term_id": term_id,
@@ -1997,10 +2108,10 @@ def build_union_term_records(
                 "usage_relations": usage_relations,
                 "sample_glosses": sample_glosses[:8],
                 "textbook_refs": term_textbook_refs[:8],
-                "dict_refs": revised_links.get(headword, [])[:3],
+                "dict_refs": dict_refs,
                 "idiom_refs": idiom_links.get(headword, [])[:3],
                 "priority_level": priority_level,
-                "needs_manual_review": not (term_textbook_refs or revised_links.get(headword) or idiom_links.get(headword)),
+                "needs_manual_review": not (term_textbook_refs or dict_refs or idiom_links.get(headword)),
             }
         )
     return records
@@ -2556,7 +2667,6 @@ def build_textbook_question_bank(
         "passage_meaning": [],
     }
     answer_keys: dict[str, dict[str, Any]] = {}
-    refs_by_source = group_textbook_refs_by_source(textbook_refs)
 
     for term_id, refs in sorted(textbook_refs.items()):
         if not refs:
@@ -2581,110 +2691,132 @@ def build_textbook_question_bank(
             focus_text = clean_text(str(ref.get("label_text") or headword or ""))
             if kind == "function_word":
                 pool = build_function_distractor_pool(headword, answer_text, function_usage_catalog, record)
+                variant_sets = build_distractor_variants(pool, f"{term_id}:{index}", 6)
             else:
-                pool = build_content_distractor_pool(term_id, ref, record, textbook_refs, refs_by_source)
-            distractors = choose_gloss_distractors(answer_text, pool, f"{term_id}:{index}")
-            if len(distractors) < 3:
+                pool = build_content_distractor_pool(ref, record)
+                variant_sets = build_distractor_variants(pool, f"{term_id}:{index}", 1)
+            if not variant_sets:
                 continue
-            option_texts = stable_shuffle([answer_text, *distractors], f"{term_id}:{index}:options")
-            labels = ["A", "B", "C", "D"]
-            correct_label = labels[option_texts.index(answer_text)]
             source_label = f"{ref.get('school_stage')}教材《{ref.get('title')}》"
             if ref.get("book_title"):
                 source_label += f"（{ref.get('book_title')}）"
-            challenge_id = f"{'function' if kind == 'function_word' else 'content'}-textbook-{stable_slug(str(ref.get('ref_id') or ''))}"
             stem = (
                 f"根据课下注释，下列对句中“{focus_text or headword}”的解释，最恰当的一项是"
                 if kind == "content_word"
                 else f"根据课下注释，下列对句中“{focus_text or headword}”的意义和用法概括，最恰当的一项是"
             )
-            bank[question_type].append(
-                {
+            for variant_index, distractors in enumerate(variant_sets, start=1):
+                option_candidates = [{"text": answer_text, "origin": "textbook_note"}] + [
+                    {
+                        "text": option_text,
+                        "origin": "function_catalog" if kind == "function_word" else "dict_sense",
+                    }
+                    for option_text in distractors
+                ]
+                ordered_indices = sorted(
+                    range(len(option_candidates)),
+                    key=lambda idx: hashlib.sha1(
+                        f"{term_id}:{index}:variant:{variant_index}:option:{idx}:{option_candidates[idx]['text']}".encode("utf-8")
+                    ).hexdigest(),
+                )
+                ordered_options = [option_candidates[idx] for idx in ordered_indices]
+                labels = ["A", "B", "C", "D"]
+                correct_label = labels[next(idx for idx, option in enumerate(ordered_options) if option["origin"] == "textbook_note")]
+                challenge_id = (
+                    f"{'function' if kind == 'function_word' else 'content'}-textbook-{stable_slug(str(ref.get('ref_id') or ''))}-v{variant_index}"
+                )
+                bank[question_type].append(
+                    {
+                        "challenge_id": challenge_id,
+                        "question_type": question_type,
+                        "kind": kind,
+                        "source_kind": "textbook",
+                        "term_id": term_id,
+                        "term_ids": [term_id],
+                        "priority_level": str(record.get("priority_level") or CONTENT_PRIORITY_SECONDARY),
+                        "source_label": source_label,
+                        "source_title": str(ref.get("title") or ""),
+                        "source_meta": {
+                            "author": ref.get("author"),
+                            "dynasty": ref.get("dynasty"),
+                            "book_title": ref.get("book_title"),
+                            "school_stage": ref.get("school_stage"),
+                        },
+                        "stem": stem,
+                        "sentence": str(ref.get("sentence") or ""),
+                        "context_window": [truncate_excerpt(item, 120) for item in (ref.get("context_window") or [])[:7]],
+                        "options": [
+                            {
+                                "label": label,
+                                "term_id": term_id,
+                                "headword": headword,
+                                "sentence": str(ref.get("sentence") or "") if kind == "function_word" else "",
+                                "context_window": [truncate_excerpt(item, 120) for item in (ref.get("context_window") or [])[:7]],
+                                "text": option["text"],
+                                "origin": option["origin"],
+                            }
+                            for label, option in zip(labels, ordered_options)
+                        ],
+                    }
+                )
+                explanation = (
+                    f"{source_label}中，这一处“{focus_text or headword}”的课下注释是“{answer_text}”。 "
+                    f"所在句为“{truncate_excerpt(str(ref.get('sentence') or ''), 100)}”。"
+                )
+                if record.get("dict_refs"):
+                    explanation += " 辞典参照：" + " ".join(
+                        truncate_excerpt(str(item.get("summary") or ""), 90) + "。"
+                        for item in list(record.get("dict_refs") or [])[:2]
+                        if clean_text(str(item.get("summary") or ""))
+                    )
+                same_term_support = [
+                    item
+                    for item in refs
+                    if str(item.get("ref_id") or "") != str(ref.get("ref_id") or "")
+                ][:3]
+                if same_term_support:
+                    explanation += " 同词课文参照：" + " ".join(
+                        f"{item.get('title')}“{truncate_excerpt(str(item.get('sentence') or ''), 52)}”。"
+                        for item in same_term_support
+                        if clean_text(str(item.get("sentence") or ""))
+                    )
+                answer_keys[challenge_id] = {
                     "challenge_id": challenge_id,
-                    "question_type": question_type,
                     "kind": kind,
-                    "source_kind": "textbook",
+                    "question_type": question_type,
                     "term_id": term_id,
                     "term_ids": [term_id],
                     "priority_level": str(record.get("priority_level") or CONTENT_PRIORITY_SECONDARY),
-                    "source_label": source_label,
-                    "source_title": str(ref.get("title") or ""),
-                    "source_meta": {
-                        "author": ref.get("author"),
-                        "dynasty": ref.get("dynasty"),
-                        "book_title": ref.get("book_title"),
-                        "school_stage": ref.get("school_stage"),
+                    "source_type": "textbook",
+                    "source_ref": {
+                        "year": None,
+                        "paper": str(ref.get("book_title") or ""),
+                        "paper_key": str(ref.get("book_key") or ""),
+                        "question_number": None,
                     },
-                    "stem": stem,
-                    "sentence": str(ref.get("sentence") or ""),
-                    "context_window": [truncate_excerpt(item, 120) for item in (ref.get("context_window") or [])[:7]],
-                    "options": [
+                    "correct_label": correct_label,
+                    "correct_text": answer_text,
+                    "explanation": explanation,
+                    "dict_support": record.get("dict_refs", [])[:2],
+                    "textbook_support": [ref],
+                    "option_analyses": [
                         {
                             "label": label,
-                            "term_id": term_id,
-                            "headword": headword,
-                            "sentence": str(ref.get("sentence") or "") if kind == "function_word" else "",
-                            "context_window": [truncate_excerpt(item, 120) for item in (ref.get("context_window") or [])[:7]],
-                            "text": option_text,
+                            "text": option["text"],
+                            "is_correct": label == correct_label,
+                            "analysis": (
+                                f"本项与教材注释一致。“{focus_text or headword}”在这里应解释为“{answer_text}”。"
+                                if label == correct_label
+                                else (
+                                    f"本项不当。该项是同词在辞典中的其他义项，不能落实到本句；课下注释应落实为“{answer_text}”。"
+                                    if option["origin"] == "dict_sense"
+                                    else f"本项不当。该项是“{focus_text or headword}”的其他常见意义或用法；课下注释应落实为“{answer_text}”。"
+                                )
+                            ),
                         }
-                        for label, option_text in zip(labels, option_texts)
+                        for label, option in zip(labels, ordered_options)
                     ],
                 }
-            )
-            explanation = (
-                f"{source_label}中，这一处“{focus_text or headword}”的课下注释是“{answer_text}”。 "
-                f"所在句为“{truncate_excerpt(str(ref.get('sentence') or ''), 100)}”。"
-            )
-            if record.get("dict_refs"):
-                explanation += " 辞典参照：" + " ".join(
-                    truncate_excerpt(str(item.get("summary") or ""), 90) + "。"
-                    for item in list(record.get("dict_refs") or [])[:2]
-                    if clean_text(str(item.get("summary") or ""))
-                )
-            same_term_support = [
-                item
-                for item in refs
-                if str(item.get("ref_id") or "") != str(ref.get("ref_id") or "")
-            ][:3]
-            if same_term_support:
-                explanation += " 同词课文参照：" + " ".join(
-                    f"{item.get('title')}“{truncate_excerpt(str(item.get('sentence') or ''), 52)}”。"
-                    for item in same_term_support
-                    if clean_text(str(item.get("sentence") or ""))
-                )
-            answer_keys[challenge_id] = {
-                "challenge_id": challenge_id,
-                "kind": kind,
-                "question_type": question_type,
-                "term_id": term_id,
-                "term_ids": [term_id],
-                "priority_level": str(record.get("priority_level") or CONTENT_PRIORITY_SECONDARY),
-                "source_type": "textbook",
-                "source_ref": {
-                    "year": None,
-                    "paper": str(ref.get("book_title") or ""),
-                    "paper_key": str(ref.get("book_key") or ""),
-                    "question_number": None,
-                },
-                "correct_label": correct_label,
-                "correct_text": answer_text,
-                "explanation": explanation,
-                "dict_support": record.get("dict_refs", [])[:2],
-                "textbook_support": [ref],
-                "option_analyses": [
-                    {
-                        "label": label,
-                        "text": option_text,
-                        "is_correct": label == correct_label,
-                        "analysis": (
-                            f"本项与教材注释一致。“{focus_text or headword}”在这里应解释为“{answer_text}”。"
-                            if label == correct_label
-                            else f"本项不当。该项把“{focus_text or headword}”误解为“{option_text}”；课下注释应落实为“{answer_text}”。"
-                        ),
-                    }
-                    for label, option_text in zip(labels, option_texts)
-                ],
-            }
     return bank, answer_keys
 
 
@@ -2755,6 +2887,73 @@ def build_public_corpus_indexes(
             for item in exam_passages
         ],
     }
+
+
+def build_textbook_note_table(textbook_refs: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for term_id, refs in sorted(textbook_refs.items()):
+        for ref in refs:
+            context_window = [clean_text(item) for item in list(ref.get("context_window") or [])[:7] if clean_text(item)]
+            sentence = clean_text(str(ref.get("sentence") or ""))
+            focus_index = next((idx for idx, item in enumerate(context_window) if item == sentence), 0)
+            rows.append(
+                {
+                    "ref_id": str(ref.get("ref_id") or ""),
+                    "term_id": term_id,
+                    "kind": "function_word" if term_id.startswith("function::") else "content_word",
+                    "headword": clean_text(str(ref.get("headword") or "")),
+                    "label_text": clean_text(str(ref.get("label_text") or "")),
+                    "gloss": clean_text(str(ref.get("gloss") or "")),
+                    "answer_text": clean_text(str(ref.get("answer_text") or "")),
+                    "note_block": clean_text(str(ref.get("note_block") or "")),
+                    "sentence": sentence,
+                    "context_window": context_window,
+                    "context_focus_index": focus_index,
+                    "source_title": clean_text(str(ref.get("title") or "")),
+                    "author": clean_text(str(ref.get("author") or "")),
+                    "dynasty": clean_text(str(ref.get("dynasty") or "")),
+                    "book_title": clean_text(str(ref.get("book_title") or "")),
+                    "school_stage": clean_text(str(ref.get("school_stage") or "")),
+                    "book_key": clean_text(str(ref.get("book_key") or "")),
+                    "page_start": ref.get("page_start"),
+                    "page_end": ref.get("page_end"),
+                    "dict_headwords": [clean_text(str(item)) for item in list(ref.get("dict_headwords") or []) if clean_text(str(item))],
+                }
+            )
+    return rows
+
+
+def write_table_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    fieldnames = [
+        "ref_id",
+        "term_id",
+        "kind",
+        "headword",
+        "label_text",
+        "gloss",
+        "answer_text",
+        "note_block",
+        "sentence",
+        "context_window",
+        "context_focus_index",
+        "source_title",
+        "author",
+        "dynasty",
+        "book_title",
+        "school_stage",
+        "book_key",
+        "page_start",
+        "page_end",
+        "dict_headwords",
+    ]
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            payload = dict(row)
+            payload["context_window"] = "｜".join(payload.get("context_window") or [])
+            payload["dict_headwords"] = "｜".join(payload.get("dict_headwords") or [])
+            writer.writerow(payload)
 
 
 def write_private_corpus_documents(
@@ -2936,12 +3135,20 @@ def main() -> int:
     occurrence_lookup = build_exam_occurrence_lookup(function_source_terms, content_source_terms)
 
     sections, textbook_refs = build_textbook_sections()
+    textbook_note_table = build_textbook_note_table(textbook_refs)
     all_headwords = sorted(
         {
             str(term.get("headword") or "")
             for term in [*function_raw_terms, *content_raw_terms]
         }
         | {term_id.split("::", 1)[1] for term_id in textbook_refs}
+        | {
+            clean_text(str(candidate))
+            for refs in textbook_refs.values()
+            for ref in refs
+            for candidate in list(ref.get("dict_headwords") or [])
+            if clean_text(str(candidate))
+        }
         | {clean_text(str(note.get("dict_headword") or "")) for note in solution_notes.values() if note.get("dict_headword")}
     )
     revised_links = query_revised_links(all_headwords)
@@ -3015,6 +3222,7 @@ def main() -> int:
 
     clear_old_runtime_files()
     write_private_answer_keys(answer_keys)
+    write_table_csv(PRIVATE_RUNTIME_DIR / "textbook_notes_table.csv", textbook_note_table)
 
     manifest_payload = {
         "built_at": datetime.now(timezone.utc).isoformat(),
@@ -3026,6 +3234,7 @@ def main() -> int:
             "exam_question_docs": len(exam_docs),
             "textbook_corpus_docs": len(textbook_passages),
             "exam_corpus_docs": len(exam_passages),
+            "textbook_notes": len(textbook_note_table),
             "challenge_counts": {key: len(value) for key, value in challenge_bank.items()},
         },
     }
@@ -3033,6 +3242,7 @@ def main() -> int:
     write_runtime_asset("terms_content", content_records, "list", manifest_payload)
     write_runtime_asset("exam_questions", exam_questions, "object", manifest_payload)
     write_runtime_asset("textbook_examples", textbook_examples, "object", manifest_payload)
+    write_runtime_asset("textbook_notes_table", textbook_note_table, "list", manifest_payload)
     write_runtime_asset("dict_links", dict_links, "object", manifest_payload)
     write_runtime_asset("corpus_indexes", corpus_indexes, "object", manifest_payload)
     write_runtime_asset("textbook_frequency_table", textbook_frequency_table, "list", manifest_payload)

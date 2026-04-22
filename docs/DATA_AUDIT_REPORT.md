@@ -1,18 +1,18 @@
 # 数据审计报告
 
-- 生成时间：2026-04-22T11:19:52.989878+00:00
+- 生成时间：2026-04-22T11:52:17.053756+00:00
 - 源数据检查：通过
 
 ## 实词题库
 - 实词条目：518
 - 重点实词：10
 - 次重点实词：508
-- 题目数量：{'content_gloss': 14, 'sentence_meaning': 79, 'passage_meaning': 0}
+- 题目数量：{'content_gloss': 14, 'sentence_meaning': 347, 'passage_meaning': 0}
 
 ## 虚词题库
 - 虚词条目：18
 - 教材联动核心虚词：1
-- 题目数量：{'xuci_pair_compare': 16, 'function_gloss': 3, 'function_profile': 0}
+- 题目数量：{'xuci_pair_compare': 16, 'function_gloss': 13, 'function_profile': 0}
 - 虚词义项表条目：18
 
 ## 语料与切分
@@ -23,9 +23,9 @@
 - 合并切分词数：3104
 
 ## 运行时验证
-- 题库总量：{'xuci_pair_compare': 16, 'function_gloss': 3, 'function_profile': 0, 'content_gloss': 14, 'sentence_meaning': 79, 'passage_meaning': 0}
-- 答案键总量：112
-- 正确答案分布：{'B': 27, 'C': 30, 'D': 31, 'A': 24}
+- 题库总量：{'xuci_pair_compare': 16, 'function_gloss': 13, 'function_profile': 0, 'content_gloss': 14, 'sentence_meaning': 347, 'passage_meaning': 0}
+- 答案键总量：390
+- 正确答案分布：{'B': 98, 'C': 100, 'D': 101, 'A': 91}
 - 问题计数：{}
 
 ## 高频词样例

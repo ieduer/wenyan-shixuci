@@ -1095,7 +1095,7 @@ function selectBankItem(
     return null;
   }
 
-  const desiredSourceKind = answeredCount % 2 === 0 ? "exam" : "textbook";
+  const desiredSourceKind = answeredCount % ROUND_SIZE === 0 ? "exam" : "textbook";
   const sourceBuckets = desiredSourceKind === "exam" ? EXAM_TYPE_PRIORITY[kind] : TEXTBOOK_TYPE_PRIORITY[kind];
   for (const qType of sourceBuckets) {
     const sourceItems = (bank[qType] || []).filter((item) => String(item.source_kind || "") === desiredSourceKind);

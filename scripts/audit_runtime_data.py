@@ -40,8 +40,13 @@ def validate_option_text(text: str, question_type: str) -> str | None:
     cleaned = clean_text(text)
     if not cleaned:
         return "blank_option"
-    if question_type in {"content_gloss", "function_gloss"}:
+    if question_type == "content_gloss":
         if not looks_like_clean_gloss(cleaned):
+            return "dirty_gloss_option"
+        if cleaned in BANNED_GLOSS_CANDIDATES:
+            return "banned_gloss_option"
+    if question_type == "function_gloss":
+        if len(cleaned) > 40:
             return "dirty_gloss_option"
         if cleaned in BANNED_GLOSS_CANDIDATES:
             return "banned_gloss_option"
@@ -119,6 +124,13 @@ def answer_key_issue_counts(
                 for option in item.get("options") or []:
                     if len(option.get("sentences") or []) != 2:
                         issue_counts["xuci_sentence_pair"] += 1
+            elif question_type == "sentence_meaning" and str(item.get("source_kind") or "") == "textbook":
+                answer_label = clean_text(str(answer_key.get("correct_label") or ""))
+                for option in item.get("options") or []:
+                    if clean_text(str(option.get("label") or "")) == answer_label:
+                        continue
+                    if clean_text(str(option.get("origin") or "")) != "dict_sense":
+                        issue_counts["textbook_content_non_dict_distractor"] += 1
             elif question_type in {"content_gloss", "function_gloss"} and str(item.get("source_kind") or "") == "exam":
                 option_sentences = [clean_text(str(option.get("sentence") or "")) for option in item.get("options") or []]
                 if not all(option_sentences):
