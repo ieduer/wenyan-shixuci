@@ -60,6 +60,16 @@ QUESTION_TYPES = [
     "analysis_short",
 ]
 
+GLOSS_BLOCK_MARKERS = (
+    "翻译为",
+    "译为",
+    "句子",
+    "注意点",
+    "参考答案",
+    "答案示例",
+    "这里活用",
+)
+
 FUNCTION_WORD_PROFILES: dict[str, list[dict[str, str]]] = {
     "以": [
         {"part_of_speech": "介词", "semantic_value": "用/凭借/因为/把", "syntactic_function": "引出工具、对象、原因、时间", "relation": "因果"},
@@ -160,6 +170,91 @@ def clean_text(value: str) -> str:
     text = text.replace("\u3000", " ")
     text = re.sub(r"\s+", " ", text)
     return text.strip()
+
+
+def clean_gloss(headword: str, gloss: str, excerpt: str = "") -> str:
+    raw_gloss = clean_text(gloss)
+    if not raw_gloss:
+        return ""
+    working = raw_gloss
+    if headword:
+        working = re.sub(rf"^{re.escape(headword)}\s*[:：,，]\s*", "", working)
+    same_as_match = re.search(r"义同\s*[“\"'‘]?([\u4e00-\u9fff]{1,8})", raw_gloss)
+    if same_as_match:
+        return same_as_match.group(1)
+    translated_match = re.search(r"译为\s*[“\"'‘]?([\u4e00-\u9fff]{1,12})", raw_gloss)
+    if translated_match:
+        return translated_match.group(1).split("、", 1)[0]
+    quoted_match = re.search(r"[“\"'‘]([\u4e00-\u9fff]{1,12})[”\"'’]", raw_gloss)
+    if quoted_match and all(marker not in raw_gloss for marker in ("亲贤", "推毂", "罪", "注意点")):
+        return quoted_match.group(1).split("、", 1)[0]
+    working = re.split(r"[。；;]\s*\d+\s*", working, maxsplit=1)[0]
+    working = re.split(r"\s+\d+\s*[“\"'‘]", working, maxsplit=1)[0]
+    for marker in GLOSS_BLOCK_MARKERS:
+        working = working.split(marker, 1)[0]
+    working = re.sub(r"[“”\"'‘’]", "", working)
+    working = working.strip("，,；;、。:： ")
+    if "、" in working:
+        working = working.split("、", 1)[0]
+    if any(marker in working for marker in ("这里活用", "义同")):
+        working = re.split(r"[，,；;]", working, maxsplit=1)[0]
+    if len(working) > 20 and any(sep in working for sep in ("，", ",", "；", ";", "。")):
+        working = re.split(r"[，,；;。]", working, maxsplit=1)[0]
+    return clean_text(working)
+
+
+def looks_like_clean_gloss(gloss: str) -> bool:
+    cleaned = clean_text(gloss)
+    if not cleaned or len(cleaned) > 20:
+        return False
+    if any(marker in cleaned for marker in GLOSS_BLOCK_MARKERS):
+        return False
+    if re.search(r"\d", cleaned):
+        return False
+    if re.search(r"[“”\"'‘’]", cleaned):
+        return False
+    return True
+
+
+def extract_translation_probe(text: str) -> str:
+    cleaned = clean_text(text)
+    if not cleaned:
+        return ""
+    for pattern in (
+        r"(?:句子\s*翻译为|翻译为)\s*[:：]\s*([^。！？]+)",
+        r"(?:译[:：])\s*([^。！？]+)",
+    ):
+        match = re.search(pattern, cleaned)
+        if match:
+            return clean_text(match.group(1))
+    return ""
+
+
+def cjk_ngrams(text: str, size: int = 2) -> set[str]:
+    chars = "".join(re.findall(r"[\u4e00-\u9fff]", clean_text(text)))
+    if len(chars) < size:
+        return {chars} if chars else set()
+    return {chars[index : index + size] for index in range(len(chars) - size + 1)}
+
+
+def score_clean_gloss(raw_gloss: str, cleaned_gloss: str) -> int:
+    raw = clean_text(raw_gloss)
+    gloss = clean_text(cleaned_gloss)
+    if not gloss:
+        return -1000
+    score = 40
+    if re.search(r"义同\s*[“\"'‘]?[\u4e00-\u9fff]{1,8}", raw):
+        score = 120
+    elif re.search(r"译为\s*[“\"'‘]?[\u4e00-\u9fff]{1,12}", raw):
+        score = 110
+    elif re.search(r"[“\"'‘][\u4e00-\u9fff]{1,12}[”\"'’]", raw):
+        score = 80
+    elif any(marker in raw for marker in (*GLOSS_BLOCK_MARKERS, "义同")):
+        score -= 18
+    score += min(len(re.findall(r"[\u4e00-\u9fff]", gloss)), 16)
+    if any(punct in gloss for punct in ("，", ",", "、")):
+        score += 3
+    return score
 
 
 def strip_inline_gloss(text: str, headword: str) -> str:
@@ -277,9 +372,9 @@ def merge_content_terms(
             ),
         )
         gloss_counter = Counter(
-            clean_text(str(item.get("gloss") or ""))
+            clean_gloss(canonical, str(item.get("gloss") or ""), str(item.get("excerpt") or ""))
             for item in occurrences
-            if clean_text(str(item.get("gloss") or ""))
+            if clean_gloss(canonical, str(item.get("gloss") or ""), str(item.get("excerpt") or ""))
         )
         years = sorted(
             {
@@ -345,6 +440,21 @@ def split_sentences(text: str) -> list[str]:
     prepared = clean_text(text)
     chunks = re.split(r"(?<=[。！？；!?])|(?<=/)", prepared)
     return [chunk.strip(" /") for chunk in chunks if chunk.strip(" /")]
+
+
+def extract_source_passage(qdoc_text: str) -> str:
+    raw = str(qdoc_text or "")
+    if not raw:
+        return ""
+    for pattern in (
+        r"\n\s*[\(（]\s*1\s*[\)）]",
+        r"\n\s*1\s*[\.．、]",
+        r"\n\s*第[一二三四五六七八九十]+题",
+    ):
+        match = re.search(pattern, raw)
+        if match:
+            return raw[: match.start()]
+    return raw
 
 
 def truncate_excerpt(text: str, limit: int = 200) -> str:
@@ -572,7 +682,11 @@ def looks_like_sentence_context(text: str, headword: str) -> bool:
         return False
     if re.search(r"[\u4e00-\u9fff]{1,3}\s*[:：]\s*(?![“\"])", cleaned):
         return False
-    if any(marker in cleaned for marker in ("翻译为", "句子", "义同", "参考答案", "答案示例")):
+    if any(marker in cleaned for marker in (*GLOSS_BLOCK_MARKERS, "义同")):
+        return False
+    if re.search(r"^[12]\s*[“\"'‘]", cleaned):
+        return False
+    if re.search(r"[“\"'‘][^”\"'’]{1,8}[”\"'’]\s*[,:：，]", cleaned):
         return False
     return True
 
@@ -655,12 +769,14 @@ def extract_function_option_sentences(entries: list[dict[str, Any]]) -> list[str
 
 
 def find_sentence_context(qdoc_text: str, excerpt: str, headword: str) -> str:
+    source_text = extract_source_passage(qdoc_text)
     sanitized = strip_inline_gloss(excerpt, headword)
-    if looks_like_sentence_context(sanitized, headword):
+    translation_probe = extract_translation_probe(excerpt)
+    if looks_like_sentence_context(sanitized, headword) and not translation_probe:
         return truncate_excerpt(sanitized, 120)
     candidates = [
         clean_text(sentence)
-        for sentence in split_sentences(qdoc_text)
+        for sentence in split_sentences(source_text)
         if headword and headword in sentence
     ]
     candidates = [
@@ -673,10 +789,13 @@ def find_sentence_context(qdoc_text: str, excerpt: str, headword: str) -> str:
         for token in re.split(r"[，,。！？；:：\s]+", sanitized)
         if token and token != headword
     ]
+    probe_ngrams = cjk_ngrams(translation_probe or sanitized, 2)
     best_sentence = ""
     best_score = -1
     for sentence in candidates:
         score = sum(1 for token in probe_tokens[:4] if token in sentence)
+        if translation_probe:
+            score += len(probe_ngrams & cjk_ngrams(sentence, 2))
         if sanitized and sanitized[:4] and sanitized[:4] in sentence:
             score += 2
         if score > best_score:
@@ -688,10 +807,11 @@ def find_sentence_context(qdoc_text: str, excerpt: str, headword: str) -> str:
 
 
 def find_passage(qdoc_text: str, excerpt: str, headword: str) -> str:
+    source_text = extract_source_passage(qdoc_text)
     probe = clean_text(excerpt).split("/")[0].strip()
     paragraphs = [
         clean_text(paragraph)
-        for paragraph in re.split(r"\n{2,}", qdoc_text)
+        for paragraph in re.split(r"\n{2,}", source_text)
         if clean_text(paragraph)
     ]
     passage_candidates = [paragraph for paragraph in paragraphs if looks_like_passage_context(paragraph, headword)]
@@ -718,7 +838,7 @@ def find_passage(qdoc_text: str, excerpt: str, headword: str) -> str:
     if best_paragraph:
         return truncate_around_headword(best_paragraph, headword, 240)
 
-    nearby_sentences = [sentence for sentence in split_sentences(qdoc_text) if looks_like_sentence_context(sentence, headword)]
+    nearby_sentences = [sentence for sentence in split_sentences(source_text) if looks_like_sentence_context(sentence, headword)]
     if nearby_sentences:
         return truncate_around_headword(" ".join(nearby_sentences[:3]), headword, 240)
     return truncate_around_headword(probe or clean_text(excerpt), headword, 240)
@@ -809,10 +929,12 @@ def build_function_question_bank(function_terms: list[dict[str, Any]], question_
 def build_content_question_bank(content_terms: list[dict[str, Any]], question_docs: dict[str, dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
     all_glosses = sorted(
         {
-            clean_text(str(occ.get("gloss") or ""))
+            clean_gloss(str(term.get("headword") or ""), str(occ.get("gloss") or ""), str(occ.get("excerpt") or ""))
             for term in content_terms
             for occ in term.get("occurrences", [])
-            if occ.get("gloss")
+            if looks_like_clean_gloss(
+                clean_gloss(str(term.get("headword") or ""), str(occ.get("gloss") or ""), str(occ.get("excerpt") or ""))
+            )
         }
     )
     bank: dict[str, list[dict[str, Any]]] = {question_type: [] for question_type in QUESTION_TYPES if question_type != "xuci_pair_compare"}
@@ -821,15 +943,60 @@ def build_content_question_bank(content_terms: list[dict[str, Any]], question_do
     for term in content_terms:
         term_id = f"content::{term['headword']}"
         raw_headword = str(term["headword"])
+        selected_occurrences: dict[tuple[str, str, int, str], dict[str, Any]] = {}
+        passage_candidates: dict[tuple[str, str, int, str], dict[str, Any]] = {}
         for index, occurrence in enumerate(term.get("occurrences", [])):
-            gloss = clean_text(str(occurrence.get("gloss") or ""))
+            gloss = clean_gloss(raw_headword, str(occurrence.get("gloss") or ""), str(occurrence.get("excerpt") or ""))
             paper_key = str(occurrence.get("paper_key") or "")
             qdoc = question_docs.get(paper_key, {})
             headword = normalize_occurrence_headword(raw_headword, str(occurrence.get("excerpt") or ""))
             excerpt = find_sentence_context(str(qdoc.get("text") or ""), str(occurrence.get("excerpt") or ""), headword)
-            if not gloss or not excerpt or not looks_like_sentence_context(excerpt, headword):
+            if not looks_like_clean_gloss(gloss) or not excerpt or not looks_like_sentence_context(excerpt, headword):
                 continue
-            seed = f"{term_id}:{paper_key}:{occurrence.get('question_number')}:{index}"
+            context_key = (
+                term_id,
+                paper_key,
+                int(occurrence.get("question_number") or 0),
+                truncate_excerpt(excerpt, 120),
+            )
+            candidate = {
+                "occurrence": occurrence,
+                "paper_key": paper_key,
+                "qdoc": qdoc,
+                "headword": headword,
+                "excerpt": truncate_excerpt(excerpt, 120),
+                "gloss": gloss,
+                "score": score_clean_gloss(str(occurrence.get("gloss") or ""), gloss),
+                "index": index,
+            }
+            existing = selected_occurrences.get(context_key)
+            if existing and (
+                existing["score"] > candidate["score"]
+                or (
+                    existing["score"] == candidate["score"]
+                    and len(str(existing["gloss"])) >= len(str(candidate["gloss"]))
+                )
+            ):
+                continue
+            selected_occurrences[context_key] = candidate
+
+        ordered_occurrences = sorted(
+            selected_occurrences.values(),
+            key=lambda item: (
+                int(item["occurrence"].get("year") or 0),
+                str(item["paper_key"]),
+                int(item["occurrence"].get("question_number") or 0),
+                int(item["index"]),
+            ),
+        )
+        for candidate in ordered_occurrences:
+            occurrence = candidate["occurrence"]
+            paper_key = candidate["paper_key"]
+            qdoc = candidate["qdoc"]
+            headword = candidate["headword"]
+            excerpt = candidate["excerpt"]
+            gloss = candidate["gloss"]
+            seed = f"{term_id}:{paper_key}:{occurrence.get('question_number')}:{hash_text(excerpt)[:10]}"
             distractors = choose_gloss_distractors(all_glosses, gloss, seed)
             if len(distractors) < 3:
                 continue
@@ -893,45 +1060,74 @@ def build_content_question_bank(content_terms: list[dict[str, Any]], question_do
             )
 
             passage = find_passage(str(qdoc.get("text") or ""), excerpt, headword)
-            passage_options = [
-                f"这段文字中，“{headword}”可理解为“{option}”，因此相关文意判断成立。"
-                for option in gloss_options
-            ]
-            bank["passage_meaning"].append(
-                {
-                    "challenge_id": f"passage-{stable_slug(seed)}",
-                    "question_type": "passage_meaning",
-                    "kind": "content_word",
-                    **base_meta,
-                    "stem": f"结合整段语境，哪一项对“{headword}”的理解最稳妥？",
+            if passage and passage.count(headword) <= 1:
+                passage_key = (
+                    term_id,
+                    paper_key,
+                    int(occurrence.get("question_number") or 0),
+                    passage,
+                )
+                existing_passage = passage_candidates.get(passage_key)
+                passage_candidate = {
+                    "score": candidate["score"],
+                    "seed": seed,
+                    "base_meta": base_meta,
+                    "headword": headword,
+                    "gloss": gloss,
                     "passage": passage,
-                    "options": [{"label": label, "text": option} for label, option in zip(option_labels, passage_options)],
-                    "answer": {"label": correct_label},
-                    "explanation": f"整段语境仍要求把“{headword}”落实为“{gloss}”。",
+                    "gloss_options": gloss_options,
+                    "correct_label": correct_label,
                 }
-            )
+                if existing_passage and (
+                    existing_passage["score"] > passage_candidate["score"]
+                    or (
+                        existing_passage["score"] == passage_candidate["score"]
+                        and len(str(existing_passage["gloss"])) >= len(str(passage_candidate["gloss"]))
+                    )
+                ):
+                    pass
+                else:
+                    passage_candidates[passage_key] = passage_candidate
 
             analysis_options = [
-                {"key": "A", "text": "它决定了句中核心动作或状态的译法。"},
-                {"key": "B", "text": "它参与交代人物、对象或事件关系。"},
-                {"key": "C", "text": "忽略它会导致句意或文意判断失真。"},
-                {"key": "D", "text": "它只起音节作用，对理解整段并不重要。"},
+                {"label": "A", "text": f"要先把“{headword}”落实为“{gloss}”，后面的句意和文意判断才站得住。"},
+                {"label": "B", "text": f"“{headword}”只管凑音节，删掉也不影响整句判断。"},
+                {"label": "C", "text": f"看见“{headword}”时只记字面，不必回到语境。"},
+                {"label": "D", "text": f"“{headword}”和上下文没有关系，不会影响人物或事件关系。"},
             ]
-            correct_keys = ["A", "C"]
-            if len(headword) > 1 or any(word in gloss for word in ("给", "对", "面对", "承担", "使", "归属")):
-                correct_keys = ["A", "B", "C"]
             bank["analysis_short"].append(
                 {
                     "challenge_id": f"analysis-{stable_slug(seed)}",
                     "question_type": "analysis_short",
                     "kind": "content_word",
                     **base_meta,
-                    "stem": f"要拿下这道题，关于“{headword}”至少应确认哪些要点？（多选）",
+                    "stem": f"关于“{headword}”，哪一项分析最稳妥？",
                     "sentence": truncate_excerpt(excerpt, 120),
                     "options": analysis_options,
-                    "answer": {"keys": correct_keys},
+                    "answer": {"label": "A"},
                     "explanation": f"至少要确认“{headword}”的词义，并知道它会牵动句意判断；本题词义为“{gloss}”。",
-                    "response_mode": "multi_select",
+                }
+            )
+        for passage_candidate in passage_candidates.values():
+            headword = str(passage_candidate["headword"])
+            gloss = str(passage_candidate["gloss"])
+            gloss_options = list(passage_candidate["gloss_options"])
+            correct_label = str(passage_candidate["correct_label"])
+            passage_options = [
+                f"这段文字中，“{headword}”可理解为“{option}”，因此相关文意判断成立。"
+                for option in gloss_options
+            ]
+            bank["passage_meaning"].append(
+                {
+                    "challenge_id": f"passage-{stable_slug(str(passage_candidate['seed']))}",
+                    "question_type": "passage_meaning",
+                    "kind": "content_word",
+                    **passage_candidate["base_meta"],
+                    "stem": f"结合整段语境，哪一项对“{headword}”的理解最稳妥？",
+                    "passage": passage_candidate["passage"],
+                    "options": [{"label": label, "text": option} for label, option in zip(option_labels, passage_options)],
+                    "answer": {"label": correct_label},
+                    "explanation": f"整段语境仍要求把“{headword}”落实为“{gloss}”。",
                 }
             )
     return bank

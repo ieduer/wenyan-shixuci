@@ -16,12 +16,12 @@ const state = {
   latestBadges: [],
   latestReport: null,
   finalizingRunId: "",
+  submitting: false,
+  autoAdvanceTimer: 0,
 };
 
 const els = {
   questionRoot: document.querySelector("#question-root"),
-  submitAnswer: document.querySelector("#submit-answer"),
-  nextQuestion: document.querySelector("#next-question"),
   stageNote: document.querySelector("#stage-note"),
   answeredCount: document.querySelector("#answered-count"),
   correctCount: document.querySelector("#correct-count"),
@@ -61,9 +61,6 @@ document.querySelectorAll("[data-kind]").forEach((button) => {
 document.querySelectorAll("[data-theme]").forEach((button) => {
   button.addEventListener("click", () => setTheme(button.dataset.theme || "parchment"));
 });
-
-els.submitAnswer.addEventListener("click", submitAnswer);
-els.nextQuestion.addEventListener("click", loadNextQuestion);
 window.addEventListener("pagehide", finalizeRunWithBeacon);
 
 applyTheme(state.theme);
@@ -104,6 +101,9 @@ async function refreshBootstrap() {
 }
 
 function clearRoundState() {
+  if (state.autoAdvanceTimer) {
+    window.clearTimeout(state.autoAdvanceTimer);
+  }
   state.run = null;
   state.currentItem = null;
   state.selectedLabel = "";
@@ -112,6 +112,8 @@ function clearRoundState() {
   state.answerReveal = null;
   state.latestFeedback = null;
   state.latestBadges = [];
+  state.submitting = false;
+  state.autoAdvanceTimer = 0;
 }
 
 async function startChallenge(kind) {
@@ -162,8 +164,7 @@ async function loadNextQuestion() {
     state.answered = false;
     state.answerReveal = null;
     state.latestFeedback = null;
-    els.submitAnswer.disabled = false;
-    els.nextQuestion.disabled = true;
+    state.submitting = false;
     renderModeHeader();
     renderRun();
     renderQuestion();
@@ -244,15 +245,8 @@ function renderQuestion() {
 
   const prompt = state.currentItem.prompt;
   const headword = termHeadword(prompt.termId);
-  const tagLabel = questionTypeLabel(prompt.questionType);
-  const modeTag = prompt.responseMode === "multi_select" ? "多選" : "單選";
   const parts = [
     `<div class="question-block">`,
-    `<div class="question-tag-row">`,
-    `<span class="question-tag">${escapeHtml(kindLabel(prompt.kind))}</span>`,
-    `<span class="question-tag">${escapeHtml(tagLabel)}</span>`,
-    `<span class="question-tag">${escapeHtml(modeTag)}</span>`,
-    `</div>`,
     `<h3>${escapeHtml(prompt.stem)}</h3>`,
   ];
 
@@ -352,7 +346,7 @@ function optionVisualState(prompt, option, key) {
 
 function selectOption(value) {
   const prompt = state.currentItem?.prompt;
-  if (!prompt || state.answered) return;
+  if (!prompt || state.answered || state.submitting) return;
   if (prompt.responseMode === "multi_select") {
     if (state.selectedKeys.has(value)) {
       state.selectedKeys.delete(value);
@@ -363,10 +357,13 @@ function selectOption(value) {
     state.selectedLabel = value;
   }
   renderQuestion();
+  if (prompt.responseMode !== "multi_select") {
+    void submitAnswer();
+  }
 }
 
 async function submitAnswer() {
-  if (!state.currentItem?.answerToken || state.answered) return;
+  if (!state.currentItem?.answerToken || state.answered || state.submitting) return;
   const prompt = state.currentItem.prompt;
   const answer =
     prompt.responseMode === "multi_select"
@@ -385,6 +382,7 @@ async function submitAnswer() {
   }
 
   try {
+    state.submitting = true;
     const payload = await api("/api/challenge/answer", {
       method: "POST",
       body: JSON.stringify({
@@ -397,11 +395,18 @@ async function submitAnswer() {
     state.latestFeedback = payload.result;
     state.answerReveal = buildAnswerReveal(payload.result.correctAnswer, payload.result.submittedAnswer);
     state.latestBadges = mergeBadges(state.latestBadges, payload.badges || []);
-    els.submitAnswer.disabled = true;
-    els.nextQuestion.disabled = false;
     renderRun();
     renderQuestion();
     renderStageNote();
+    if (state.autoAdvanceTimer) {
+      window.clearTimeout(state.autoAdvanceTimer);
+    }
+    state.autoAdvanceTimer = window.setTimeout(() => {
+      state.autoAdvanceTimer = 0;
+      if (state.kind) {
+        void loadNextQuestion();
+      }
+    }, 720);
   } catch (error) {
     state.latestFeedback = {
       correct: false,
@@ -410,6 +415,8 @@ async function submitAnswer() {
       pendingReviewCount: Number(els.reviewCount.textContent || 0),
     };
     renderStageNote();
+  } finally {
+    state.submitting = false;
   }
 }
 
@@ -428,7 +435,7 @@ function renderStageNote() {
   const title = state.answered ? (result.correct ? "答對" : "加入追擊") : result.encouragingFeedback || "";
   const detail = state.answered
     ? result.correct
-      ? `+${Math.round(result.scoreDelta || 0)} 分 · 可直接進入下一題`
+      ? `+${Math.round(result.scoreDelta || 0)} 分`
       : `本題已進入追擊佇列${reviewCount ? ` · 目前 ${reviewCount} 題待追擊` : ""}`
     : result.explanation || "";
   const tone = result.correct ? "good" : state.answered ? "bad" : "muted";
@@ -582,17 +589,6 @@ function deriveRank(score, streak, accuracy) {
   if (score >= 45 || accuracy >= 70) return "入勢";
   if (score >= 18 || streak >= 2) return "破題";
   return "初鋒";
-}
-
-function questionTypeLabel(questionType) {
-  return {
-    xuci_pair_compare: "辨義辨用",
-    content_gloss: "定義",
-    translation_keypoint: "翻譯",
-    sentence_meaning: "句意",
-    passage_meaning: "文意",
-    analysis_short: "要點",
-  }[questionType] || questionType;
 }
 
 function kindLabel(kind) {

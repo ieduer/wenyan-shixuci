@@ -10,7 +10,7 @@ routes = [
 
 [vars]
 SITE_KEY = "wy"
-SITE_TITLE = "文言實虛詞"
+SITE_TITLE = "文言練習"
 PRIMARY_HOST = "wy.bdfz.net"
 USER_CENTER_ORIGIN = "https://my.bdfz.net"
 REPORT_SYNC_ENDPOINT = "https://my.bdfz.net/api/mastery/report"

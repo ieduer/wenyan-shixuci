@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-21T16:52:10.411033+00:00",
+  "generated_at": "2026-04-22T03:13:16.384248+00:00",
   "source_report": {
     "ok": true,
     "failures": [],
@@ -963,11 +963,21 @@
       }
     ],
     "total_occurrences": 244,
-    "accepted_occurrences": 237,
+    "accepted_occurrences": 225,
     "rejected_occurrence_counts": {
-      "invalid_context": 7
+      "invalid_context": 15,
+      "missing_gloss": 1,
+      "invalid_gloss": 3
     },
     "rejected_examples": [
+      {
+        "reason": "invalid_context",
+        "headword": "时",
+        "paper_key": "beijing-2018-None",
+        "question_number": 8,
+        "raw_excerpt": "时不胜月 时:季节",
+        "sanitized_context": "时不胜月"
+      },
       {
         "reason": "invalid_context",
         "headword": "僭上",
@@ -975,6 +985,22 @@
         "question_number": 13,
         "raw_excerpt": "关键词:僭上:越分冒用尊者的仪制或宫室、器物等",
         "sanitized_context": "关键词:僭上:越分冒用尊者的仪制或宫室、器物等"
+      },
+      {
+        "reason": "invalid_context",
+        "headword": "凶逆",
+        "paper_key": "national-2015-c62fd826a408",
+        "question_number": 4,
+        "raw_excerpt": "“ 游幸 ”指帝王或后妃出游;这里指炀帝出游。 2“凶逆 ”,凶恶悖逆,也指凶恶悖逆的人,这里指后者; “王室 ”,朝廷; “泉壤 ” 指黄泉之下,地下。",
+        "sanitized_context": "”护儿叹曰: “吾备位大臣,荷国重 任,不能肃清凶逆 ,遂今王室至此 ,抱恨泉壤 ,知复何言!"
+      },
+      {
+        "reason": "invalid_context",
+        "headword": "咨怨",
+        "paper_key": "national-2015-c62fd826a408",
+        "question_number": 4,
+        "raw_excerpt": "1 “军旅 ”指军队,也可指军事;这里指军事、战事; “咨怨 ”指嗟叹怨恨; “ 游幸 ”指帝王或后妃出游;这里指炀帝出游。 2“凶逆 ”,凶恶悖逆,也指凶恶悖逆的人,这里指后者; “王室 ”,朝廷; “泉壤 ”",
+        "sanitized_context": "”乃赐物两千石 ,并牛酒,令谒先人墓 ,宴乡里父老 ,仍今 三品已上并集其宅,酣饮尽日,朝野荣之,十二年,驾幸江都,护儿谏曰: 陛下兴军旅 ,百姓易咨怨 ,车架游幸 ,深恐非宜, ”伏愿驻驾洛阳伏愿驻驾洛 阳,与时休息 ,陛下今幸江都 ,…"
       },
       {
         "reason": "invalid_context",
@@ -994,35 +1020,50 @@
       },
       {
         "reason": "invalid_context",
+        "headword": "所以",
+        "paper_key": "national-2019-8d7210da3a49",
+        "question_number": 13,
+        "raw_excerpt": "“所以”,......的原因",
+        "sanitized_context": "“所以”,......的原因"
+      },
+      {
+        "reason": "missing_gloss",
+        "headword": "持",
+        "paper_key": "national-2016-12f0123dae6a",
+        "question_number": 4,
+        "raw_excerpt": "曾经;从容:严肃;固:结实,牢靠,这里活用为动词,义同 “持”,句子 翻译为:苏轼曾从容地责备公亮不能纠正弊端,世人讥讽他保持禄位加固宠 幸."
+      },
+      {
+        "reason": "invalid_context",
+        "headword": "泉壤",
+        "paper_key": "national-2015-c62fd826a408",
+        "question_number": 4,
+        "raw_excerpt": "逆,也指凶恶悖逆的人,这里指后者; “王室 ”,朝廷; “泉壤 ” 指黄泉之下,地下。",
+        "sanitized_context": "”护儿叹曰: “吾备位大臣,荷国重 任,不能肃清凶逆 ,遂今王室至此 ,抱恨泉壤 ,知复何言!"
+      },
+      {
+        "reason": "invalid_context",
+        "headword": "游幸",
+        "paper_key": "national-2015-c62fd826a408",
+        "question_number": 4,
+        "raw_excerpt": "也可指军事;这里指军事、战事; “咨怨 ”指嗟叹怨恨; “ 游幸 ”指帝王或后妃出游;这里指炀帝出游。 2“凶逆 ”,凶恶悖逆,也指凶恶悖逆的人,这里指后者; “王室 ”,朝廷; “泉壤 ” 指黄泉之下,地下。",
+        "sanitized_context": "”乃赐物两千石 ,并牛酒,令谒先人墓 ,宴乡里父老 ,仍今 三品已上并集其宅,酣饮尽日,朝野荣之,十二年,驾幸江都,护儿谏曰: 陛下兴军旅 ,百姓易咨怨 ,车架游幸 ,深恐非宜, ”伏愿驻驾洛阳伏愿驻驾洛 阳,与时休息 ,陛下今幸江都 ,…"
+      },
+      {
+        "reason": "invalid_context",
+        "headword": "王室",
+        "paper_key": "national-2015-c62fd826a408",
+        "question_number": 4,
+        "raw_excerpt": "“王室 ”,朝廷",
+        "sanitized_context": "”护儿叹曰: “吾备位大臣,荷国重 任,不能肃清凶逆 ,遂今王室至此 ,抱恨泉壤 ,知复何言!"
+      },
+      {
+        "reason": "invalid_context",
         "headword": "留",
         "paper_key": "national-2016-12f0123dae6a",
         "question_number": 4,
         "raw_excerpt": "点,首先要找出 关键实词、虚词,查看有无特殊句式,运用 “留”“删”“调”“换”“补”的方法,直 译为主,意译为辅 .并按现代汉语的规范 ,将翻译过来的内容进行适当调整 , 达到词达句顺.此句中重点的词有:",
         "sanitized_context": "点,首先要找出 关键实词、虚词,查看有无特殊句式,运用 “留”“删”“调”“换”“补”的方法,直 译为主,意译为辅 .并按现代汉语的规范 ,将翻译过来的内容进行适当调整 , 达到词达句顺.此句中重点的词有:"
-      },
-      {
-        "reason": "invalid_context",
-        "headword": "补",
-        "paper_key": "national-2016-12f0123dae6a",
-        "question_number": 4,
-        "raw_excerpt": "、虚词,查看有无特殊句式,运用 “留”“删”“调”“换”“补”的方法,直 译为主,意译为辅 .并按现代汉语的规范 ,将翻译过来的内容进行适当调整 , 达到词达句顺.此句中重点的词有: 1锡:通“赐”,赏赐;虔:恭",
-        "sanitized_context": "、虚词,查看有无特殊句式,运用 “留”“删”“调”“换”“补”的方法,直 译为主,意译为辅 .并按现代汉语的规范 ,将翻译过来的内容进行适当调整 , 达到词达句顺.此句中重点的词有: 1锡:通“赐”,赏赐;虔:恭"
-      },
-      {
-        "reason": "invalid_context",
-        "headword": "译",
-        "paper_key": "national-2019-8d7210da3a49",
-        "question_number": 13,
-        "raw_excerpt": "语把它表达出来。本题还需要注意以下关键词与特殊句式的翻 译:(1)“所以”,......的原因。第一处“乃”,就是。第二处“乃”,才。“此乃吾所 以居子之上也。”是判断句式。(2)“及”,等到。“作乱”,发生骚",
-        "sanitized_context": "13.把文中画横线的句子翻译成现代汉语。"
-      },
-      {
-        "reason": "invalid_context",
-        "headword": "赐",
-        "paper_key": "national-2016-12f0123dae6a",
-        "question_number": 4,
-        "raw_excerpt": "调整 , 达到词达句顺.此句中重点的词有: 1锡:通“赐”,赏赐;虔:恭敬;亲:亲自.句子翻译为 :赐宴不到场,这是对 君主命令的不敬.君主有病,却一定要他亲临宴会,做这样的事能心安吗? 2尝:曾经;从容",
-        "sanitized_context": "调整 , 达到词达句顺.此句中重点的词有: 1锡:通“赐”,赏赐;虔:恭敬;亲:亲自.句子翻译为 :赐宴不到场,这是对 君主命令的不敬.君主有病,却一定要他亲临宴会,做这样的事能心安吗? 2尝:曾经;从容"
       }
     ],
     "salvaged_polluted_examples": [
@@ -1119,21 +1160,21 @@
       }
     ],
     "runtime_question_counts": {
-      "content_gloss": 237,
-      "translation_keypoint": 237,
-      "sentence_meaning": 237,
-      "passage_meaning": 237,
-      "analysis_short": 237
+      "content_gloss": 216,
+      "translation_keypoint": 216,
+      "sentence_meaning": 216,
+      "passage_meaning": 170,
+      "analysis_short": 216
     }
   },
   "runtime": {
     "challenge_counts": {
       "xuci_pair_compare": 5,
-      "content_gloss": 237,
-      "translation_keypoint": 237,
-      "sentence_meaning": 237,
-      "passage_meaning": 237,
-      "analysis_short": 237
+      "content_gloss": 216,
+      "translation_keypoint": 216,
+      "sentence_meaning": 216,
+      "passage_meaning": 170,
+      "analysis_short": 216
     },
     "issue_counts": {},
     "issues": {}

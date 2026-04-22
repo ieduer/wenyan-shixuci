@@ -1,6 +1,6 @@
 # DATA_AUDIT_REPORT
 
-- Generated at: 2026-04-21T16:52:10.411033+00:00
+- Generated at: 2026-04-22T03:13:16.384248+00:00
 - Source check ok: True
 - Question docs: 52
 - Beijing year coverage: 2002-2025
@@ -11,7 +11,7 @@
 - Pure function-word compare groups with complete A-D options: 8
 - Emitted function-word compare challenges: 5
 - Content headword replacements applied: 3
-- Content occurrences accepted into runtime: 237 / 244
+- Content occurrences accepted into runtime: 225 / 244
 
 ## Xuci Audit
 
@@ -42,7 +42,7 @@
 - normalized `以为贺预` -> `预`
 - normalized `典禁旅典` -> `典`
 
-- Rejected occurrence counts: `{"invalid_context": 7}`
+- Rejected occurrence counts: `{"invalid_context": 15, "missing_gloss": 1, "invalid_gloss": 3}`
 - Remaining non-simple runtime headwords: `[{"headword": "好生之德", "needs_manual_review": false, "dict_ref_count": 1}]`
 
 ### Salvaged Polluted Examples
@@ -56,7 +56,7 @@
 
 ## Runtime Validity
 
-- Challenge counts: `{"xuci_pair_compare": 5, "content_gloss": 237, "translation_keypoint": 237, "sentence_meaning": 237, "passage_meaning": 237, "analysis_short": 237}`
+- Challenge counts: `{"xuci_pair_compare": 5, "content_gloss": 216, "translation_keypoint": 216, "sentence_meaning": 216, "passage_meaning": 170, "analysis_short": 216}`
 - Issue counts: `{}`
 
 ## Architecture Reflection

@@ -12,11 +12,13 @@ from build_runtime_data import (
     QUESTION_TYPES,
     RUNTIME_MIRROR_DIR,
     answer_label_for_question,
+    clean_gloss,
     clean_text,
     derive_canonical_content_headword,
     extract_function_option_sentences,
     find_sentence_context,
     load_json,
+    looks_like_clean_gloss,
     looks_like_passage_context,
     looks_like_sentence_context,
     merge_content_terms,
@@ -187,7 +189,7 @@ def audit_content_terms(
         headword = str(term["headword"])
         for occurrence in term.get("occurrences", []):
             total_occurrences += 1
-            gloss = clean_text(str(occurrence.get("gloss") or ""))
+            gloss = clean_gloss(headword, str(occurrence.get("gloss") or ""), str(occurrence.get("excerpt") or ""))
             qdoc = question_docs.get(str(occurrence.get("paper_key") or ""), {})
             raw_excerpt = str(occurrence.get("excerpt") or "")
             raw_context = clean_text(raw_excerpt)
@@ -214,6 +216,20 @@ def audit_content_terms(
                             "paper_key": occurrence.get("paper_key"),
                             "question_number": occurrence.get("question_number"),
                             "raw_excerpt": raw_context,
+                        }
+                    )
+                continue
+            if not looks_like_clean_gloss(gloss):
+                rejection_counter["invalid_gloss"] += 1
+                if len(rejected_examples) < 12:
+                    rejected_examples.append(
+                        {
+                            "reason": "invalid_gloss",
+                            "headword": headword,
+                            "paper_key": occurrence.get("paper_key"),
+                            "question_number": occurrence.get("question_number"),
+                            "raw_excerpt": raw_context,
+                            "gloss": gloss,
                         }
                     )
                 continue
@@ -300,15 +316,36 @@ def audit_runtime_question_bank(runtime_exam_questions: dict[str, Any]) -> dict[
                 )
 
     for question_type in ("content_gloss", "translation_keypoint", "sentence_meaning", "passage_meaning", "analysis_short"):
+        context_groups: dict[tuple[Any, ...], list[dict[str, Any]]] = defaultdict(list)
         for item in runtime_exam_questions["challenge_bank"][question_type]:
-            option_texts = [option.get("text") for option in item.get("options", [])]
+            context_key = (
+                item.get("headword"),
+                item.get("paper_key"),
+                item.get("question_number"),
+                item.get("sentence") or item.get("passage") or "",
+            )
+            context_groups[context_key].append(item)
+            option_texts = [option.get("text") for option in item.get("options", []) if option.get("text")]
             if len(option_texts) != len(set(option_texts)):
                 issues[question_type].append({"challenge_id": item["challenge_id"], "issue": "duplicate_options"})
             if question_type == "analysis_short":
-                if not item.get("answer", {}).get("keys"):
+                if item.get("answer", {}).get("label") not in {"A", "B", "C", "D"}:
                     issues[question_type].append({"challenge_id": item["challenge_id"], "issue": "missing_answer"})
             elif item.get("answer", {}).get("label") not in {"A", "B", "C", "D"}:
                 issues[question_type].append({"challenge_id": item["challenge_id"], "issue": "missing_answer"})
+            if question_type in {"content_gloss", "translation_keypoint"}:
+                answer_label = item.get("answer", {}).get("label")
+                option_map = {option.get("label"): option.get("text") for option in item.get("options", [])}
+                answer_text = clean_text(option_map.get(answer_label) or "")
+                if not looks_like_clean_gloss(answer_text):
+                    issues[question_type].append(
+                        {
+                            "challenge_id": item["challenge_id"],
+                            "issue": "polluted_correct_option",
+                            "headword": item.get("headword"),
+                            "answer_text": answer_text,
+                        }
+                    )
             evidence_text = item.get("sentence") or item.get("passage") or ""
             evidence_ok = (
                 looks_like_passage_context(evidence_text, str(item.get("headword") or ""))
@@ -324,6 +361,19 @@ def audit_runtime_question_bank(runtime_exam_questions: dict[str, Any]) -> dict[
                         "evidence_text": evidence_text,
                     }
                 )
+        for grouped_items in context_groups.values():
+            if len(grouped_items) <= 1:
+                continue
+            issues[question_type].append(
+                {
+                    "challenge_ids": [item["challenge_id"] for item in grouped_items],
+                    "issue": "duplicate_context_question",
+                    "headword": grouped_items[0].get("headword"),
+                    "paper_key": grouped_items[0].get("paper_key"),
+                    "question_number": grouped_items[0].get("question_number"),
+                    "evidence_text": grouped_items[0].get("sentence") or grouped_items[0].get("passage"),
+                }
+            )
 
     return {
         "challenge_counts": counts,
