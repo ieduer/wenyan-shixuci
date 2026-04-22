@@ -13,6 +13,7 @@ from build_runtime_data import (
     PRIVATE_RUNTIME_DIR,
     PUBLIC_RUNTIME_DIR,
     RUNTIME_MIRROR_DIR,
+    build_headword_frequency_records,
     clean_gloss,
     clean_text,
     load_json,
@@ -118,6 +119,10 @@ def answer_key_issue_counts(
                 for option in item.get("options") or []:
                     if len(option.get("sentences") or []) != 2:
                         issue_counts["xuci_sentence_pair"] += 1
+            elif question_type in {"content_gloss", "function_gloss"} and str(item.get("source_kind") or "") == "exam":
+                option_sentences = [clean_text(str(option.get("sentence") or "")) for option in item.get("options") or []]
+                if not all(option_sentences):
+                    issue_counts["exam_option_sentence_missing"] += 1
             elif len(item.get("options") or []) != 4:
                 issue_counts["single_choice_option_count"] += 1
 
@@ -133,6 +138,11 @@ def build_summary_report() -> dict[str, Any]:
     terms_function = load_json(PUBLIC_RUNTIME_DIR / "terms_function.json")
     terms_content = load_json(PUBLIC_RUNTIME_DIR / "terms_content.json")
     exam_questions = load_json(PUBLIC_RUNTIME_DIR / "exam_questions.json")
+    corpus_indexes = load_json(PUBLIC_RUNTIME_DIR / "corpus_indexes.json")
+    textbook_frequency_table = load_json(PUBLIC_RUNTIME_DIR / "textbook_frequency_table.json")
+    exam_frequency_table = load_json(PUBLIC_RUNTIME_DIR / "exam_frequency_table.json")
+    union_frequency_table = load_json(PUBLIC_RUNTIME_DIR / "union_frequency_table.json")
+    function_usage_table = load_json(PUBLIC_RUNTIME_DIR / "function_usage_table.json")
     answer_keys = load_json(PRIVATE_RUNTIME_DIR / "answer_keys.json")
 
     challenge_bank = exam_questions["challenge_bank"]
@@ -148,6 +158,11 @@ def build_summary_report() -> dict[str, Any]:
         if not (term.get("dict_refs") or term.get("textbook_refs") or term.get("idiom_refs"))
     )
     content_dirty_samples = build_filtered_raw_examples(terms_content)
+    correct_label_counter = Counter()
+    for answer in answer_keys.values():
+        label = clean_text(str(answer.get("correct_label") or ""))
+        if label in {"A", "B", "C", "D"}:
+            correct_label_counter[label] += 1
 
     report = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -165,6 +180,7 @@ def build_summary_report() -> dict[str, Any]:
             },
             "support_miss_count": support_miss_count,
             "filtered_raw_examples": content_dirty_samples,
+            "top_textbook_tokens": textbook_frequency_table[:30],
         },
         "function": {
             "term_count": len(terms_function),
@@ -174,10 +190,20 @@ def build_summary_report() -> dict[str, Any]:
                 "function_gloss": len(challenge_bank.get("function_gloss", [])),
                 "function_profile": len(challenge_bank.get("function_profile", [])),
             },
+            "usage_table_count": len(function_usage_table),
+        },
+        "corpus": {
+            "textbook_doc_count": len(corpus_indexes.get("textbook", [])),
+            "exam_doc_count": len(corpus_indexes.get("exam", [])),
+            "textbook_token_count": len(textbook_frequency_table),
+            "exam_token_count": len(exam_frequency_table),
+            "union_token_count": len(union_frequency_table),
+            "top_union_tokens": union_frequency_table[:40],
         },
         "runtime": {
             "challenge_counts": {key: len(value) for key, value in challenge_bank.items()},
             "answer_key_count": len(answer_keys),
+            "correct_label_distribution": dict(correct_label_counter),
             "issue_counts": dict(issue_counts),
             "issue_examples": issue_examples,
             "private_answer_key_paths": [
@@ -210,14 +236,29 @@ def write_reports(report: dict[str, Any]) -> None:
         f"- 虚词条目：{report['function']['term_count']}",
         f"- 教材联动核心虚词：{report['function']['core_term_count']}",
         f"- 题目数量：{report['function']['challenge_counts']}",
+        f"- 虚词义项表条目：{report['function']['usage_table_count']}",
+        "",
+        "## 语料与切分",
+        f"- 教材篇目数：{report['corpus']['textbook_doc_count']}",
+        f"- 真题文段数：{report['corpus']['exam_doc_count']}",
+        f"- 教材切分词数：{report['corpus']['textbook_token_count']}",
+        f"- 真题切分词数：{report['corpus']['exam_token_count']}",
+        f"- 合并切分词数：{report['corpus']['union_token_count']}",
         "",
         "## 运行时验证",
         f"- 题库总量：{report['runtime']['challenge_counts']}",
         f"- 答案键总量：{report['runtime']['answer_key_count']}",
+        f"- 正确答案分布：{report['runtime']['correct_label_distribution']}",
         f"- 问题计数：{runtime_issues if runtime_issues else '{}'}",
         "",
-        "## 已过滤的原始脏数据样例",
+        "## 高频词样例",
     ]
+    for example in report["corpus"]["top_union_tokens"][:15]:
+        lines.append(f"- {example['token']}: {example['frequency']}")
+    lines.extend([
+        "",
+        "## 已过滤的原始脏数据样例",
+    ])
     if report["content"]["filtered_raw_examples"]:
         for example in report["content"]["filtered_raw_examples"][:10]:
             lines.append(
@@ -245,10 +286,16 @@ def write_reports(report: dict[str, Any]) -> None:
             "term_count": report["function"]["term_count"],
             "core_term_count": report["function"]["core_term_count"],
         },
+        "corpus": {
+            "textbook_doc_count": report["corpus"]["textbook_doc_count"],
+            "exam_doc_count": report["corpus"]["exam_doc_count"],
+            "union_token_count": report["corpus"]["union_token_count"],
+        },
         "runtime": {
             "challenge_counts": report["runtime"]["challenge_counts"],
             "issue_counts": report["runtime"]["issue_counts"],
             "answer_key_count": report["runtime"]["answer_key_count"],
+            "correct_label_distribution": report["runtime"]["correct_label_distribution"],
         },
     }
     encoded = json.dumps(quality, ensure_ascii=False, indent=2)

@@ -388,10 +388,26 @@ select {
 }
 
 .option-card p,
+.option-sentence,
 .pair-sentence {
   margin: 0;
   font-size: clamp(1.32rem, 2vw, 1.56rem);
   line-height: 1.84;
+}
+
+.option-sentence {
+  margin-top: 0.72rem;
+  padding: 0.82rem 0.9rem;
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--surface-soft) 94%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--gold) 58%, transparent);
+  cursor: help;
+}
+
+.option-gloss {
+  margin-top: 0.72rem;
+  font-size: clamp(1.18rem, 1.9vw, 1.36rem);
+  line-height: 1.78;
 }
 
 .pair-sentences {
@@ -445,8 +461,8 @@ select {
 
 .analysis-summary {
   margin: 0;
-  font-size: 1.14rem;
-  line-height: 1.9;
+  font-size: 1.22rem;
+  line-height: 1.96;
   color: var(--ink);
   white-space: pre-wrap;
 }
@@ -480,8 +496,8 @@ select {
 
 .analysis-item p {
   margin: 0;
-  font-size: 1.06rem;
-  line-height: 1.82;
+  font-size: 1.14rem;
+  line-height: 1.9;
   color: var(--ink);
   white-space: pre-wrap;
 }
@@ -759,9 +775,15 @@ select {
   }
 
   .option-card p,
+  .option-sentence,
   .pair-sentence {
     font-size: 1.16rem;
     line-height: 1.75;
+  }
+
+  .option-gloss {
+    font-size: 1.08rem;
+    line-height: 1.72;
   }
 
   .completion-card {

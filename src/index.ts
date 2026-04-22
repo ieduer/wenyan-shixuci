@@ -194,21 +194,25 @@ interface RuntimeManifest {
 interface DataQualitySummary {
   generated_at: string;
   source_ok: boolean;
-  xuci: {
-    raw_group_count: number;
-    complete_function_option_group_count: number;
-    emitted_count: number;
-    status_counts: Record<string, number>;
-  };
   content: {
-    accepted_occurrences: number;
-    total_occurrences: number;
-    rejected_occurrence_counts: Record<string, number>;
-    headword_replacements_count: number;
+    term_count: number;
+    core_term_count: number;
+    secondary_term_count: number;
+  };
+  function: {
+    term_count: number;
+    core_term_count: number;
+  };
+  corpus: {
+    textbook_doc_count: number;
+    exam_doc_count: number;
+    union_token_count: number;
   };
   runtime: {
     challenge_counts: Record<string, number>;
     issue_counts: Record<string, number>;
+    answer_key_count: number;
+    correct_label_distribution: Record<string, number>;
   };
 }
 
@@ -283,12 +287,12 @@ const SESSION_COOKIE = "wy_session";
 const DEV_SIGNING_SECRET = "local-dev-only-not-for-production";
 const ROUND_SIZE = 10;
 const EXAM_TYPE_PRIORITY: Record<Kind, QuestionType[]> = {
-  content_word: ["content_gloss", "passage_meaning"],
+  content_word: ["content_gloss"],
   function_word: ["xuci_pair_compare", "function_gloss"],
 };
 const TEXTBOOK_TYPE_PRIORITY: Record<Kind, QuestionType[]> = {
   content_word: ["sentence_meaning"],
-  function_word: ["function_profile"],
+  function_word: ["function_gloss"],
 };
 const BADGE_DEFS = [
   { key: "first-correct", title: "初鸣勋章", detail: "答对第一题" },
@@ -378,7 +382,7 @@ async function handleBootstrap(request: Request, env: Env): Promise<Response> {
       stats: {
         functionTerms: runtime.termsFunction.length,
         contentTerms: runtime.termsContent.length,
-        functionChallenges: ["xuci_pair_compare", "function_gloss", "function_profile"].reduce(
+        functionChallenges: ["xuci_pair_compare", "function_gloss"].reduce(
           (sum, questionType) => sum + (runtime.examQuestions.challenge_bank[questionType as QuestionType]?.length || 0),
           0
         ),
@@ -471,9 +475,39 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
     );
   }
 
+  const pendingItem = await getLatestPendingRunItem(env, runId, owner.ownerId);
+  if (pendingItem) {
+    const answerToken = await signToken(env, request, {
+      type: "answer",
+      sid: owner.ownerId,
+      rid: runId,
+      iid: pendingItem.id,
+      exp: Math.floor(Date.now() / 1000) + 10 * 60,
+    });
+    const pendingResponse = json(
+      {
+        ok: true,
+        run: summarizeRun(runRow),
+        item: {
+          id: pendingItem.id,
+          prompt: pendingItem.prompt,
+          answerToken,
+        },
+        roundCompleted: false,
+        player: summarizePlayerState(playerState),
+      },
+      200
+    );
+    if (sessionState.isNew) {
+      pendingResponse.headers.append("Set-Cookie", buildSessionCookie(env, request, sessionState.token));
+    }
+    return pendingResponse;
+  }
+
   const usedChallengeIds = await listRunChallengeIds(env, runId, owner.ownerId);
   const reviewTargets = mode === "review" ? await listPendingReviewTargets(env, owner.ownerId, kind) : [];
-  const bankItem = selectBankItem(runtime, owner.ownerId, runRow, kind, mode, playerState, usedChallengeIds, reviewTargets);
+  const lastPrompt = await getLastRunPrompt(env, runId, owner.ownerId);
+  const bankItem = selectBankItem(runtime, owner.ownerId, runRow, kind, mode, playerState, usedChallengeIds, reviewTargets, lastPrompt);
   if (!bankItem) {
     if (mode === "review" && String(runRow.status || "") === "active") {
       const roundSummary = await finalizeRound(env, owner.ownerId, runRow);
@@ -1035,10 +1069,12 @@ function selectBankItem(
   mode: Mode,
   playerState: PlayerStateRow,
   usedChallengeIds: Set<string>,
-  reviewTargets: Array<Record<string, unknown>>
+  reviewTargets: Array<Record<string, unknown>>,
+  lastPrompt: ChallengePromptPayload | null
 ): BankItem | null {
   const bank = runtime.examQuestions.challenge_bank;
   const answeredCount = Number(runRow.answered_count || 0);
+  const recentTermIds = uniqueStrings(lastPrompt?.termIds?.length ? lastPrompt.termIds : [lastPrompt?.termId || ""]);
   if (mode === "review") {
     for (const reviewTarget of reviewTargets) {
       const reviewTermId = String(reviewTarget.term_id || "");
@@ -1062,8 +1098,14 @@ function selectBankItem(
   const desiredSourceKind = answeredCount % 2 === 0 ? "exam" : "textbook";
   const sourceBuckets = desiredSourceKind === "exam" ? EXAM_TYPE_PRIORITY[kind] : TEXTBOOK_TYPE_PRIORITY[kind];
   for (const qType of sourceBuckets) {
-    const items = pickBankByPriority((bank[qType] || []).filter((item) => String(item.source_kind || "") === desiredSourceKind), playerState);
-    const selected = chooseUnusedItem(items, usedChallengeIds, `${ownerId}:${String(runRow.id)}:${desiredSourceKind}:${qType}:${answeredCount}`);
+    const sourceItems = (bank[qType] || []).filter((item) => String(item.source_kind || "") === desiredSourceKind);
+    const relatedItems = recentTermIds.length ? sourceItems.filter((item) => sharesRelatedTerm(item, recentTermIds)) : [];
+    const items = pickBankByPriority(relatedItems.length ? relatedItems : sourceItems, playerState);
+    const selected = chooseUnusedItem(
+      items,
+      usedChallengeIds,
+      `${ownerId}:${String(runRow.id)}:${desiredSourceKind}:${qType}:${answeredCount}:${recentTermIds.join(",")}`
+    );
     if (selected) {
       return selected;
     }
@@ -1072,8 +1114,14 @@ function selectBankItem(
   const fallbackBuckets = desiredSourceKind === "exam" ? TEXTBOOK_TYPE_PRIORITY[kind] : EXAM_TYPE_PRIORITY[kind];
   for (const qType of fallbackBuckets) {
     const fallbackSource = desiredSourceKind === "exam" ? "textbook" : "exam";
-    const items = pickBankByPriority((bank[qType] || []).filter((item) => String(item.source_kind || "") === fallbackSource), playerState);
-    const selected = chooseUnusedItem(items, usedChallengeIds, `${ownerId}:${String(runRow.id)}:${fallbackSource}:${qType}:${answeredCount}`);
+    const sourceItems = (bank[qType] || []).filter((item) => String(item.source_kind || "") === fallbackSource);
+    const relatedItems = recentTermIds.length ? sourceItems.filter((item) => sharesRelatedTerm(item, recentTermIds)) : [];
+    const items = pickBankByPriority(relatedItems.length ? relatedItems : sourceItems, playerState);
+    const selected = chooseUnusedItem(
+      items,
+      usedChallengeIds,
+      `${ownerId}:${String(runRow.id)}:${fallbackSource}:${qType}:${answeredCount}:${recentTermIds.join(",")}`
+    );
     if (selected) {
       return selected;
     }
@@ -1618,6 +1666,12 @@ function chooseUnusedItem(items: BankItem[], usedChallengeIds: Set<string>, seed
   return candidates[offset] || null;
 }
 
+function sharesRelatedTerm(item: BankItem, recentTermIds: string[]): boolean {
+  if (!recentTermIds.length) return false;
+  const itemTermIds = uniqueStrings([item.term_id, ...(item.term_ids || [])]);
+  return itemTermIds.some((termId) => recentTermIds.includes(termId));
+}
+
 async function listRunChallengeIds(env: Env, runId: string, sessionId: string): Promise<Set<string>> {
   const { results } = await env.DB.prepare(
     `SELECT prompt_json FROM challenge_items WHERE run_id = ? AND session_id = ? ORDER BY created_at ASC`
@@ -1630,6 +1684,44 @@ async function listRunChallengeIds(env: Env, runId: string, sessionId: string): 
     if (prompt.challengeId) challengeIds.add(prompt.challengeId);
   }
   return challengeIds;
+}
+
+async function getLatestPendingRunItem(
+  env: Env,
+  runId: string,
+  sessionId: string
+): Promise<{ id: string; prompt: ChallengePromptPayload } | null> {
+  const row = await env.DB.prepare(
+    `SELECT id, prompt_json
+     FROM challenge_items
+     WHERE run_id = ? AND session_id = ? AND answered_at IS NULL
+     ORDER BY created_at DESC, id DESC
+     LIMIT 1`
+  )
+    .bind(runId, sessionId)
+    .first<Record<string, unknown>>();
+  if (!row?.id || !row?.prompt_json) return null;
+  const prompt = safeParseObject(row.prompt_json) as unknown as ChallengePromptPayload;
+  if (!prompt?.challengeId) return null;
+  return {
+    id: String(row.id),
+    prompt,
+  };
+}
+
+async function getLastRunPrompt(env: Env, runId: string, sessionId: string): Promise<ChallengePromptPayload | null> {
+  const row = await env.DB.prepare(
+    `SELECT prompt_json
+     FROM challenge_items
+     WHERE run_id = ? AND session_id = ?
+     ORDER BY created_at DESC, id DESC
+     LIMIT 1`
+  )
+    .bind(runId, sessionId)
+    .first<Record<string, unknown>>();
+  if (!row?.prompt_json) return null;
+  const prompt = safeParseObject(row.prompt_json) as unknown as ChallengePromptPayload;
+  return prompt?.challengeId ? prompt : null;
 }
 
 async function finalizeRound(env: Env, sessionId: string, run: Record<string, unknown>): Promise<Record<string, unknown>> {

@@ -1,23 +1,49 @@
 # 数据审计报告
 
-- 生成时间：2026-04-22T10:09:45.171252+00:00
+- 生成时间：2026-04-22T11:19:52.989878+00:00
 - 源数据检查：通过
 
 ## 实词题库
-- 实词条目：537
-- 重点实词：11
-- 次重点实词：526
-- 题目数量：{'content_gloss': 16, 'sentence_meaning': 16, 'passage_meaning': 0}
+- 实词条目：518
+- 重点实词：10
+- 次重点实词：508
+- 题目数量：{'content_gloss': 14, 'sentence_meaning': 79, 'passage_meaning': 0}
 
 ## 虚词题库
 - 虚词条目：18
 - 教材联动核心虚词：1
-- 题目数量：{'xuci_pair_compare': 16, 'function_gloss': 1, 'function_profile': 1}
+- 题目数量：{'xuci_pair_compare': 16, 'function_gloss': 3, 'function_profile': 0}
+- 虚词义项表条目：18
+
+## 语料与切分
+- 教材篇目数：55
+- 真题文段数：52
+- 教材切分词数：2051
+- 真题切分词数：2352
+- 合并切分词数：3104
 
 ## 运行时验证
-- 题库总量：{'xuci_pair_compare': 16, 'function_gloss': 1, 'function_profile': 1, 'content_gloss': 16, 'sentence_meaning': 16, 'passage_meaning': 0}
-- 答案键总量：50
+- 题库总量：{'xuci_pair_compare': 16, 'function_gloss': 3, 'function_profile': 0, 'content_gloss': 14, 'sentence_meaning': 79, 'passage_meaning': 0}
+- 答案键总量：112
+- 正确答案分布：{'B': 27, 'C': 30, 'D': 31, 'A': 24}
 - 问题计数：{}
+
+## 高频词样例
+- 之: 1110
+- 不: 742
+- 以: 577
+- 而: 532
+- 人: 446
+- 为: 436
+- 其: 411
+- 者: 398
+- 也: 381
+- 曰: 354
+- 有: 327
+- 文: 324
+- 于: 321
+- 的: 308
+- 子: 297
 
 ## 已过滤的原始脏数据样例
 - 未发现需展示的脏数据样例。

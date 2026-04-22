@@ -221,7 +221,12 @@ function renderQuestion() {
         <div class="option-head">
           <span class="option-tag">${escapeHtml(key)}</span>
         </div>
-        <p>${highlightTerm(option.text || "", headword)}</p>
+        ${
+          prompt.sourceKind === "exam" && option.sentence
+            ? `<div class="option-sentence">${highlightTerm(option.sentence || "", option.headword || headword)}</div>
+               <p class="option-gloss">${highlightTerm(option.text || "", option.headword || headword)}</p>`
+            : `<p class="option-gloss">${highlightTerm(option.text || "", headword)}</p>`
+        }
       </button>
     `);
   });

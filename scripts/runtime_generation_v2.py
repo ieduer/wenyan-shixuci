@@ -39,6 +39,7 @@ MINERU_OUTPUT_ROOT = SOURCE_ROOT / "data" / "mineru_output"
 ANSWER_OVERRIDE_PATH = REPO_ROOT / "data" / "manual" / "beijing_exam_answer_overrides.json"
 SOLUTION_NOTE_PATH = REPO_ROOT / "data" / "manual" / "beijing_exam_solution_notes.json"
 OPTION_OVERRIDE_PATH = REPO_ROOT / "data" / "manual" / "beijing_exam_option_overrides.json"
+XUCI_DETAILS_PATH = SOURCE_ROOT / "data" / "index" / "dict_exam_xuci_details.json"
 
 QUESTION_TYPE_TO_BASIS = {
     "xuci_compare_same": "direct_choice",
@@ -229,6 +230,13 @@ FUNCTION_PROFILE_DISTRACTOR_FALLBACK = [
     "副词，表示反问或推测",
     "语气词，表示感叹或疑问",
 ]
+FUNCTION_PROFILE_BAD_RE = re.compile(r"(其谁|其孰|用千|小旬|旬之前|前或代词后|一分句|…|[A-Za-z])")
+
+FUNCTION_USAGE_POS = {"代词", "副词", "连词", "助词", "介词", "语气词", "动词"}
+CHINESE_CHAR_RE = re.compile(r"[\u4e00-\u9fff]")
+CONTENT_GLOSS_BAD_HINT_RE = re.compile(
+    r"(指.*?(王|帝|公|侯|君|将军|大夫|人|地名|县|州|国)|作者于|公元|前\d+|后\d+|年（?\d+|在今|版）|选自《)"
+)
 
 
 def load_json(path: Path) -> Any:
@@ -474,6 +482,345 @@ def unique_clean_strings(values: list[str]) -> list[str]:
 def truncate_excerpt(text: str, limit: int = 200) -> str:
     cleaned = clean_text(text)
     return cleaned if len(cleaned) <= limit else cleaned[: limit - 1] + "…"
+
+
+def load_function_detail_terms() -> dict[str, Any]:
+    if not XUCI_DETAILS_PATH.exists():
+        return {}
+    payload = load_json(XUCI_DETAILS_PATH)
+    if not isinstance(payload, dict):
+        return {}
+    terms = payload.get("terms", {})
+    return terms if isinstance(terms, dict) else {}
+
+
+def normalize_function_profile_text(value: str) -> str:
+    text = clean_text(value)
+    text = re.sub(r"^[一二三四五六七八九十]+、", "", text)
+    text = text.replace("，可译为", "，表示")
+    text = text.replace("。可译为", "，表示")
+    text = text.replace("可译为", "表示")
+    text = text.replace("“", "").replace("”", "")
+    text = text.replace('"', "").replace("'", "")
+    text = text.replace("‘", "").replace("’", "")
+    text = text.replace("\\", "")
+    text = re.sub(r"\(\(.*", "", text)
+    text = re.sub(r"[+]+", "", text)
+    text = re.sub(r"\s+", "", text)
+    return text.strip("，。；; ")
+
+
+def canonical_function_semantic(usage: str, value: str) -> tuple[str, str]:
+    text = normalize_function_profile_text(value)
+    relation = relation_from_profile_text(text)
+    if usage == "代词":
+        if "其中" in text or "其一" in text:
+            return "表示其中之一", relation
+        if any(token in text for token in ("这", "那", "指示", "近指")):
+            return "表示指示", relation
+        if any(token in text for token in ("领属", "第三人称", "它的", "我的", "你的")):
+            return "表示领属或代称", relation
+        if "取消小句的独立性" in text or "作小句的主语" in text:
+            return "作小句主语，取消句子独立性", relation
+        if "其他" in text or "其馀" in text or "其余" in text:
+            return "表示其余、其他", relation
+    if usage == "副词":
+        if any(token in text for token in ("祈请", "祈使")):
+            return "表示祈使语气", "语气"
+        if any(token in text for token in ("测度", "也许", "大概", "或许", "恐怕")):
+            return "表示揣测", relation or "语气"
+        if any(token in text for token in ("反诘", "难道", "岂")):
+            return "表示反诘", relation or "语气"
+        if any(token in text for token in ("将要", "就要", "即将")):
+            return "表示将要", relation
+        if any(token in text for token in ("程度", "非常", "确实", "果然", "真正")):
+            return "表示强调或程度", relation
+    if usage == "连词":
+        if "假设" in text or "如果" in text:
+            return "表示假设", "假设"
+        if "让步" in text or "尚且" in text:
+            return "表示让步", "让步"
+        if "选择" in text or "还是" in text:
+            return "表示选择", "选择"
+        if "承接" in text or "论断" in text or "就" in text:
+            return "表示承接或论断", relation or "承接"
+        if "修饰语与名词之间" in text or "的" in text:
+            return "连接修饰语与中心语", relation or "修饰"
+    if usage == "助词":
+        if "疑问" in text or "语气" in text or "句末" in text:
+            return "表示语气或疑问", relation or "语气"
+        if "附加成分与中心成分之间" in text or "之" in text:
+            return "连接定语与中心语", relation or "修饰"
+        if "动词性成分之后" in text or "名词性结构" in text:
+            return "构成名词性结构", relation
+        if "停顿" in text or "提示" in text:
+            return "提示停顿或判断", relation or "语气"
+    if usage == "介词":
+        if any(token in text for token in ("凭借", "依靠", "因为", "由于", "替", "给", "向", "对")):
+            return "表示凭借、对象或原因", relation
+    if usage == "语气词":
+        if any(token in text for token in ("疑问", "感叹", "语气")):
+            return "表示疑问或感叹语气", relation or "语气"
+    concise = semantic_value_from_profile_text(text)
+    concise = re.sub(r"[。；;].*", "", concise)
+    concise = truncate_excerpt(concise, 18)
+    return concise, relation
+
+
+def canonicalize_function_profile(usage: str, value: str) -> dict[str, str] | None:
+    semantic, relation = canonical_function_semantic(usage, value)
+    semantic = clean_text(semantic)
+    if not semantic:
+        return None
+    display = f"{usage}，{semantic}"
+    return {
+        "part_of_speech": usage,
+        "semantic_value": semantic,
+        "syntactic_function": "",
+        "relation": relation,
+        "display": display,
+    }
+
+
+def function_profile_display_ok(value: str) -> bool:
+    cleaned = normalize_function_profile_text(value)
+    if not cleaned:
+        return False
+    if len(cleaned) < 6 or len(cleaned) > 18:
+        return False
+    if FUNCTION_PROFILE_BAD_RE.search(cleaned):
+        return False
+    return any(cleaned.startswith(f"{usage}，") for usage in FUNCTION_USAGE_POS)
+
+
+def relation_from_profile_text(value: str) -> str:
+    text = clean_text(value)
+    for relation in ("并列", "承接", "递进", "转折", "因果", "目的", "条件", "假设", "让步", "修饰", "选择", "判断", "被动", "提宾", "语气"):
+        if relation in text:
+            return relation
+    return ""
+
+
+def semantic_value_from_profile_text(value: str) -> str:
+    text = clean_text(value)
+    match = re.search(r"表示([^，。；;]+)", text)
+    if match:
+        return clean_text(match.group(1))
+    match = re.search(r"可译为([^，。；;]+)", text)
+    if match:
+        return clean_text(match.group(1))
+    return text
+
+
+def build_function_usage_catalog(detail_terms: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    catalog: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for raw_headword, detail in detail_terms.items():
+        headword = clean_text(raw_headword)
+        if not headword:
+            continue
+        xuci_dict = detail.get("xuci_dict") if isinstance(detail, dict) else None
+        sections = xuci_dict.get("sections") if isinstance(xuci_dict, dict) else []
+        profiles: list[dict[str, Any]] = []
+        for section in sections or []:
+            usage = clean_text(str(section.get("usage") or ""))
+            if usage not in FUNCTION_USAGE_POS:
+                continue
+            senses = section.get("senses") if isinstance(section, dict) else []
+            if senses:
+                for sense in senses:
+                    label = str(sense.get("label") or "")
+                    summary = str(sense.get("summary") or "")
+                    combined = " ".join(item for item in [label, summary] if clean_text(item))
+                    if not clean_text(combined):
+                        continue
+                    canonical = canonicalize_function_profile(usage, combined)
+                    if not canonical:
+                        continue
+                    profiles.append({**canonical, "source": "dict_exam_xuci_details"})
+            else:
+                summary = str(section.get("summary") or "")
+                canonical = canonicalize_function_profile(usage, summary)
+                if canonical:
+                    profiles.append({**canonical, "source": "dict_exam_xuci_details"})
+        deduped: list[dict[str, Any]] = []
+        seen_displays: set[str] = set()
+        for profile in profiles:
+            display = clean_text(str(profile.get("display") or ""))
+            if not display or display in seen_displays or not function_profile_display_ok(display):
+                continue
+            seen_displays.add(display)
+            deduped.append(profile)
+        catalog[headword] = deduped
+    return {key: value for key, value in catalog.items() if value}
+
+
+def filter_valid_content_glosses(values: list[str]) -> list[str]:
+    cleaned_values = unique_clean_strings(values)
+    results: list[str] = []
+    for value in cleaned_values:
+        if not value or len(value) > 120:
+            continue
+        if CONTENT_GLOSS_BAD_HINT_RE.search(value):
+            continue
+        if value in BANNED_GLOSS_CANDIDATES:
+            continue
+        if re.search(r"\d{3,}", value):
+            continue
+        results.append(value)
+    return results
+
+
+def textbook_content_ref_style(ref: dict[str, Any]) -> str:
+    label = normalize_label_headword(str(ref.get("label_text") or ""))
+    headword = clean_text(str(ref.get("headword") or ""))
+    target = label or headword
+    if len(target) > 4:
+        return "phrase"
+    return "word"
+
+
+def textbook_phrase_gloss_ok(value: str) -> bool:
+    cleaned = clean_text(value)
+    if len(cleaned) < 6 or len(cleaned) > 120:
+        return False
+    if CONTENT_GLOSS_BAD_HINT_RE.search(cleaned):
+        return False
+    return True
+
+
+def group_textbook_refs_by_source(textbook_refs: dict[str, list[dict[str, Any]]]) -> dict[tuple[str, str], list[dict[str, Any]]]:
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for refs in textbook_refs.values():
+        for ref in refs:
+            key = (str(ref.get("book_key") or ""), str(ref.get("title") or ""))
+            grouped[key].append(ref)
+    return grouped
+
+
+def build_content_distractor_pool(
+    term_id: str,
+    ref: dict[str, Any],
+    record: dict[str, Any],
+    textbook_refs: dict[str, list[dict[str, Any]]],
+    refs_by_source: dict[tuple[str, str], list[dict[str, Any]]],
+) -> list[str]:
+    current_gloss = clean_text(str(ref.get("answer_text") or ref.get("gloss") or ref.get("note_block") or ""))
+    style = textbook_content_ref_style(ref)
+    pool: list[str] = []
+    same_term_refs = textbook_refs.get(term_id, [])
+    pool.extend(str(item.get("answer_text") or item.get("gloss") or item.get("note_block") or "") for item in same_term_refs)
+    if style != "phrase":
+        pool.extend(str(item) for item in list(record.get("sample_glosses") or []))
+    if style == "phrase":
+        source_key = (str(ref.get("book_key") or ""), str(ref.get("title") or ""))
+        same_source_refs = refs_by_source.get(source_key, [])
+        pool.extend(
+            str(item.get("answer_text") or item.get("gloss") or item.get("note_block") or "")
+            for item in same_source_refs
+            if str(item.get("ref_id") or "") != str(ref.get("ref_id") or "")
+        )
+        return [item for item in filter_valid_content_glosses(pool) if textbook_phrase_gloss_ok(item) and item != current_gloss]
+    return [item for item in filter_valid_content_glosses(pool) if item != current_gloss]
+
+
+def build_function_distractor_pool(
+    headword: str,
+    correct_gloss: str,
+    usage_catalog: dict[str, list[dict[str, Any]]],
+    record: dict[str, Any],
+) -> list[str]:
+    pool = [str(profile.get("display") or "") for profile in usage_catalog.get(headword, [])]
+    pool.extend(str(item) for item in list(record.get("sample_glosses") or []))
+    pool.extend(FUNCTION_PROFILE_DISTRACTOR_FALLBACK)
+    cleaned = unique_clean_strings(normalize_function_profile_text(item) for item in pool if item)
+    return [item for item in cleaned if item and item != normalize_function_profile_text(correct_gloss)]
+
+
+def build_headword_frequency_records(
+    terms_function: list[dict[str, Any]],
+    terms_content: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for term in [*terms_content, *terms_function]:
+        records.append(
+            {
+                "term_id": term["term_id"],
+                "headword": term["headword"],
+                "kind": term["kind"],
+                "beijing_frequency": term.get("beijing_frequency", 0),
+                "national_frequency": term.get("national_frequency", 0),
+                "textbook_ref_count": len(term.get("textbook_refs", [])),
+                "question_type_counts": term.get("question_type_counts", {}),
+                "sample_glosses": term.get("sample_glosses", []),
+            }
+        )
+    return sorted(records, key=lambda item: (-int(item.get("beijing_frequency") or 0), str(item.get("term_id") or "")))
+
+
+def longest_match_segment(text: str, vocabulary: set[str], max_length: int = 8) -> list[str]:
+    compact = "".join(CHINESE_CHAR_RE.findall(clean_text(text)))
+    if not compact:
+        return []
+    tokens: list[str] = []
+    index = 0
+    while index < len(compact):
+        matched = ""
+        for length in range(min(max_length, len(compact) - index), 0, -1):
+            candidate = compact[index : index + length]
+            if candidate in vocabulary:
+                matched = candidate
+                break
+        if not matched:
+            matched = compact[index]
+        tokens.append(matched)
+        index += len(matched)
+    return tokens
+
+
+def build_segmentation_vocabulary(
+    terms_function: list[dict[str, Any]],
+    terms_content: list[dict[str, Any]],
+    textbook_refs: dict[str, list[dict[str, Any]]],
+) -> set[str]:
+    vocabulary: set[str] = set(COMMON_XUCI_HEADWORDS)
+    for term in [*terms_content, *terms_function]:
+        headword = clean_text(str(term.get("headword") or ""))
+        if 1 <= len(headword) <= 8:
+            vocabulary.add(headword)
+    for refs in textbook_refs.values():
+        for ref in refs:
+            for value in (str(ref.get("headword") or ""), str(ref.get("label_text") or "")):
+                token = normalize_label_headword(value)
+                if 1 <= len(token) <= 8:
+                    vocabulary.add(token)
+    return {item for item in vocabulary if item}
+
+
+def build_corpus_frequency_table(passages: list[dict[str, Any]], vocabulary: set[str]) -> list[dict[str, Any]]:
+    counter: Counter[str] = Counter()
+    sources: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for passage in passages:
+        tokens = longest_match_segment(str(passage.get("text") or ""), vocabulary)
+        counter.update(tokens)
+        for token in dict.fromkeys(tokens):
+            if len(sources[token]) >= 5:
+                continue
+            sources[token].append(
+                {
+                    "title": passage.get("title"),
+                    "source": passage.get("source"),
+                    "year": passage.get("year"),
+                    "book_key": passage.get("book_key"),
+                }
+            )
+    return [
+        {
+            "token": token,
+            "frequency": frequency,
+            "examples": sources.get(token, []),
+        }
+        for token, frequency in sorted(counter.items(), key=lambda item: (-item[1], item[0]))
+    ]
 
 
 def load_question_templates() -> dict[str, Any]:
@@ -778,10 +1125,10 @@ def extract_source_passage(qdoc_text: str) -> str:
     return raw
 
 
-def split_context_units(text: str) -> list[str]:
+def normalize_context_source(text: str) -> str:
     normalized = clean_text_keep_newlines(text)
     normalized = IMAGE_LINE_RE.sub("", normalized)
-    lines = []
+    kept_lines: list[str] = []
     for raw_line in normalized.splitlines():
         line = raw_line.strip()
         if not line:
@@ -790,12 +1137,56 @@ def split_context_units(text: str) -> list[str]:
             continue
         if line.startswith("![]("):
             continue
+        kept_lines.append(line)
+    return "\n".join(kept_lines)
+
+
+def split_context_units(text: str) -> list[str]:
+    normalized = normalize_context_source(text)
+    lines = []
+    for raw_line in normalized.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
         parts = re.split(r"(?<=[。！？；!?])", line)
         for part in parts:
             value = clean_text(part)
             if value:
                 lines.append(value)
     return lines
+
+
+def split_context_units_with_offsets(text: str) -> list[dict[str, Any]]:
+    normalized = normalize_context_source(text)
+    units: list[dict[str, Any]] = []
+    for match in re.finditer(r"[^\n。！？；!?]+[。！？；!?]?", normalized):
+        value = clean_text(match.group(0))
+        if not value:
+            continue
+        units.append(
+            {
+                "text": value,
+                "start": match.start(),
+                "end": match.end(),
+            }
+        )
+    return units
+
+
+def context_window_from_position(source_text: str, position: int) -> list[str]:
+    units = split_context_units_with_offsets(source_text)
+    if not units:
+        return []
+    target_index = 0
+    for index, unit in enumerate(units):
+        if int(unit["start"]) <= position < int(unit["end"]):
+            target_index = index
+            break
+        if position >= int(unit["end"]):
+            target_index = index
+    start = max(0, target_index - 3)
+    end = min(len(units), target_index + 4)
+    return [str(unit["text"]) for unit in units[start:end]]
 
 
 def best_context_window(source_text: str, probe_text: str, headword: str = "") -> list[str]:
@@ -820,6 +1211,30 @@ def best_context_window(source_text: str, probe_text: str, headword: str = "") -
     start = max(0, best_index - 3)
     end = min(len(units), best_index + 4)
     return units[start:end]
+
+
+def locate_progressive_probe(body_text: str, label_text: str, headword: str, start_index: int = 0) -> tuple[str, int]:
+    candidates = unique_clean_strings(
+        [
+            clean_text(label_text),
+            normalize_label_headword(label_text),
+            clean_text(headword),
+        ]
+    )
+    search_body = normalize_context_source(body_text)
+    for candidate in sorted(candidates, key=len, reverse=True):
+        if not candidate:
+            continue
+        position = search_body.find(candidate, start_index)
+        if position >= 0:
+            return candidate, position
+    for candidate in sorted(candidates, key=len, reverse=True):
+        if not candidate:
+            continue
+        position = search_body.find(candidate)
+        if position >= 0:
+            return candidate, position
+    return clean_text(label_text) or clean_text(headword), -1
 
 
 def _compact_query(value: str) -> str:
@@ -1141,7 +1556,7 @@ def extract_note_headword(label_text: str, note_text: str = "") -> str:
             return body_hint_match.group(1)
         for size in range(1, min(4, len(label)) + 1):
             candidate = label[-size:]
-            if candidate and candidate in body:
+            if candidate and re.search(rf"{re.escape(candidate)}[，,:：]", body):
                 return candidate
     return label[:8]
 
@@ -1167,6 +1582,24 @@ def summarize_note_gloss(headword: str, note_text: str) -> str:
         return candidate
     first_clause = re.split(r"[。；;，,]", cleaned, maxsplit=1)[0]
     return truncate_excerpt(first_clause, 28)
+
+
+def build_textbook_answer_text(label_text: str, note_text: str, gloss: str) -> str:
+    cleaned_note = clean_text(note_text)
+    cleaned_gloss = clean_text(gloss)
+    normalized_label = normalize_label_headword(label_text)
+    if not cleaned_note:
+        return cleaned_gloss
+    compact_note = "".join(
+        part
+        for part in [clean_text(item) for item in re.split(r"(?<=[。；;])", cleaned_note)][:2]
+        if part
+    )
+    if len(normalized_label) >= 4:
+        return truncate_excerpt(compact_note or cleaned_note, 120)
+    if cleaned_gloss in {"意思是", "这里是", "这里指", "指"} or len(cleaned_gloss) <= 2:
+        return truncate_excerpt(compact_note or cleaned_note, 120)
+    return cleaned_gloss
 
 
 def normalize_label_headword(label_text: str) -> str:
@@ -1325,6 +1758,7 @@ def build_textbook_sections() -> tuple[list[dict[str, Any]], dict[str, list[dict
                     "note_entries": note_entries,
                 }
                 sections.append(section_record)
+                body_cursor = 0
                 for note_index, note in enumerate(note_entries, start=1):
                     term_kind = infer_textbook_term_kind(
                         note["headword"],
@@ -1333,14 +1767,40 @@ def build_textbook_sections() -> tuple[list[dict[str, Any]], dict[str, list[dict
                         note["gloss"],
                     )
                     term_id = f"{'function' if term_kind == 'function_word' else 'content'}::{note['headword']}"
-                    probe_text = note["label_text"] or note["headword"]
-                    context_window = best_context_window(body_text, probe_text, note["headword"])
+                    probe_text, probe_position = locate_progressive_probe(
+                        body_text,
+                        note["label_text"],
+                        note["headword"],
+                        body_cursor,
+                    )
+                    if probe_position >= 0:
+                        body_cursor = probe_position + len(probe_text)
+                    context_window = (
+                        context_window_from_position(body_text, probe_position)
+                        if probe_position >= 0
+                        else best_context_window(body_text, probe_text, note["headword"])
+                    )
                     sentence = ""
                     if context_window:
-                        sentence = next(
-                            (unit for unit in context_window if note["headword"] in unit or note["label_text"] in unit),
-                            context_window[min(len(context_window) // 2, len(context_window) - 1)],
-                        )
+                        if probe_position >= 0:
+                            exact_window = split_context_units_with_offsets(body_text)
+                            sentence = next(
+                                (
+                                    str(unit["text"])
+                                    for unit in exact_window
+                                    if int(unit["start"]) <= probe_position < int(unit["end"])
+                                ),
+                                "",
+                            )
+                        if not sentence:
+                            sentence = next(
+                                (
+                                    unit
+                                    for unit in context_window
+                                    if probe_text in unit or note["headword"] in unit or note["label_text"] in unit
+                                ),
+                                context_window[min(len(context_window) // 2, len(context_window) - 1)],
+                            )
                     if not textbook_ref_is_reliable(
                         term_kind,
                         note["headword"],
@@ -1377,6 +1837,7 @@ def build_textbook_sections() -> tuple[list[dict[str, Any]], dict[str, list[dict
                             "headword": note["headword"],
                             "label_text": note["label_text"],
                             "gloss": note["gloss"],
+                            "answer_text": build_textbook_answer_text(note["label_text"], note["note_text"], note["gloss"]),
                         }
                     )
                 continue
@@ -1478,6 +1939,7 @@ def build_union_term_records(
     textbook_refs: dict[str, list[dict[str, Any]]],
     revised_links: dict[str, list[dict[str, Any]]],
     idiom_links: dict[str, list[dict[str, Any]]],
+    function_usage_catalog: dict[str, list[dict[str, Any]]],
     kind: str,
 ) -> list[dict[str, Any]]:
     exam_index = {str(term.get("headword") or ""): term for term in raw_exam_terms}
@@ -1514,7 +1976,7 @@ def build_union_term_records(
             usage_relations = [{"semantic_value": gloss, "evidence_count": 1} for gloss in sample_glosses[:8]]
         else:
             priority_level = CONTENT_PRIORITY_CORE if beijing_occurrences and any(ref.get("school_stage") == "高中" for ref in term_textbook_refs) else FUNCTION_PRIORITY_SUPPORT
-            usage_relations = [{"semantic_value": gloss, "evidence_count": 1} for gloss in sample_glosses[:8]]
+            usage_relations = function_usage_catalog.get(headword, []) or [{"semantic_value": gloss, "evidence_count": 1} for gloss in sample_glosses[:8]]
         records.append(
             {
                 "term_id": term_id,
@@ -1572,7 +2034,7 @@ def build_exam_occurrence_lookup(
     content_terms: list[dict[str, Any]],
 ) -> dict[tuple[str, int, str], dict[str, Any]]:
     lookup: dict[tuple[str, int, str], dict[str, Any]] = {}
-    for term in [*function_terms, *content_terms]:
+    for term in function_terms:
         raw_headword = str(term.get("headword") or "")
         for occurrence in list(term.get("occurrences") or []):
             if occurrence.get("scope") != "beijing":
@@ -1583,6 +2045,23 @@ def build_exam_occurrence_lookup(
             if not paper_key or not question_number or option_label not in {"A", "B", "C", "D"}:
                 continue
             normalized = normalize_exam_occurrence(raw_headword, occurrence)
+            normalized["kind_hint"] = "function_word"
+            key = (paper_key, question_number, option_label)
+            current = lookup.get(key)
+            if not current or len(str(normalized.get("headword") or "")) < len(str(current.get("headword") or "")):
+                lookup[key] = normalized
+    for term in content_terms:
+        raw_headword = str(term.get("headword") or "")
+        for occurrence in list(term.get("occurrences") or []):
+            if occurrence.get("scope") != "beijing":
+                continue
+            paper_key = str(occurrence.get("paper_key") or "")
+            question_number = int(occurrence.get("question_number") or 0)
+            option_label = clean_text(str(occurrence.get("option_label") or ""))
+            if not paper_key or not question_number or option_label not in {"A", "B", "C", "D"}:
+                continue
+            normalized = normalize_exam_occurrence(raw_headword, occurrence)
+            normalized["kind_hint"] = "content_word"
             key = (paper_key, question_number, option_label)
             current = lookup.get(key)
             if not current or len(str(normalized.get("headword") or "")) < len(str(current.get("headword") or "")):
@@ -1600,6 +2079,7 @@ def build_option_analysis_for_direct(
 ) -> str:
     headword = str(option.get("headword") or "")
     gloss = str(option.get("gloss") or option.get("text") or "")
+    sentence = clean_text(str(option.get("sentence") or ""))
     incorrect_prompt = "不正确" in prompt_text or "不同的一项" in prompt_text
     if incorrect_prompt:
         if is_correct_option:
@@ -1607,6 +2087,8 @@ def build_option_analysis_for_direct(
             pos = clean_text(str(solution_note.get("part_of_speech") or ""))
             reason = clean_text(str(solution_note.get("reason") or ""))
             pieces = [f"本项是题目的误释项。"]
+            if sentence:
+                pieces.append(f"原句“{sentence}”。")
             if headword and actual_gloss:
                 pieces.append(f"句中“{headword}”应作“{actual_gloss}”讲。")
             if pos:
@@ -1617,15 +2099,21 @@ def build_option_analysis_for_direct(
                 pieces.append(reason)
             return " ".join(pieces)
         if headword and gloss:
+            if sentence:
+                return f"本项解释成立。原句“{sentence}”里，“{headword}”在这里就是“{gloss}”的意思。"
             return f"本项解释成立。句中“{headword}”在这里就是“{gloss}”的意思。"
         return f"本项解释成立，不符合题干要求的“{clean_text(prompt_text)}”。"
     if is_correct_option:
         if headword and gloss:
+            if sentence:
+                return f"本项成立。原句“{sentence}”里，“{headword}”在这里应解释为“{gloss}”。"
             return f"本项成立。句中“{headword}”在这里应解释为“{gloss}”。"
         return f"本项成立，符合题干要求。"
     correct_headword = str(correct_option.get("headword") or "")
     correct_gloss = str(correct_option.get("gloss") or correct_option.get("text") or "")
     if headword and gloss and correct_headword == headword and correct_gloss:
+        if sentence:
+            return f"本项不当。原句“{sentence}”里，“{headword}”不作“{gloss}”讲，更稳妥的解释是“{correct_gloss}”。"
         return f"本项不当。句中“{headword}”不作“{gloss}”讲，更稳妥的解释是“{correct_gloss}”。"
     return f"本项不是正确答案，标准答案为 {correct_label}。"
 
@@ -1642,7 +2130,10 @@ def build_challenge_explanation(
     pieces = [f"题源：{source_label}。"]
     headword = str(correct_option.get("headword") or "")
     gloss = str(correct_option.get("gloss") or correct_option.get("text") or "")
+    sentence = clean_text(str(correct_option.get("sentence") or ""))
     manual_dict_support = build_manual_dict_support(solution_note)
+    if sentence:
+        pieces.append(f"原句：{sentence}。")
     if incorrect_prompt and solution_note:
         actual_gloss = clean_text(str(solution_note.get("actual_gloss") or ""))
         pos = clean_text(str(solution_note.get("part_of_speech") or ""))
@@ -1874,7 +2365,7 @@ def parse_beijing_exam_bank(
                     )
                     headword = clean_text(str(option_override.get("headword") or parsed.get("headword") or hinted_headword or explicit_headword or ""))
                     question_headword = question_headword or headword
-                    question_kind = "function_word" if headword in COMMON_XUCI_HEADWORDS else "content_word"
+                    question_kind = str(occurrence.get("kind_hint") or ("function_word" if headword in COMMON_XUCI_HEADWORDS else "content_word"))
                     question_type = "function_gloss" if question_kind == "function_word" else "content_gloss"
                     term_id = f"{'function' if question_kind == 'function_word' else 'content'}::{headword}"
                     term_ids.append(term_id)
@@ -1896,9 +2387,15 @@ def parse_beijing_exam_bank(
                     )
                 if len(options_payload) != 4:
                     continue
-                question_kind = "function_word" if question_headword in COMMON_XUCI_HEADWORDS else "content_word"
-                question_type = "function_gloss" if question_kind == "function_word" else "content_gloss"
                 correct_option = next((option for option in options_payload if option["label"] == answer_label), options_payload[0])
+                question_kind = "function_word" if str(correct_option.get("term_id") or "").startswith("function::") else "content_word"
+                question_type = "function_gloss" if question_kind == "function_word" else "content_gloss"
+                option_sentence_count = sum(1 for option in options_payload if clean_text(str(option.get("sentence") or "")))
+                if question_kind == "content_word" and not all(
+                    clean_text(str(option.get("sentence") or "")) and clean_text(str(option.get("text") or ""))
+                    for option in options_payload
+                ):
+                    continue
                 solution_key = f"{paper_key}#{question_number}#{answer_label}"
                 if sub_index:
                     solution_key = f"{paper_key}#{question_number}#{sub_index}#{answer_label}"
@@ -1922,8 +2419,11 @@ def parse_beijing_exam_bank(
                     if question_sentence and question_headword
                     else []
                 )
-                display_sentence = clean_text(str(correct_option.get("sentence") or question_sentence or ""))
-                display_context = list(correct_option.get("context_window") or question_context or [])
+                display_sentence = clean_text(str(question_sentence or ""))
+                display_context = list(question_context or [])
+                if option_sentence_count <= 1:
+                    display_sentence = clean_text(str(correct_option.get("sentence") or question_sentence or ""))
+                    display_context = list(correct_option.get("context_window") or question_context or [])
                 explanation = build_challenge_explanation(
                     unit_prompt,
                     source_label,
@@ -1968,14 +2468,26 @@ def parse_beijing_exam_bank(
                         "question_number": question_number,
                     },
                     "correct_label": answer_label,
-                    "correct_text": str(correct_option.get("text") or ""),
+                    "correct_text": (
+                        f"{clean_text(str(correct_option.get('headword') or ''))}：{clean_text(str(solution_note.get('actual_gloss') or ''))}"
+                        if ("不正确" in unit_prompt or "不同的一项" in unit_prompt) and clean_text(str(solution_note.get("actual_gloss") or ""))
+                        else (
+                            f"{clean_text(str(correct_option.get('sentence') or ''))} —— {clean_text(str(correct_option.get('text') or ''))}"
+                            if clean_text(str(correct_option.get("sentence") or ""))
+                            else str(correct_option.get("text") or "")
+                        )
+                    ),
                     "explanation": explanation,
                     "dict_support": (manual_dict_support or support_record.get("dict_refs", []))[:2],
                     "textbook_support": filtered_textbook_support[:2],
                     "option_analyses": [
                         {
                             "label": option["label"],
-                            "text": option.get("text") or "",
+                            "text": (
+                                f"{clean_text(str(option.get('sentence') or ''))} —— {clean_text(str(option.get('text') or ''))}"
+                                if clean_text(str(option.get("sentence") or ""))
+                                else option.get("text") or ""
+                            ),
                             "is_correct": option["label"] == answer_label,
                             "analysis": build_option_analysis_for_direct(
                                 unit_prompt,
@@ -2033,6 +2545,7 @@ def choose_gloss_distractors(correct_gloss: str, pool: list[str], seed: str) -> 
 def build_textbook_question_bank(
     textbook_refs: dict[str, list[dict[str, Any]]],
     record_by_term: dict[str, dict[str, Any]],
+    function_usage_catalog: dict[str, list[dict[str, Any]]],
 ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, dict[str, Any]]]:
     bank: dict[str, list[dict[str, Any]]] = {
         "xuci_pair_compare": [],
@@ -2043,48 +2556,39 @@ def build_textbook_question_bank(
         "passage_meaning": [],
     }
     answer_keys: dict[str, dict[str, Any]] = {}
-
-    content_gloss_pool = unique_clean_strings(
-        [
-            ref.get("gloss") or ref.get("note_block") or ""
-            for refs in textbook_refs.values()
-            for ref in refs
-            if not str(ref.get("ref_id") or "").startswith("function::")
-        ]
-    )
-    function_gloss_pool = unique_clean_strings(
-        [
-            ref.get("gloss") or ref.get("note_block") or ""
-            for refs in textbook_refs.values()
-            for ref in refs
-            if str(ref.get("ref_id") or "").startswith("function::")
-        ]
-    )
+    refs_by_source = group_textbook_refs_by_source(textbook_refs)
 
     for term_id, refs in sorted(textbook_refs.items()):
         if not refs:
             continue
         record = record_by_term.get(term_id, {})
-        if int(record.get("beijing_frequency") or 0) <= 0:
-            continue
         headword = str(record.get("headword") or term_id.split("::", 1)[1])
         kind = str(record.get("kind") or ("function_word" if term_id.startswith("function::") else "content_word"))
-        question_type = "function_profile" if kind == "function_word" else "sentence_meaning"
-        distractor_pool = function_gloss_pool if kind == "function_word" else content_gloss_pool
+        question_type = "function_gloss" if kind == "function_word" else "sentence_meaning"
         for index, ref in enumerate(refs):
-            correct_gloss = clean_text(str(ref.get("gloss") or ref.get("note_block") or ""))
-            if not correct_gloss:
+            answer_text = (
+                normalize_function_profile_text(str(ref.get("note_block") or ref.get("answer_text") or ref.get("gloss") or ""))
+                if kind == "function_word"
+                else clean_text(str(ref.get("answer_text") or ref.get("gloss") or ref.get("note_block") or ""))
+            )
+            correct_gloss = (
+                normalize_function_profile_text(str(ref.get("gloss") or ref.get("note_block") or ""))
+                if kind == "function_word"
+                else clean_text(str(ref.get("gloss") or ref.get("note_block") or ""))
+            )
+            if not correct_gloss or not answer_text:
                 continue
             focus_text = clean_text(str(ref.get("label_text") or headword or ""))
-            pool = distractor_pool
             if kind == "function_word":
-                pool = unique_clean_strings([*distractor_pool, *FUNCTION_PROFILE_DISTRACTOR_FALLBACK])
-            distractors = choose_gloss_distractors(correct_gloss, pool, f"{term_id}:{index}")
+                pool = build_function_distractor_pool(headword, answer_text, function_usage_catalog, record)
+            else:
+                pool = build_content_distractor_pool(term_id, ref, record, textbook_refs, refs_by_source)
+            distractors = choose_gloss_distractors(answer_text, pool, f"{term_id}:{index}")
             if len(distractors) < 3:
                 continue
-            option_texts = stable_shuffle([correct_gloss, *distractors], f"{term_id}:{index}:options")
+            option_texts = stable_shuffle([answer_text, *distractors], f"{term_id}:{index}:options")
             labels = ["A", "B", "C", "D"]
-            correct_label = labels[option_texts.index(correct_gloss)]
+            correct_label = labels[option_texts.index(answer_text)]
             source_label = f"{ref.get('school_stage')}教材《{ref.get('title')}》"
             if ref.get("book_title"):
                 source_label += f"（{ref.get('book_title')}）"
@@ -2119,6 +2623,8 @@ def build_textbook_question_bank(
                             "label": label,
                             "term_id": term_id,
                             "headword": headword,
+                            "sentence": str(ref.get("sentence") or "") if kind == "function_word" else "",
+                            "context_window": [truncate_excerpt(item, 120) for item in (ref.get("context_window") or [])[:7]],
                             "text": option_text,
                         }
                         for label, option_text in zip(labels, option_texts)
@@ -2126,11 +2632,26 @@ def build_textbook_question_bank(
                 }
             )
             explanation = (
-                f"{source_label}中，这一处“{focus_text or headword}”的课下注释是“{correct_gloss}”。 "
+                f"{source_label}中，这一处“{focus_text or headword}”的课下注释是“{answer_text}”。 "
                 f"所在句为“{truncate_excerpt(str(ref.get('sentence') or ''), 100)}”。"
             )
             if record.get("dict_refs"):
-                explanation += f" 辞典参照：{truncate_excerpt(str(record['dict_refs'][0].get('summary') or ''), 90)}。"
+                explanation += " 辞典参照：" + " ".join(
+                    truncate_excerpt(str(item.get("summary") or ""), 90) + "。"
+                    for item in list(record.get("dict_refs") or [])[:2]
+                    if clean_text(str(item.get("summary") or ""))
+                )
+            same_term_support = [
+                item
+                for item in refs
+                if str(item.get("ref_id") or "") != str(ref.get("ref_id") or "")
+            ][:3]
+            if same_term_support:
+                explanation += " 同词课文参照：" + " ".join(
+                    f"{item.get('title')}“{truncate_excerpt(str(item.get('sentence') or ''), 52)}”。"
+                    for item in same_term_support
+                    if clean_text(str(item.get("sentence") or ""))
+                )
             answer_keys[challenge_id] = {
                 "challenge_id": challenge_id,
                 "kind": kind,
@@ -2146,7 +2667,7 @@ def build_textbook_question_bank(
                     "question_number": None,
                 },
                 "correct_label": correct_label,
-                "correct_text": correct_gloss,
+                "correct_text": answer_text,
                 "explanation": explanation,
                 "dict_support": record.get("dict_refs", [])[:2],
                 "textbook_support": [ref],
@@ -2156,15 +2677,154 @@ def build_textbook_question_bank(
                         "text": option_text,
                         "is_correct": label == correct_label,
                         "analysis": (
-                            f"本项与教材注释一致。“{focus_text or headword}”在这里应解释为“{correct_gloss}”。"
+                            f"本项与教材注释一致。“{focus_text or headword}”在这里应解释为“{answer_text}”。"
                             if label == correct_label
-                            else f"本项不当。该项把“{focus_text or headword}”误解为“{option_text}”；课下注释应落实为“{correct_gloss}”。"
+                            else f"本项不当。该项把“{focus_text or headword}”误解为“{option_text}”；课下注释应落实为“{answer_text}”。"
                         ),
                     }
                     for label, option_text in zip(labels, option_texts)
                 ],
             }
     return bank, answer_keys
+
+
+def build_textbook_corpus_passages(sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    passages: list[dict[str, Any]] = []
+    for section in sections:
+        passages.append(
+            {
+                "source": "textbook",
+                "book_key": section.get("book_key"),
+                "school_stage": section.get("school_stage"),
+                "title": section.get("title"),
+                "kind": section.get("kind"),
+                "author": section.get("author"),
+                "dynasty": section.get("dynasty"),
+                "text": section.get("body_text") or "",
+            }
+        )
+    return passages
+
+
+def build_exam_corpus_passages(question_docs: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    passages: list[dict[str, Any]] = []
+    for paper_key, qdoc in sorted(question_docs.items(), key=lambda item: (int(item[1].get("year") or 0), str(item[0]))):
+        source_passage = extract_source_passage(str(qdoc.get("text") or ""))
+        if not source_passage:
+            continue
+        passages.append(
+            {
+                "source": "exam",
+                "paper_key": paper_key,
+                "scope": "beijing" if str(paper_key).startswith("beijing-") else "national",
+                "year": int(qdoc.get("year") or 0),
+                "paper": qdoc.get("paper"),
+                "title": extract_exam_article_title(source_passage) or str(qdoc.get("title") or paper_key),
+                "text": source_passage,
+            }
+        )
+    return passages
+
+
+def build_public_corpus_indexes(
+    textbook_passages: list[dict[str, Any]],
+    exam_passages: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "textbook": [
+            {
+                "book_key": item.get("book_key"),
+                "school_stage": item.get("school_stage"),
+                "title": item.get("title"),
+                "kind": item.get("kind"),
+                "author": item.get("author"),
+                "dynasty": item.get("dynasty"),
+                "char_count": len("".join(CHINESE_CHAR_RE.findall(str(item.get("text") or "")))),
+            }
+            for item in textbook_passages
+        ],
+        "exam": [
+            {
+                "paper_key": item.get("paper_key"),
+                "scope": item.get("scope"),
+                "year": item.get("year"),
+                "paper": item.get("paper"),
+                "title": item.get("title"),
+                "char_count": len("".join(CHINESE_CHAR_RE.findall(str(item.get("text") or "")))),
+            }
+            for item in exam_passages
+        ],
+    }
+
+
+def write_private_corpus_documents(
+    textbook_passages: list[dict[str, Any]],
+    exam_passages: list[dict[str, Any]],
+) -> None:
+    PRIVATE_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    textbook_lines = ["# 教材文言总语料", ""]
+    for item in textbook_passages:
+        title = clean_text(str(item.get("title") or ""))
+        meta = " / ".join(
+            [
+                clean_text(str(item.get("school_stage") or "")),
+                clean_text(str(item.get("book_key") or "")),
+                clean_text(str(item.get("author") or "")),
+                clean_text(str(item.get("dynasty") or "")),
+            ]
+        ).strip(" /")
+        textbook_lines.append(f"## {title}")
+        if meta:
+            textbook_lines.append(meta)
+        textbook_lines.append(clean_text_keep_newlines(str(item.get("text") or "")))
+        textbook_lines.append("")
+    (PRIVATE_RUNTIME_DIR / "textbook_classical_corpus.md").write_text("\n".join(textbook_lines), encoding="utf-8")
+
+    exam_lines = ["# 真题文言总语料", ""]
+    for item in exam_passages:
+        title = clean_text(str(item.get("title") or ""))
+        meta = " / ".join(
+            [
+                clean_text(str(item.get("scope") or "")),
+                clean_text(str(item.get("year") or "")),
+                clean_text(str(item.get("paper") or "")),
+                clean_text(str(item.get("paper_key") or "")),
+            ]
+        ).strip(" /")
+        exam_lines.append(f"## {title}")
+        if meta:
+            exam_lines.append(meta)
+        exam_lines.append(clean_text_keep_newlines(str(item.get("text") or "")))
+        exam_lines.append("")
+    (PRIVATE_RUNTIME_DIR / "exam_classical_corpus.md").write_text("\n".join(exam_lines), encoding="utf-8")
+
+
+def build_function_usage_table(
+    function_records: list[dict[str, Any]],
+    function_usage_catalog: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    table: list[dict[str, Any]] = []
+    for record in function_records:
+        headword = clean_text(str(record.get("headword") or ""))
+        profiles = function_usage_catalog.get(headword, [])
+        table.append(
+            {
+                "term_id": record.get("term_id"),
+                "headword": headword,
+                "beijing_frequency": record.get("beijing_frequency", 0),
+                "question_type_counts": record.get("question_type_counts", {}),
+                "profiles": profiles,
+                "textbook_refs": [
+                    {
+                        "title": ref.get("title"),
+                        "sentence": ref.get("sentence"),
+                        "gloss": ref.get("gloss"),
+                    }
+                    for ref in list(record.get("textbook_refs") or [])[:8]
+                ],
+            }
+        )
+    return sorted(table, key=lambda item: (-int(item.get("beijing_frequency") or 0), str(item.get("headword") or "")))
 
 
 def write_runtime_asset(name: str, payload: Any, kind: str, manifest: dict[str, Any]) -> None:
@@ -2267,13 +2927,15 @@ def main() -> int:
     answer_overrides = load_manual_answer_overrides()
     solution_notes = load_solution_notes()
     option_overrides = load_manual_option_overrides()
+    function_detail_terms = load_function_detail_terms()
+    function_usage_catalog = build_function_usage_catalog(function_detail_terms)
     function_source_terms = apply_manual_term_source_corrections(list(xuci.get("terms", [])), option_overrides, solution_notes)
     content_source_terms = apply_manual_term_source_corrections(list(shici.get("terms", [])), option_overrides, solution_notes)
     function_raw_terms = merge_function_terms(function_source_terms)
     content_raw_terms = merge_content_terms(content_source_terms, question_docs)
     occurrence_lookup = build_exam_occurrence_lookup(function_source_terms, content_source_terms)
 
-    _sections, textbook_refs = build_textbook_sections()
+    sections, textbook_refs = build_textbook_sections()
     all_headwords = sorted(
         {
             str(term.get("headword") or "")
@@ -2285,8 +2947,12 @@ def main() -> int:
     revised_links = query_revised_links(all_headwords)
     idiom_links = query_idiom_links(all_headwords)
 
-    function_records = build_union_term_records(function_raw_terms, textbook_refs, revised_links, idiom_links, "function_word")
-    content_records = build_union_term_records(content_raw_terms, textbook_refs, revised_links, idiom_links, "content_word")
+    function_records = build_union_term_records(
+        function_raw_terms, textbook_refs, revised_links, idiom_links, function_usage_catalog, "function_word"
+    )
+    content_records = build_union_term_records(
+        content_raw_terms, textbook_refs, revised_links, idiom_links, function_usage_catalog, "content_word"
+    )
     record_by_term = {record["term_id"]: record for record in [*function_records, *content_records]}
 
     exam_bank, exam_answer_keys, exam_docs = parse_beijing_exam_bank(
@@ -2297,7 +2963,7 @@ def main() -> int:
         record_by_term,
         occurrence_lookup,
     )
-    textbook_bank, textbook_answer_keys = build_textbook_question_bank(textbook_refs, record_by_term)
+    textbook_bank, textbook_answer_keys = build_textbook_question_bank(textbook_refs, record_by_term, function_usage_catalog)
 
     challenge_bank = {
         key: sorted(
@@ -2328,6 +2994,24 @@ def main() -> int:
         for record in [*function_records, *content_records]
     }
     textbook_examples = {term_id: refs for term_id, refs in textbook_refs.items() if refs}
+    textbook_passages = build_textbook_corpus_passages(sections)
+    exam_passages = build_exam_corpus_passages(question_docs)
+    write_private_corpus_documents(textbook_passages, exam_passages)
+    segmentation_vocabulary = build_segmentation_vocabulary(function_records, content_records, textbook_refs)
+    textbook_frequency_table = build_corpus_frequency_table(textbook_passages, segmentation_vocabulary)
+    exam_frequency_table = build_corpus_frequency_table(exam_passages, segmentation_vocabulary)
+    union_frequency_counter = Counter()
+    for row in textbook_frequency_table:
+        union_frequency_counter[str(row["token"])] += int(row["frequency"])
+    for row in exam_frequency_table:
+        union_frequency_counter[str(row["token"])] += int(row["frequency"])
+    union_frequency_table = [
+        {"token": token, "frequency": frequency}
+        for token, frequency in sorted(union_frequency_counter.items(), key=lambda item: (-item[1], item[0]))
+    ]
+    corpus_indexes = build_public_corpus_indexes(textbook_passages, exam_passages)
+    exam_tested_terms = build_headword_frequency_records(function_records, content_records)
+    function_usage_table = build_function_usage_table(function_records, function_usage_catalog)
 
     clear_old_runtime_files()
     write_private_answer_keys(answer_keys)
@@ -2340,6 +3024,8 @@ def main() -> int:
             "terms_function": len(function_records),
             "terms_content": len(content_records),
             "exam_question_docs": len(exam_docs),
+            "textbook_corpus_docs": len(textbook_passages),
+            "exam_corpus_docs": len(exam_passages),
             "challenge_counts": {key: len(value) for key, value in challenge_bank.items()},
         },
     }
@@ -2348,6 +3034,12 @@ def main() -> int:
     write_runtime_asset("exam_questions", exam_questions, "object", manifest_payload)
     write_runtime_asset("textbook_examples", textbook_examples, "object", manifest_payload)
     write_runtime_asset("dict_links", dict_links, "object", manifest_payload)
+    write_runtime_asset("corpus_indexes", corpus_indexes, "object", manifest_payload)
+    write_runtime_asset("textbook_frequency_table", textbook_frequency_table, "list", manifest_payload)
+    write_runtime_asset("exam_frequency_table", exam_frequency_table, "list", manifest_payload)
+    write_runtime_asset("union_frequency_table", union_frequency_table, "list", manifest_payload)
+    write_runtime_asset("exam_tested_terms", exam_tested_terms, "list", manifest_payload)
+    write_runtime_asset("function_usage_table", function_usage_table, "list", manifest_payload)
     write_manifest(manifest_payload)
     return 0
 
