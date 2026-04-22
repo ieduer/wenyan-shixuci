@@ -510,9 +510,22 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
   }
 
   const usedChallengeIds = await listRunChallengeIds(env, runId, owner.ownerId);
+  const historicalChallengeIds =
+    mode === "review" ? new Set<string>() : await listHistoricalChallengeIds(env, owner.ownerId, kind, runId);
   const reviewTargets = mode === "review" ? await listPendingReviewTargets(env, owner.ownerId, kind) : [];
   const lastPrompt = await getLastRunPrompt(env, runId, owner.ownerId);
-  const bankItem = selectBankItem(runtime, owner.ownerId, runRow, kind, mode, playerState, usedChallengeIds, reviewTargets, lastPrompt);
+  const bankItem = selectBankItem(
+    runtime,
+    owner.ownerId,
+    runRow,
+    kind,
+    mode,
+    playerState,
+    usedChallengeIds,
+    historicalChallengeIds,
+    reviewTargets,
+    lastPrompt
+  );
   if (!bankItem) {
     if (mode === "review" && String(runRow.status || "") === "active") {
       const roundSummary = await finalizeRound(env, owner.ownerId, runRow);
@@ -1074,72 +1087,79 @@ function selectBankItem(
   mode: Mode,
   playerState: PlayerStateRow,
   usedChallengeIds: Set<string>,
+  historicalChallengeIds: Set<string>,
   reviewTargets: Array<Record<string, unknown>>,
   lastPrompt: ChallengePromptPayload | null
 ): BankItem | null {
   const bank = runtime.examQuestions.challenge_bank;
   const answeredCount = Number(runRow.answered_count || 0);
   const recentTermIds = uniqueStrings(lastPrompt?.termIds?.length ? lastPrompt.termIds : [lastPrompt?.termId || ""]);
-  if (mode === "review") {
-    for (const reviewTarget of reviewTargets) {
-      const reviewTermId = String(reviewTarget.term_id || "");
-      const reviewQuestionType = String(reviewTarget.question_type || "") as QuestionType;
-      const candidates = (bank[reviewQuestionType] || []).filter((item) =>
-        !usedChallengeIds.has(String(item.challenge_id || "")) &&
-        ((item.term_ids && item.term_ids.includes(reviewTermId)) || item.term_id === reviewTermId)
-      );
+  const pickWithBlocked = (blockedChallengeIds: Set<string>): BankItem | null => {
+    if (mode === "review") {
+      for (const reviewTarget of reviewTargets) {
+        const reviewTermId = String(reviewTarget.term_id || "");
+        const reviewQuestionType = String(reviewTarget.question_type || "") as QuestionType;
+        const candidates = (bank[reviewQuestionType] || []).filter((item) =>
+          !usedChallengeIds.has(String(item.challenge_id || "")) &&
+          ((item.term_ids && item.term_ids.includes(reviewTermId)) || item.term_id === reviewTermId)
+        );
+        const selected = chooseUnusedItem(
+          candidates,
+          usedChallengeIds,
+          `${ownerId}:${String(runRow.id)}:${reviewQuestionType}:${reviewTermId}:${answeredCount}`
+        );
+        if (selected) {
+          return selected;
+        }
+      }
+      return null;
+    }
+
+    const desiredSourceKind = answeredCount % ROUND_SIZE === 0 ? "exam" : "textbook";
+    const sourceBuckets = desiredSourceKind === "exam" ? EXAM_TYPE_PRIORITY[kind] : TEXTBOOK_TYPE_PRIORITY[kind];
+    for (const qType of sourceBuckets) {
+      const sourceItems = (bank[qType] || []).filter((item) => String(item.source_kind || "") === desiredSourceKind);
+      const relatedItems = recentTermIds.length ? sourceItems.filter((item) => sharesRelatedTerm(item, recentTermIds)) : [];
+      const items = pickBankByPriority(relatedItems.length ? relatedItems : sourceItems, playerState);
       const selected = chooseUnusedItem(
-        candidates,
-        usedChallengeIds,
-        `${ownerId}:${String(runRow.id)}:${reviewQuestionType}:${reviewTermId}:${answeredCount}`
+        items,
+        blockedChallengeIds,
+        `${ownerId}:${String(runRow.id)}:${desiredSourceKind}:${qType}:${answeredCount}:${recentTermIds.join(",")}`
       );
       if (selected) {
         return selected;
       }
     }
+
+    const fallbackBuckets = desiredSourceKind === "exam" ? TEXTBOOK_TYPE_PRIORITY[kind] : EXAM_TYPE_PRIORITY[kind];
+    for (const qType of fallbackBuckets) {
+      const fallbackSource = desiredSourceKind === "exam" ? "textbook" : "exam";
+      const sourceItems = (bank[qType] || []).filter((item) => String(item.source_kind || "") === fallbackSource);
+      const relatedItems = recentTermIds.length ? sourceItems.filter((item) => sharesRelatedTerm(item, recentTermIds)) : [];
+      const items = pickBankByPriority(relatedItems.length ? relatedItems : sourceItems, playerState);
+      const selected = chooseUnusedItem(
+        items,
+        blockedChallengeIds,
+        `${ownerId}:${String(runRow.id)}:${fallbackSource}:${qType}:${answeredCount}:${recentTermIds.join(",")}`
+      );
+      if (selected) {
+        return selected;
+      }
+    }
+
+    for (const qType of [...EXAM_TYPE_PRIORITY[kind], ...TEXTBOOK_TYPE_PRIORITY[kind]]) {
+      const items = pickBankByPriority(bank[qType] || [], playerState);
+      const selected = chooseUnusedItem(items, blockedChallengeIds, `${ownerId}:${String(runRow.id)}:fallback:${qType}:${answeredCount}`);
+      if (selected) {
+        return selected;
+      }
+    }
     return null;
-  }
+  };
 
-  const desiredSourceKind = answeredCount % ROUND_SIZE === 0 ? "exam" : "textbook";
-  const sourceBuckets = desiredSourceKind === "exam" ? EXAM_TYPE_PRIORITY[kind] : TEXTBOOK_TYPE_PRIORITY[kind];
-  for (const qType of sourceBuckets) {
-    const sourceItems = (bank[qType] || []).filter((item) => String(item.source_kind || "") === desiredSourceKind);
-    const relatedItems = recentTermIds.length ? sourceItems.filter((item) => sharesRelatedTerm(item, recentTermIds)) : [];
-    const items = pickBankByPriority(relatedItems.length ? relatedItems : sourceItems, playerState);
-    const selected = chooseUnusedItem(
-      items,
-      usedChallengeIds,
-      `${ownerId}:${String(runRow.id)}:${desiredSourceKind}:${qType}:${answeredCount}:${recentTermIds.join(",")}`
-    );
-    if (selected) {
-      return selected;
-    }
-  }
-
-  const fallbackBuckets = desiredSourceKind === "exam" ? TEXTBOOK_TYPE_PRIORITY[kind] : EXAM_TYPE_PRIORITY[kind];
-  for (const qType of fallbackBuckets) {
-    const fallbackSource = desiredSourceKind === "exam" ? "textbook" : "exam";
-    const sourceItems = (bank[qType] || []).filter((item) => String(item.source_kind || "") === fallbackSource);
-    const relatedItems = recentTermIds.length ? sourceItems.filter((item) => sharesRelatedTerm(item, recentTermIds)) : [];
-    const items = pickBankByPriority(relatedItems.length ? relatedItems : sourceItems, playerState);
-    const selected = chooseUnusedItem(
-      items,
-      usedChallengeIds,
-      `${ownerId}:${String(runRow.id)}:${fallbackSource}:${qType}:${answeredCount}:${recentTermIds.join(",")}`
-    );
-    if (selected) {
-      return selected;
-    }
-  }
-
-  for (const qType of [...EXAM_TYPE_PRIORITY[kind], ...TEXTBOOK_TYPE_PRIORITY[kind]]) {
-    const items = pickBankByPriority(bank[qType] || [], playerState);
-    const selected = chooseUnusedItem(items, usedChallengeIds, `${ownerId}:${String(runRow.id)}:fallback:${qType}:${answeredCount}`);
-    if (selected) {
-      return selected;
-    }
-  }
-  return null;
+  const blockedChallengeIds =
+    mode === "review" ? usedChallengeIds : new Set<string>([...usedChallengeIds, ...historicalChallengeIds]);
+  return pickWithBlocked(blockedChallengeIds);
 }
 
 function buildSenseKey(item: BankItem): string {
@@ -1687,6 +1707,25 @@ async function listRunChallengeIds(env: Env, runId: string, sessionId: string): 
   for (const row of results || []) {
     const prompt = safeParseObject(row.prompt_json) as unknown as ChallengePromptPayload;
     if (prompt.challengeId) challengeIds.add(prompt.challengeId);
+  }
+  return challengeIds;
+}
+
+async function listHistoricalChallengeIds(env: Env, sessionId: string, kind: Kind, currentRunId: string): Promise<Set<string>> {
+  const { results } = await env.DB.prepare(
+    `SELECT ci.prompt_json
+     FROM challenge_items ci
+     JOIN challenge_runs cr ON cr.id = ci.run_id AND cr.session_id = ci.session_id
+     WHERE ci.session_id = ? AND cr.kind = ? AND ci.answered_at IS NOT NULL AND ci.run_id <> ?
+     ORDER BY ci.answered_at DESC
+     LIMIT 5000`
+  )
+    .bind(sessionId, kind, currentRunId)
+    .all<Record<string, unknown>>();
+  const challengeIds = new Set<string>();
+  for (const row of results || []) {
+    const prompt = safeParseObject(row.prompt_json) as unknown as ChallengePromptPayload;
+    if (prompt?.challengeId) challengeIds.add(prompt.challengeId);
   }
   return challengeIds;
 }

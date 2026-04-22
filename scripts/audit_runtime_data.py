@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,10 +27,12 @@ from check_sources import REPO_ROOT, SHICI_PATH, XUCI_PATH, collect_source_repor
 DOCS_DIR = REPO_ROOT / "docs"
 JSON_REPORT_PATH = DOCS_DIR / "DATA_AUDIT_REPORT.json"
 MD_REPORT_PATH = DOCS_DIR / "DATA_AUDIT_REPORT.md"
+TEXTBOOK_SOURCE_AUDIT_PATH = DOCS_DIR / "TEXTBOOK_SOURCE_AUDIT.json"
 DATA_QUALITY_PATHS = [
     PUBLIC_RUNTIME_DIR / "data_quality.json",
     RUNTIME_MIRROR_DIR / "data_quality.json",
 ]
+SUSPICIOUS_RUNTIME_TEXT_RE = re.compile(r"(还中午|僅供個人學習使用|仅供个人学习使用|下載|下载|链接|鏈接)")
 
 
 def looks_like_public_answer_leak(item: dict[str, Any]) -> bool:
@@ -104,6 +107,30 @@ def answer_key_issue_counts(
                 issue_counts["option_analysis_mismatch"] += 1
             if not clean_text(str(answer_key.get("explanation") or "")):
                 issue_counts["empty_explanation"] += 1
+            combined_text = "\n".join(
+                [
+                    clean_text(str(answer_key.get("correct_text") or "")),
+                    clean_text(str(answer_key.get("explanation") or "")),
+                    *[
+                        clean_text(str(option.get("text") or ""))
+                        for option in list(answer_key.get("option_analyses") or [])
+                    ],
+                    *[
+                        clean_text(str(option.get("analysis") or ""))
+                        for option in list(answer_key.get("option_analyses") or [])
+                    ],
+                ]
+            )
+            if SUSPICIOUS_RUNTIME_TEXT_RE.search(combined_text):
+                issue_counts["suspicious_runtime_text"] += 1
+                if len(issue_examples) < 20:
+                    issue_examples.append(
+                        {
+                            "reason": "suspicious_runtime_text",
+                            "challenge_id": challenge_id,
+                            "question_type": question_type,
+                        }
+                    )
 
             for option in item.get("options") or []:
                 reason = validate_option_text(str(option.get("text") or option.get("headword") or ""), question_type)
@@ -144,6 +171,33 @@ def answer_key_issue_counts(
     return issue_counts, issue_examples
 
 
+def duplicate_prompt_counts(challenge_bank: dict[str, list[dict[str, Any]]]) -> tuple[Counter[str], list[dict[str, Any]]]:
+    counts: Counter[str] = Counter()
+    seen: dict[tuple[str, str], dict[str, Any]] = {}
+    examples: list[dict[str, Any]] = []
+    for question_type, items in challenge_bank.items():
+        for item in items:
+            signature = (
+                clean_text(str(item.get("kind") or "")),
+                re.sub(r"\s+", "", clean_text(str(item.get("source_label") or "") + str(item.get("stem") or "") + str(item.get("sentence") or "") + str(item.get("passage") or ""))),
+            )
+            if signature in seen:
+                counts["duplicate_prompt_signature"] += 1
+                if len(examples) < 20:
+                    examples.append(
+                        {
+                            "reason": "duplicate_prompt_signature",
+                            "question_type": question_type,
+                            "challenge_id": clean_text(str(item.get("challenge_id") or "")),
+                            "matches": clean_text(str(seen[signature].get("challenge_id") or "")),
+                            "source_label": clean_text(str(item.get("source_label") or "")),
+                        }
+                    )
+            else:
+                seen[signature] = item
+    return counts, examples
+
+
 def build_summary_report() -> dict[str, Any]:
     source_report = collect_source_report()
     manifest = load_json(PUBLIC_RUNTIME_DIR / "manifest.json")
@@ -157,9 +211,13 @@ def build_summary_report() -> dict[str, Any]:
     function_usage_table = load_json(PUBLIC_RUNTIME_DIR / "function_usage_table.json")
     textbook_note_stats = load_json(PUBLIC_RUNTIME_DIR / "textbook_note_stats.json")
     answer_keys = load_json(PRIVATE_RUNTIME_DIR / "answer_keys.json")
+    textbook_source_audit = load_json(TEXTBOOK_SOURCE_AUDIT_PATH) if TEXTBOOK_SOURCE_AUDIT_PATH.exists() else {}
 
     challenge_bank = exam_questions["challenge_bank"]
     issue_counts, issue_examples = answer_key_issue_counts(challenge_bank, answer_keys)
+    duplicate_counts, duplicate_examples = duplicate_prompt_counts(challenge_bank)
+    issue_counts.update(duplicate_counts)
+    issue_examples.extend(duplicate_examples[: max(0, 20 - len(issue_examples))])
 
     content_core = [term for term in terms_content if str(term.get("priority_level") or "") == "core"]
     content_secondary = [term for term in terms_content if str(term.get("priority_level") or "") == "secondary"]
@@ -211,6 +269,11 @@ def build_summary_report() -> dict[str, Any]:
             "textbook_note_count": int(textbook_note_stats.get("total_notes") or 0),
             "textbook_content_note_count": int(textbook_note_stats.get("content_notes") or 0),
             "textbook_function_note_count": int(textbook_note_stats.get("function_notes") or 0),
+            "textbook_source_audit": {
+                "body_source_counts": textbook_source_audit.get("body_source_counts", {}),
+                "unresolved_note_count": int(textbook_source_audit.get("unresolved_note_count") or 0),
+                "forum_article_hits": int((textbook_source_audit.get("forum_cache") or {}).get("article_hits") or 0),
+            },
             "textbook_token_count": len(textbook_frequency_table),
             "exam_token_count": len(exam_frequency_table),
             "union_token_count": len(union_frequency_table),
@@ -260,6 +323,9 @@ def write_reports(report: dict[str, Any]) -> None:
         f"- 教材注释数：{report['corpus']['textbook_note_count']}",
         f"- 教材实词注释数：{report['corpus']['textbook_content_note_count']}",
         f"- 教材虚词注释数：{report['corpus']['textbook_function_note_count']}",
+        f"- 教材正文来源：{report['corpus']['textbook_source_audit']['body_source_counts']}",
+        f"- Forum 命中文章：{report['corpus']['textbook_source_audit']['forum_article_hits']}",
+        f"- 未解注释：{report['corpus']['textbook_source_audit']['unresolved_note_count']}",
         f"- 真题文段数：{report['corpus']['exam_doc_count']}",
         f"- 教材切分词数：{report['corpus']['textbook_token_count']}",
         f"- 真题切分词数：{report['corpus']['exam_token_count']}",

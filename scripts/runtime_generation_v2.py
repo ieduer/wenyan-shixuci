@@ -263,6 +263,12 @@ CHINESE_CHAR_RE = re.compile(r"[\u4e00-\u9fff]")
 CONTENT_GLOSS_BAD_HINT_RE = re.compile(
     r"(指.*?(王|帝|公|侯|君|将军|大夫|人|地名|县|州|国)|作者于|公元|前\d+|后\d+|年（?\d+|在今|版）|选自《)"
 )
+DIRECT_OPTION_GLOSS_BAD_PAREN_RE = re.compile(
+    r"[（(][^）)]*(?:中午|下載|下载|教材|高考|学习|學習|創作|创作|作者于|在今|公元|年号|年號|链接|鏈接)[^）)]*[）)]"
+)
+DIRECT_OPTION_GLOSS_BAD_FRAGMENT_RE = re.compile(
+    r"(还中午|僅供個人學習使用|仅供个人学习使用|教材|高考|下載|下载|链接|鏈接)"
+)
 
 
 def load_json(path: Path) -> Any:
@@ -318,6 +324,38 @@ def clean_gloss(headword: str, gloss: str, excerpt: str = "") -> str:
     return clean_text(working)
 
 
+def clean_direct_option_gloss(headword: str, gloss: str) -> str:
+    cleaned = clean_text(gloss)
+    if not cleaned:
+        return ""
+    needs_compaction = bool(
+        len(cleaned) > 28
+        or CONTENT_GLOSS_BAD_HINT_RE.search(cleaned)
+        or DIRECT_OPTION_GLOSS_BAD_PAREN_RE.search(cleaned)
+        or DIRECT_OPTION_GLOSS_BAD_FRAGMENT_RE.search(cleaned)
+    )
+    if not needs_compaction:
+        return cleaned
+
+    stripped = DIRECT_OPTION_GLOSS_BAD_PAREN_RE.sub("", cleaned)
+    stripped = DIRECT_OPTION_GLOSS_BAD_FRAGMENT_RE.sub("", stripped)
+    stripped = clean_text(stripped).strip("，,；;。:： ")
+    stripped = re.split(r"[。；;]", stripped, maxsplit=1)[0].strip("，,；;。:： ")
+    if stripped and looks_like_clean_gloss(stripped):
+        return stripped
+
+    concise = clean_gloss(headword, stripped or cleaned)
+    if concise and looks_like_clean_gloss(concise):
+        return concise
+
+    fallback = re.sub(r"[（(][^）)]*[）)]", "", stripped or cleaned)
+    fallback = clean_text(fallback).strip("，,；;。:： ")
+    fallback = re.split(r"[，,；;。]", fallback, maxsplit=1)[0].strip("，,；;。:： ")
+    if fallback and looks_like_clean_gloss(fallback):
+        return fallback
+    return cleaned
+
+
 def looks_like_clean_gloss(gloss: str) -> bool:
     cleaned = clean_text(gloss)
     if not cleaned or len(cleaned) > 28:
@@ -329,6 +367,55 @@ def looks_like_clean_gloss(gloss: str) -> bool:
     if re.search(r"\d", cleaned):
         return False
     return True
+
+
+def normalize_signature_part(value: Any) -> str:
+    return re.sub(r"\s+", "", clean_text(str(value or ""))).replace("“", "").replace("”", "").replace("「", "").replace("」", "")
+
+
+def challenge_display_signature(item: dict[str, Any]) -> str:
+    options = "|".join(
+        f"{clean_text(str(option.get('label') or ''))}:{normalize_signature_part(option.get('sentence') or '')}:{normalize_signature_part(option.get('text') or '')}"
+        for option in list(item.get("options") or [])
+    )
+    return "||".join(
+        [
+            clean_text(str(item.get("kind") or "")),
+            normalize_signature_part(item.get("source_kind") or ""),
+            normalize_signature_part(item.get("source_label") or ""),
+            normalize_signature_part(item.get("stem") or ""),
+            normalize_signature_part(item.get("sentence") or ""),
+            normalize_signature_part(item.get("passage") or ""),
+            options,
+        ]
+    )
+
+
+def dedupe_challenge_bank(
+    challenge_bank: dict[str, list[dict[str, Any]]],
+    answer_keys: dict[str, dict[str, Any]],
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, dict[str, Any]]]:
+    deduped: dict[str, list[dict[str, Any]]] = {}
+    seen_signatures: dict[str, set[str]] = defaultdict(set)
+    removed_ids: set[str] = set()
+    for question_type in QUESTION_TYPES:
+        kept: list[dict[str, Any]] = []
+        for item in list(challenge_bank.get(question_type) or []):
+            kind = clean_text(str(item.get("kind") or "content_word"))
+            signature = challenge_display_signature(item)
+            if not signature:
+                kept.append(item)
+                continue
+            if signature in seen_signatures[kind]:
+                removed_ids.add(clean_text(str(item.get("challenge_id") or "")))
+                continue
+            seen_signatures[kind].add(signature)
+            kept.append(item)
+        deduped[question_type] = kept
+    filtered_answer_keys = {
+        key: value for key, value in answer_keys.items() if clean_text(str(key)) not in removed_ids
+    }
+    return deduped, filtered_answer_keys
 
 
 def normalize_exam_headword(headword: str, excerpt: str = "") -> str:
@@ -1246,16 +1333,28 @@ def apply_manual_term_source_corrections(
                     occurrence["excerpt"] = clean_text(str(option_override.get("excerpt") or ""))
                 elif option_override.get("sentence"):
                     sentence = clean_text(str(option_override.get("sentence") or ""))
-                    gloss = clean_text(str(option_override.get("gloss") or occurrence.get("gloss") or ""))
+                    gloss = clean_direct_option_gloss(
+                        clean_text(str(option_override.get("headword") or occurrence.get("headword") or "")),
+                        str(option_override.get("gloss") or occurrence.get("gloss") or ""),
+                    )
                     headword = clean_text(str(option_override.get("headword") or occurrence.get("headword") or ""))
                     if sentence and headword and gloss:
                         occurrence["excerpt"] = f"{sentence} {headword}:{gloss}"
                 if option_override.get("gloss"):
-                    occurrence["display_gloss"] = clean_text(str(option_override.get("gloss") or ""))
+                    occurrence["display_gloss"] = clean_direct_option_gloss(
+                        clean_text(str(option_override.get("headword") or occurrence.get("headword") or "")),
+                        str(option_override.get("gloss") or ""),
+                    )
                 if solution_note.get("actual_gloss"):
-                    occurrence["gloss"] = clean_text(str(solution_note.get("actual_gloss") or ""))
+                    occurrence["gloss"] = clean_direct_option_gloss(
+                        clean_text(str(option_override.get("headword") or occurrence.get("headword") or "")),
+                        str(solution_note.get("actual_gloss") or ""),
+                    )
                 elif option_override.get("gloss"):
-                    occurrence["gloss"] = clean_text(str(option_override.get("gloss") or ""))
+                    occurrence["gloss"] = clean_direct_option_gloss(
+                        clean_text(str(option_override.get("headword") or occurrence.get("headword") or "")),
+                        str(option_override.get("gloss") or ""),
+                    )
             occurrences.append(occurrence)
         if occurrences:
             term["occurrences"] = occurrences
@@ -2060,6 +2159,8 @@ def load_textbook_sections_from_master_tables() -> tuple[list[dict[str, Any]], d
     for row in note_rows:
         if str(row.get("match_status") or "") != "matched":
             continue
+        if clean_text(str(row.get("annotation_scope") or "body")) != "body":
+            continue
         book_key = clean_text(str(row.get("book_key") or ""))
         title = clean_text(str(row.get("title") or ""))
         headword = clean_text(str(row.get("headword") or ""))
@@ -2642,7 +2743,10 @@ def parse_beijing_exam_bank(
                     )
                     option_override = option_overrides.get(manual_key, {})
                     hinted_headword = clean_text(str(occurrence.get("headword") or question_headword or ""))
-                    hinted_gloss = clean_text(str(option_override.get("gloss") or occurrence.get("display_gloss") or occurrence.get("gloss") or ""))
+                    hinted_gloss = clean_direct_option_gloss(
+                        hinted_headword,
+                        str(option_override.get("gloss") or occurrence.get("display_gloss") or occurrence.get("gloss") or ""),
+                    )
                     parsed = option_sentence_and_gloss(
                         option_text,
                         explicit_headword=explicit_headword or None,
@@ -2656,7 +2760,10 @@ def parse_beijing_exam_bank(
                     term_id = f"{'function' if question_kind == 'function_word' else 'content'}::{headword}"
                     term_ids.append(term_id)
                     sentence_text = clean_text(str(option_override.get("sentence") or parsed.get("sentence") or ""))
-                    gloss_text = clean_text(str(option_override.get("gloss") or parsed.get("gloss") or hinted_gloss or ""))
+                    gloss_text = clean_direct_option_gloss(
+                        headword,
+                        str(option_override.get("gloss") or parsed.get("gloss") or hinted_gloss or ""),
+                    )
                     options_payload.append(
                         {
                             "label": option_label,
@@ -2866,7 +2973,7 @@ def build_textbook_question_bank(
             focus_text = clean_text(str(ref.get("label_text") or headword or ""))
             if kind == "function_word":
                 pool = build_function_distractor_pool(headword, answer_text, function_usage_catalog, record)
-                variant_sets = build_distractor_variants(pool, f"{term_id}:{index}", 6)
+                variant_sets = build_distractor_variants(pool, f"{term_id}:{index}", 1)
             else:
                 pool = build_content_distractor_pool(ref, record)
                 variant_sets = build_distractor_variants(pool, f"{term_id}:{index}", 1)
@@ -3098,6 +3205,7 @@ def build_textbook_note_table(textbook_refs: dict[str, list[dict[str, Any]]]) ->
                     "body_source_mode": clean_text(str(ref.get("body_source_mode") or "")),
                     "body_source_title": clean_text(str(ref.get("body_source_title") or "")),
                     "body_source_path": clean_text(str(ref.get("body_source_path") or "")),
+                    "annotation_scope": clean_text(str(ref.get("annotation_scope") or "body")),
                     "match_status": clean_text(str(ref.get("match_status") or "")),
                     "match_mode": clean_text(str(ref.get("match_mode") or "")),
                     "match_confidence": ref.get("match_confidence"),
@@ -3187,6 +3295,7 @@ def write_table_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "body_source_mode",
         "body_source_title",
         "body_source_path",
+        "annotation_scope",
         "match_status",
         "match_mode",
         "match_confidence",
@@ -3359,6 +3468,8 @@ def clear_old_runtime_files() -> None:
         TEXTBOOK_ARTICLE_MASTER_PATH.name,
         TEXTBOOK_NOTE_MASTER_PATH.name,
         "textbook_note_unresolved_table.json",
+        "forum_textbook_topics_raw.json",
+        "forum_textbook_source_cache.json",
     }
     for output_dir in (RUNTIME_MIRROR_DIR, PUBLIC_RUNTIME_DIR):
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -3443,6 +3554,7 @@ def main() -> int:
         for key in QUESTION_TYPES
     }
     answer_keys = {**exam_answer_keys, **textbook_answer_keys}
+    challenge_bank, answer_keys = dedupe_challenge_bank(challenge_bank, answer_keys)
 
     exam_questions = {
         "built_at": datetime.now(timezone.utc).isoformat(),
