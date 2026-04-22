@@ -35,6 +35,8 @@ PUBLIC_RUNTIME_DIR = REPO_ROOT / "public" / "runtime"
 PRIVATE_RUNTIME_DIR = REPO_ROOT / "data" / "runtime_private"
 GENERATED_DIR = REPO_ROOT / "src" / "generated"
 QUESTION_TEMPLATES_DIR = REPO_ROOT / "question_templates"
+TEXTBOOK_ARTICLE_MASTER_PATH = PRIVATE_RUNTIME_DIR / "textbook_article_master_table.json"
+TEXTBOOK_NOTE_MASTER_PATH = PRIVATE_RUNTIME_DIR / "textbook_note_master_table.json"
 VERSION_MANIFEST_PATH = SOURCE_ROOT / "platform" / "backend" / "textbook_version_manifest.json.pre_chuzhong"
 MINERU_OUTPUT_ROOT = SOURCE_ROOT / "data" / "mineru_output"
 ANSWER_OVERRIDE_PATH = REPO_ROOT / "data" / "manual" / "beijing_exam_answer_overrides.json"
@@ -80,6 +82,26 @@ BANNED_GLOSS_CANDIDATES = {
     "而",
     "于",
     "与",
+}
+
+LOW_VALUE_SINGLE_CHAR_DICT_HEADWORDS = {
+    "一",
+    "二",
+    "三",
+    "四",
+    "五",
+    "上",
+    "下",
+    "大",
+    "小",
+    "中",
+    "之",
+    "其",
+    "而",
+    "于",
+    "以",
+    "为",
+    "也",
 }
 
 GLOSS_BLOCK_MARKERS = (
@@ -271,6 +293,7 @@ def clean_gloss(headword: str, gloss: str, excerpt: str = "") -> str:
     if not raw_gloss:
         return ""
     working = raw_gloss
+    working = re.sub(r"^(意思是|这里是|这里指|这里借指)\s*[:：,，]\s*", "", working)
     if headword:
         working = re.sub(rf"^{re.escape(headword)}\s*[:：,，]\s*", "", working)
     same_as_match = re.search(r"义同\s*[“\"'‘]?([\u4e00-\u9fff]{1,12})", raw_gloss)
@@ -288,6 +311,10 @@ def clean_gloss(headword: str, gloss: str, excerpt: str = "") -> str:
         working = working.split("、", 1)[0]
     if len(working) > 26 and any(sep in working for sep in ("，", ",", "；", ";", "。")):
         working = re.split(r"[，,；;。]", working, maxsplit=1)[0]
+    if "。" in working:
+        clauses = [clean_text(part) for part in working.split("。") if clean_text(part)]
+        if len(clauses) >= 2 and len(clauses[-1]) <= 2 and len(clauses[0]) >= 2:
+            working = clauses[0]
     return clean_text(working)
 
 
@@ -668,6 +695,8 @@ def filter_valid_content_glosses(values: list[str]) -> list[str]:
             continue
         if value in BANNED_GLOSS_CANDIDATES:
             continue
+        if re.search(r"[……]|\.{2,}", value):
+            continue
         if re.search(r"\d{3,}", value):
             continue
         results.append(value)
@@ -773,9 +802,32 @@ def select_textbook_dict_links(
             selected.append(link)
 
     append_links(headword)
+    if selected:
+        return selected[:4]
+
+    candidate_headwords: list[str] = []
     for ref in refs:
-        for candidate in ref.get("dict_headwords") or derive_textbook_dict_headwords(ref, headword):
-            append_links(clean_text(str(candidate)))
+        candidate_headwords.extend(ref.get("dict_headwords") or derive_textbook_dict_headwords(ref, headword))
+
+    def candidate_priority(candidate_headword: str) -> tuple[int, int, int, int]:
+        candidate = clean_text(str(candidate_headword))
+        cleaned_headword = clean_text(headword)
+        return (
+            1 if candidate == cleaned_headword else 0,
+            len(candidate),
+            1 if cleaned_headword.endswith(candidate) else 0,
+            0 if len(candidate) == 1 and candidate in LOW_VALUE_SINGLE_CHAR_DICT_HEADWORDS else 1,
+        )
+
+    for candidate in sorted(unique_clean_strings(candidate_headwords), key=candidate_priority, reverse=True):
+        if candidate == clean_text(headword):
+            continue
+        if len(clean_text(headword)) > 1 and len(candidate) == 1 and candidate in LOW_VALUE_SINGLE_CHAR_DICT_HEADWORDS:
+            continue
+        before_count = len(selected)
+        append_links(candidate)
+        if len(selected) > before_count:
+            break
     return selected[:4]
 
 
@@ -1954,6 +2006,129 @@ def build_textbook_sections() -> tuple[list[dict[str, Any]], dict[str, list[dict
     return sections, {key: value[:20] for key, value in refs_by_term.items()}
 
 
+def textbook_school_stage(book_key: str) -> str:
+    return "高中" if str(book_key).startswith("高中_") else "初中"
+
+
+def load_textbook_source_master_tables() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    missing = [str(path) for path in (TEXTBOOK_ARTICLE_MASTER_PATH, TEXTBOOK_NOTE_MASTER_PATH) if not path.exists()]
+    if missing:
+        raise FileNotFoundError(
+            "Missing textbook source master tables: "
+            + ", ".join(missing)
+            + ". Run scripts/build_textbook_source_tables.py before runtime_generation_v2.py."
+        )
+    article_rows = load_json(TEXTBOOK_ARTICLE_MASTER_PATH)
+    note_rows = load_json(TEXTBOOK_NOTE_MASTER_PATH)
+    if not isinstance(article_rows, list) or not isinstance(note_rows, list):
+        raise ValueError("Textbook source master tables must be JSON arrays.")
+    return article_rows, note_rows
+
+
+def load_textbook_sections_from_master_tables() -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
+    article_rows, note_rows = load_textbook_source_master_tables()
+    sections: list[dict[str, Any]] = []
+    article_meta: dict[tuple[str, str], dict[str, Any]] = {}
+
+    for row in article_rows:
+        book_key = clean_text(str(row.get("book_key") or ""))
+        title = clean_text(str(row.get("title") or ""))
+        if not book_key or not title:
+            continue
+        section = {
+            "book_key": book_key,
+            "book_title": clean_text(str(row.get("book_title") or "")),
+            "school_stage": textbook_school_stage(book_key),
+            "title": title,
+            "kind": clean_text(str(row.get("kind") or "")),
+            "author": clean_text(str(row.get("author") or "")),
+            "dynasty": clean_text(str(row.get("dynasty") or "")),
+            "page_start": row.get("page_start_print"),
+            "page_end": row.get("page_end_print"),
+            "body_text": clean_text_keep_newlines(str(row.get("full_text") or row.get("ocr_full_text") or "")),
+            "body_source_mode": clean_text(str(row.get("body_source_mode") or "")),
+            "body_source_title": clean_text(str(row.get("body_source_title") or "")),
+            "body_source_path": clean_text(str(row.get("body_source_path") or "")),
+            "manifest_title": clean_text(str(row.get("manifest_title") or "")),
+            "note_entries": [],
+        }
+        sections.append(section)
+        article_meta[(book_key, title)] = section
+
+    refs_by_term: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    seen_refs: dict[str, set[tuple[str, str, str, str]]] = defaultdict(set)
+    for row in note_rows:
+        if str(row.get("match_status") or "") != "matched":
+            continue
+        book_key = clean_text(str(row.get("book_key") or ""))
+        title = clean_text(str(row.get("title") or ""))
+        headword = clean_text(str(row.get("headword") or ""))
+        label_text = clean_text(str(row.get("label_text") or ""))
+        note_text = clean_text(str(row.get("note_text") or ""))
+        gloss = clean_text(str(row.get("gloss") or ""))
+        term_kind = str(row.get("kind") or "")
+        if term_kind not in {"content_word", "function_word"}:
+            term_kind = infer_textbook_term_kind(headword, label_text, note_text, gloss)
+        sentence = clean_text(str(row.get("source_sentence") or ""))
+        if not (book_key and title and headword and gloss and sentence):
+            continue
+        if not textbook_ref_is_reliable(term_kind, headword, label_text, note_text, gloss, sentence):
+            continue
+        context_window = [truncate_excerpt(clean_text(str(item)), 160) for item in list(row.get("context_window") or []) if clean_text(str(item))][:7]
+        if sentence and sentence not in context_window:
+            focus_index = int(row.get("context_focus_index") or 0)
+            if 0 <= focus_index < len(context_window):
+                context_window[focus_index] = truncate_excerpt(sentence, 160)
+            else:
+                context_window.insert(min(len(context_window), 3), truncate_excerpt(sentence, 160))
+                context_window = context_window[:7]
+        term_id = f"{'function' if term_kind == 'function_word' else 'content'}::{headword}"
+        ref_dedupe_key = (
+            normalize_title(title),
+            clean_text(sentence),
+            clean_text(gloss),
+            clean_text(headword),
+        )
+        if ref_dedupe_key in seen_refs[term_id]:
+            continue
+        seen_refs[term_id].add(ref_dedupe_key)
+        article = article_meta.get((book_key, title), {})
+        refs_by_term[term_id].append(
+            {
+                "ref_id": f"{term_id}:{stable_slug(book_key)}:{stable_slug(title)}:{int(row.get('note_order') or 0)}",
+                "school_stage": article.get("school_stage") or textbook_school_stage(book_key),
+                "book_key": book_key,
+                "title": title,
+                "kind": clean_text(str(row.get("kind") or article.get("kind") or "")),
+                "page_start": row.get("page_start_print") if row.get("page_start_print") is not None else article.get("page_start"),
+                "page_end": row.get("page_end_print") if row.get("page_end_print") is not None else article.get("page_end"),
+                "sentence": truncate_excerpt(sentence, 160),
+                "context_window": context_window,
+                "note_block": note_text,
+                "author": clean_text(str(article.get("author") or "")),
+                "dynasty": clean_text(str(article.get("dynasty") or "")),
+                "book_title": clean_text(str(row.get("book_title") or article.get("book_title") or "")),
+                "headword": headword,
+                "label_text": label_text,
+                "gloss": gloss,
+                "answer_text": clean_text(str(row.get("answer_text") or build_textbook_answer_text(label_text, note_text, gloss))),
+                "dict_headwords": [clean_text(str(item)) for item in list(row.get("dict_headwords") or []) if clean_text(str(item))],
+                "manifest_title": clean_text(str(row.get("manifest_title") or article.get("manifest_title") or "")),
+                "note_order": row.get("note_order"),
+                "body_source_mode": clean_text(str(row.get("body_source_mode") or article.get("body_source_mode") or "")),
+                "body_source_title": clean_text(str(row.get("body_source_title") or article.get("body_source_title") or "")),
+                "body_source_path": clean_text(str(row.get("body_source_path") or article.get("body_source_path") or "")),
+                "match_status": clean_text(str(row.get("match_status") or "")),
+                "match_mode": clean_text(str(row.get("match_mode") or "")),
+                "match_confidence": row.get("match_confidence"),
+                "source_sentence": truncate_excerpt(sentence, 160),
+                "md_path": clean_text(str(row.get("md_path") or "")),
+                "middle_path": clean_text(str(row.get("middle_path") or "")),
+            }
+        )
+    return sections, {key: value[:20] for key, value in refs_by_term.items()}
+
+
 def query_revised_links(headwords: list[str]) -> dict[str, list[dict[str, Any]]]:
     refs: dict[str, list[dict[str, Any]]] = defaultdict(list)
     temp_ctx: tempfile.TemporaryDirectory[str] | None = None
@@ -2918,6 +3093,17 @@ def build_textbook_note_table(textbook_refs: dict[str, list[dict[str, Any]]]) ->
                     "page_start": ref.get("page_start"),
                     "page_end": ref.get("page_end"),
                     "dict_headwords": [clean_text(str(item)) for item in list(ref.get("dict_headwords") or []) if clean_text(str(item))],
+                    "manifest_title": clean_text(str(ref.get("manifest_title") or "")),
+                    "note_order": ref.get("note_order"),
+                    "body_source_mode": clean_text(str(ref.get("body_source_mode") or "")),
+                    "body_source_title": clean_text(str(ref.get("body_source_title") or "")),
+                    "body_source_path": clean_text(str(ref.get("body_source_path") or "")),
+                    "match_status": clean_text(str(ref.get("match_status") or "")),
+                    "match_mode": clean_text(str(ref.get("match_mode") or "")),
+                    "match_confidence": ref.get("match_confidence"),
+                    "source_sentence": clean_text(str(ref.get("source_sentence") or sentence)),
+                    "md_path": clean_text(str(ref.get("md_path") or "")),
+                    "middle_path": clean_text(str(ref.get("middle_path") or "")),
                 }
             )
     return rows
@@ -2996,6 +3182,17 @@ def write_table_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "page_start",
         "page_end",
         "dict_headwords",
+        "manifest_title",
+        "note_order",
+        "body_source_mode",
+        "body_source_title",
+        "body_source_path",
+        "match_status",
+        "match_mode",
+        "match_confidence",
+        "source_sentence",
+        "md_path",
+        "middle_path",
     ]
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
@@ -3158,12 +3355,19 @@ def shard_payload(payload: Any, max_bytes: int) -> list[Any]:
 
 
 def clear_old_runtime_files() -> None:
+    keep_private_json_names = {
+        TEXTBOOK_ARTICLE_MASTER_PATH.name,
+        TEXTBOOK_NOTE_MASTER_PATH.name,
+        "textbook_note_unresolved_table.json",
+    }
     for output_dir in (RUNTIME_MIRROR_DIR, PUBLIC_RUNTIME_DIR):
         output_dir.mkdir(parents=True, exist_ok=True)
         for path in output_dir.glob("*.json"):
             path.unlink()
     PRIVATE_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
     for path in PRIVATE_RUNTIME_DIR.glob("*.json"):
+        if path.name in keep_private_json_names:
+            continue
         path.unlink()
 
 
@@ -3185,7 +3389,7 @@ def main() -> int:
     content_raw_terms = merge_content_terms(content_source_terms, question_docs)
     occurrence_lookup = build_exam_occurrence_lookup(function_source_terms, content_source_terms)
 
-    sections, textbook_refs = build_textbook_sections()
+    sections, textbook_refs = load_textbook_sections_from_master_tables()
     textbook_note_table = build_textbook_note_table(textbook_refs)
     textbook_note_content = [row for row in textbook_note_table if str(row.get("kind") or "") == "content_word"]
     textbook_note_function = [row for row in textbook_note_table if str(row.get("kind") or "") == "function_word"]

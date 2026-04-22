@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-22T12:03:01.010179+00:00",
+  "generated_at": "2026-04-22T13:06:59.707537+00:00",
   "source_ok": true,
   "source_report": {
     "ok": true,
@@ -148,39 +148,45 @@
     }
   },
   "manifest_stats": {
-    "terms_function": 18,
-    "terms_content": 518,
+    "terms_function": 21,
+    "terms_content": 1203,
     "exam_question_docs": 24,
-    "textbook_corpus_docs": 55,
+    "textbook_corpus_docs": 69,
     "exam_corpus_docs": 52,
-    "textbook_notes": 490,
-    "textbook_content_notes": 488,
-    "textbook_function_notes": 2,
+    "textbook_notes": 1218,
+    "textbook_content_notes": 1211,
+    "textbook_function_notes": 7,
     "challenge_counts": {
       "xuci_pair_compare": 16,
-      "function_gloss": 13,
+      "function_gloss": 43,
       "function_profile": 0,
       "content_gloss": 14,
-      "sentence_meaning": 347,
+      "sentence_meaning": 471,
       "passage_meaning": 0
     }
   },
   "content": {
-    "term_count": 518,
-    "core_term_count": 10,
-    "secondary_term_count": 508,
+    "term_count": 1203,
+    "core_term_count": 17,
+    "secondary_term_count": 1186,
     "challenge_counts": {
       "content_gloss": 14,
-      "sentence_meaning": 347,
+      "sentence_meaning": 471,
       "passage_meaning": 0
     },
-    "support_miss_count": 12,
+    "support_miss_count": 11,
     "filtered_raw_examples": [],
     "top_textbook_tokens": [
       {
         "token": "之",
-        "frequency": 245,
+        "frequency": 757,
         "examples": [
+          {
+            "title": "芣苢",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
           {
             "title": "短歌行",
             "source": "textbook",
@@ -188,7 +194,7 @@
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
-            "title": "归园田居（其一）",
+            "title": "梦游天姥吟留别",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
@@ -204,25 +210,13 @@
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "师说",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           }
         ]
       },
       {
         "token": "不",
-        "frequency": 173,
+        "frequency": 553,
         "examples": [
-          {
-            "title": "芣苢 / 插秧歌",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
           {
             "title": "插秧歌",
             "source": "textbook",
@@ -236,13 +230,19 @@
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
-            "title": "归园田居（其一）",
+            "title": "梦游天姥吟留别",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
-            "title": "梦游天姥吟留别",
+            "title": "琵琶行并序",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "劝学",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
@@ -251,8 +251,14 @@
       },
       {
         "token": "而",
-        "frequency": 137,
+        "frequency": 374,
         "examples": [
+          {
+            "title": "梦游天姥吟留别",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
           {
             "title": "劝学",
             "source": "textbook",
@@ -272,58 +278,16 @@
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
-            "title": "静女",
+            "title": "登泰山记",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "子路、曾皙、冉有、公西华侍坐",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          }
-        ]
-      },
-      {
-        "token": "的",
-        "frequency": 120,
-        "examples": [
-          {
-            "title": "归园田居（其一）",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "静女",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "登岳阳楼",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          },
-          {
-            "title": "桂枝香·金陵怀古",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          },
-          {
-            "title": "将进酒",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文选择性必修_上册"
           }
         ]
       },
       {
         "token": "以",
-        "frequency": 116,
+        "frequency": 370,
         "examples": [
           {
             "title": "短歌行",
@@ -332,7 +296,7 @@
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
-            "title": "归园田居（其一）",
+            "title": "梦游天姥吟留别",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
@@ -345,42 +309,6 @@
           },
           {
             "title": "劝学",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "师说",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          }
-        ]
-      },
-      {
-        "token": "人",
-        "frequency": 113,
-        "examples": [
-          {
-            "title": "短歌行",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "归园田居（其一）",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "琵琶行并序",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "永遇乐·京口北固亭怀古",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
@@ -395,46 +323,10 @@
       },
       {
         "token": "也",
-        "frequency": 112,
+        "frequency": 283,
         "examples": [
           {
-            "title": "劝学",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "师说",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "子路、曾皙、冉有、公西华侍坐",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          },
-          {
-            "title": "庖丁解牛",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          },
-          {
-            "title": "烛之武退秦师",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          }
-        ]
-      },
-      {
-        "token": "其",
-        "frequency": 96,
-        "examples": [
-          {
-            "title": "琵琶行并序",
+            "title": "声声慢（寻寻觅觅）",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
@@ -458,7 +350,7 @@
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
-            "title": "静女",
+            "title": "登泰山记",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
@@ -466,44 +358,8 @@
         ]
       },
       {
-        "token": "者",
-        "frequency": 93,
-        "examples": [
-          {
-            "title": "归园田居（其一）",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "琵琶行并序",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "劝学",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "师说",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "赤壁赋",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          }
-        ]
-      },
-      {
-        "token": "为",
-        "frequency": 87,
+        "token": "人",
+        "frequency": 278,
         "examples": [
           {
             "title": "短歌行",
@@ -518,6 +374,30 @@
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
+            "title": "梦游天姥吟留别",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "琵琶行并序",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "念奴娇·赤壁怀古",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          }
+        ]
+      },
+      {
+        "token": "其",
+        "frequency": 258,
+        "examples": [
+          {
             "title": "琵琶行并序",
             "source": "textbook",
             "year": null,
@@ -531,6 +411,18 @@
           },
           {
             "title": "师说",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "赤壁赋",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "登泰山记",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
@@ -539,8 +431,14 @@
       },
       {
         "token": "有",
-        "frequency": 85,
+        "frequency": 237,
         "examples": [
+          {
+            "title": "芣苢",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
           {
             "title": "短歌行",
             "source": "textbook",
@@ -560,6 +458,66 @@
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
+            "title": "声声慢（寻寻觅觅）",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          }
+        ]
+      },
+      {
+        "token": "为",
+        "frequency": 228,
+        "examples": [
+          {
+            "title": "短歌行",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "梦游天姥吟留别",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "琵琶行并序",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "劝学",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "师说",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          }
+        ]
+      },
+      {
+        "token": "者",
+        "frequency": 227,
+        "examples": [
+          {
+            "title": "琵琶行并序",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "劝学",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
             "title": "师说",
             "source": "textbook",
             "year": null,
@@ -570,12 +528,90 @@
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "登泰山记",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          }
+        ]
+      },
+      {
+        "token": "于",
+        "frequency": 220,
+        "examples": [
+          {
+            "title": "琵琶行并序",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "劝学",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "师说",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "赤壁赋",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "登泰山记",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          }
+        ]
+      },
+      {
+        "token": "的",
+        "frequency": 208,
+        "examples": [
+          {
+            "title": "游园（皂罗袍）",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
+          },
+          {
+            "title": "《论语》十二章",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文选择性必修_上册"
+          },
+          {
+            "title": "燕歌行并序",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文选择性必修_中册"
+          },
+          {
+            "title": "李凭箜篌引",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文选择性必修_中册"
+          },
+          {
+            "title": "锦瑟",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文选择性必修_中册"
           }
         ]
       },
       {
         "token": "一",
-        "frequency": 74,
+        "frequency": 197,
         "examples": [
           {
             "title": "归园田居（其一）",
@@ -596,13 +632,13 @@
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
-            "title": "永遇乐·京口北固亭怀古",
+            "title": "念奴娇·赤壁怀古",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
-            "title": "静女",
+            "title": "永遇乐·京口北固亭怀古",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
@@ -610,8 +646,8 @@
         ]
       },
       {
-        "token": "于",
-        "frequency": 74,
+        "token": "曰",
+        "frequency": 191,
         "examples": [
           {
             "title": "琵琶行并序",
@@ -638,124 +674,16 @@
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
-            "title": "静女",
+            "title": "登泰山记",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          }
-        ]
-      },
-      {
-        "token": "子",
-        "frequency": 67,
-        "examples": [
-          {
-            "title": "短歌行",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "劝学",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "赤壁赋",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "静女",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "子路、曾皙、冉有、公西华侍坐",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          }
-        ]
-      },
-      {
-        "token": "诗",
-        "frequency": 64,
-        "examples": [
-          {
-            "title": "归园田居（其一）",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "静女",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "登岳阳楼",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          },
-          {
-            "title": "将进酒",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文选择性必修_上册"
-          },
-          {
-            "title": "氓",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文选择性必修_下册"
-          }
-        ]
-      },
-      {
-        "token": "曰",
-        "frequency": 60,
-        "examples": [
-          {
-            "title": "琵琶行并序",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "劝学",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "赤壁赋",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "子路、曾皙、冉有、公西华侍坐",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          },
-          {
-            "title": "庖丁解牛",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
           }
         ]
       },
       {
         "token": "无",
-        "frequency": 58,
+        "frequency": 169,
         "examples": [
           {
             "title": "归园田居（其一）",
@@ -791,14 +719,8 @@
       },
       {
         "token": "是",
-        "frequency": 54,
+        "frequency": 149,
         "examples": [
-          {
-            "title": "芣苢 / 插秧歌",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
           {
             "title": "插秧歌",
             "source": "textbook",
@@ -806,7 +728,37 @@
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
-            "title": "归园田居（其一）",
+            "title": "琵琶行并序",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "念奴娇·赤壁怀古",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "声声慢（寻寻觅觅）",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "师说",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          }
+        ]
+      },
+      {
+        "token": "与",
+        "frequency": 143,
+        "examples": [
+          {
+            "title": "插秧歌",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
@@ -819,6 +771,162 @@
           },
           {
             "title": "师说",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "赤壁赋",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "登泰山记",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          }
+        ]
+      },
+      {
+        "token": "吾",
+        "frequency": 139,
+        "examples": [
+          {
+            "title": "劝学",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "师说",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "赤壁赋",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "子路、曾皙、冉有、公西华侍坐",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
+          },
+          {
+            "title": "齐桓晋文之事",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
+          }
+        ]
+      },
+      {
+        "token": "王",
+        "frequency": 136,
+        "examples": [
+          {
+            "title": "齐桓晋文之事",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
+          },
+          {
+            "title": "鸿门宴",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
+          },
+          {
+            "title": "谏逐客书",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
+          },
+          {
+            "title": "答司马谏议书",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
+          },
+          {
+            "title": "阿房宫赋",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
+          }
+        ]
+      },
+      {
+        "token": "子",
+        "frequency": 133,
+        "examples": [
+          {
+            "title": "短歌行",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "师说",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "赤壁赋",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "登泰山记",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "子路、曾皙、冉有、公西华侍坐",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
+          }
+        ]
+      },
+      {
+        "token": "所",
+        "frequency": 129,
+        "examples": [
+          {
+            "title": "劝学",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "师说",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "赤壁赋",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "登泰山记",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "涉江采芙蓉",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
@@ -827,7 +935,7 @@
       },
       {
         "token": "自",
-        "frequency": 48,
+        "frequency": 123,
         "examples": [
           {
             "title": "归园田居（其一）",
@@ -842,28 +950,64 @@
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
+            "title": "声声慢（寻寻觅觅）",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
             "title": "劝学",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
-            "title": "静女",
+            "title": "赤壁赋",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          }
+        ]
+      },
+      {
+        "token": "大",
+        "frequency": 122,
+        "examples": [
+          {
+            "title": "插秧歌",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
-            "title": "促织",
+            "title": "琵琶行并序",
             "source": "textbook",
             "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "念奴娇·赤壁怀古",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "师说",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "登泰山记",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           }
         ]
       },
       {
         "token": "中",
-        "frequency": 47,
+        "frequency": 121,
         "examples": [
           {
             "title": "短歌行",
@@ -894,267 +1038,15 @@
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          }
-        ]
-      },
-      {
-        "token": "如",
-        "frequency": 47,
-        "examples": [
-          {
-            "title": "短歌行",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "永遇乐·京口北固亭怀古",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "劝学",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "赤壁赋",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "静女",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          }
-        ]
-      },
-      {
-        "token": "所",
-        "frequency": 45,
-        "examples": [
-          {
-            "title": "劝学",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "师说",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "赤壁赋",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "庖丁解牛",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          },
-          {
-            "title": "鸿门宴",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          }
-        ]
-      },
-      {
-        "token": "在",
-        "frequency": 39,
-        "examples": [
-          {
-            "title": "归园田居（其一）",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "梦游天姥吟留别",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "琵琶行并序",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "静女",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "鸿门宴",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          }
-        ]
-      },
-      {
-        "token": "吾",
-        "frequency": 38,
-        "examples": [
-          {
-            "title": "劝学",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "师说",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "子路、曾皙、冉有、公西华侍坐",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          },
-          {
-            "title": "烛之武退秦师",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          },
-          {
-            "title": "鸿门宴",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          }
-        ]
-      },
-      {
-        "token": "可",
-        "frequency": 36,
-        "examples": [
-          {
-            "title": "短歌行",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "永遇乐·京口北固亭怀古",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "劝学",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "子路、曾皙、冉有、公西华侍坐",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          },
-          {
-            "title": "鸿门宴",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          }
-        ]
-      },
-      {
-        "token": "时",
-        "frequency": 35,
-        "examples": [
-          {
-            "title": "短歌行",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "归园田居（其一）",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "琵琶行并序",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "静女",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "庖丁解牛",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
           }
         ]
       },
       {
         "token": "能",
-        "frequency": 35,
+        "frequency": 118,
         "examples": [
           {
-            "title": "永遇乐·京口北固亭怀古",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "师说",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
-          {
-            "title": "烛之武退秦师",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          },
-          {
-            "title": "与妻书",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          },
-          {
-            "title": "促织",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          }
-        ]
-      },
-      {
-        "token": "得",
-        "frequency": 34,
-        "examples": [
-          {
-            "title": "归园田居（其一）",
+            "title": "梦游天姥吟留别",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
@@ -1172,7 +1064,79 @@
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
-            "title": "鸿门宴",
+            "title": "师说",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "赤壁赋",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          }
+        ]
+      },
+      {
+        "token": "下",
+        "frequency": 116,
+        "examples": [
+          {
+            "title": "短歌行",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "梦游天姥吟留别",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "琵琶行并序",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "永遇乐·京口北固亭怀古",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "劝学",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          }
+        ]
+      },
+      {
+        "token": "国",
+        "frequency": 116,
+        "examples": [
+          {
+            "title": "念奴娇·赤壁怀古",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "子路、曾皙、冉有、公西华侍坐",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
+          },
+          {
+            "title": "齐桓晋文之事",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
+          },
+          {
+            "title": "烛之武退秦师",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_下册"
@@ -1186,45 +1150,21 @@
         ]
       },
       {
-        "token": "则",
-        "frequency": 33,
+        "token": "可",
+        "frequency": 113,
         "examples": [
           {
-            "title": "劝学",
+            "title": "短歌行",
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
-            "title": "谏太宗十思疏",
+            "title": "梦游天姥吟留别",
             "source": "textbook",
             "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
-          {
-            "title": "答司马谏议书",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          },
-          {
-            "title": "六国论",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
-          },
-          {
-            "title": "《论语》十二章",
-            "source": "textbook",
-            "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文选择性必修_上册"
-          }
-        ]
-      },
-      {
-        "token": "矣",
-        "frequency": 33,
-        "examples": [
           {
             "title": "永遇乐·京口北固亭怀古",
             "source": "textbook",
@@ -1242,302 +1182,362 @@
             "source": "textbook",
             "year": null,
             "book_key": "高中_语文_普通高中教科书_语文必修_上册"
-          },
+          }
+        ]
+      },
+      {
+        "token": "在",
+        "frequency": 110,
+        "examples": [
           {
-            "title": "庖丁解牛",
+            "title": "归园田居（其一）",
             "source": "textbook",
             "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           },
           {
-            "title": "烛之武退秦师",
+            "title": "梦游天姥吟留别",
             "source": "textbook",
             "year": null,
-            "book_key": "高中_语文_普通高中教科书_语文必修_下册"
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "琵琶行并序",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "劝学",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "赤壁赋",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          }
+        ]
+      },
+      {
+        "token": "如",
+        "frequency": 109,
+        "examples": [
+          {
+            "title": "短歌行",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "梦游天姥吟留别",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "琵琶行并序",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "念奴娇·赤壁怀古",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
+          },
+          {
+            "title": "永遇乐·京口北固亭怀古",
+            "source": "textbook",
+            "year": null,
+            "book_key": "高中_语文_普通高中教科书_语文必修_上册"
           }
         ]
       }
     ]
   },
   "function": {
-    "term_count": 18,
-    "core_term_count": 1,
+    "term_count": 21,
+    "core_term_count": 2,
     "challenge_counts": {
       "xuci_pair_compare": 16,
-      "function_gloss": 13,
+      "function_gloss": 43,
       "function_profile": 0
     },
-    "usage_table_count": 18
+    "usage_table_count": 21
   },
   "corpus": {
-    "textbook_doc_count": 55,
+    "textbook_doc_count": 69,
     "exam_doc_count": 52,
-    "textbook_note_count": 490,
-    "textbook_content_note_count": 488,
-    "textbook_function_note_count": 2,
-    "textbook_token_count": 2051,
-    "exam_token_count": 2352,
-    "union_token_count": 3104,
+    "textbook_note_count": 1218,
+    "textbook_content_note_count": 1211,
+    "textbook_function_note_count": 7,
+    "textbook_token_count": 3658,
+    "exam_token_count": 2396,
+    "union_token_count": 4235,
     "top_union_tokens": [
       {
         "token": "之",
-        "frequency": 1110
+        "frequency": 1620
       },
       {
         "token": "不",
-        "frequency": 742
+        "frequency": 1117
       },
       {
         "token": "以",
-        "frequency": 577
+        "frequency": 831
       },
       {
         "token": "而",
-        "frequency": 532
+        "frequency": 769
       },
       {
         "token": "人",
-        "frequency": 446
+        "frequency": 607
       },
       {
         "token": "为",
-        "frequency": 436
+        "frequency": 577
       },
       {
         "token": "其",
-        "frequency": 411
-      },
-      {
-        "token": "者",
-        "frequency": 398
+        "frequency": 573
       },
       {
         "token": "也",
-        "frequency": 381
+        "frequency": 552
+      },
+      {
+        "token": "者",
+        "frequency": 532
       },
       {
         "token": "曰",
-        "frequency": 354
+        "frequency": 485
       },
       {
         "token": "有",
-        "frequency": 327
-      },
-      {
-        "token": "文",
-        "frequency": 324
+        "frequency": 479
       },
       {
         "token": "于",
-        "frequency": 321
+        "frequency": 467
       },
       {
         "token": "的",
-        "frequency": 308
+        "frequency": 396
       },
       {
         "token": "子",
-        "frequency": 297
+        "frequency": 361
       },
       {
         "token": "下",
-        "frequency": 271
-      },
-      {
-        "token": "中",
-        "frequency": 234
-      },
-      {
-        "token": "是",
-        "frequency": 227
-      },
-      {
-        "token": "大",
-        "frequency": 221
+        "frequency": 356
       },
       {
         "token": "一",
-        "frequency": 218
+        "frequency": 341
       },
       {
-        "token": "所",
-        "frequency": 217
+        "token": "文",
+        "frequency": 325
       },
       {
-        "token": "公",
-        "frequency": 210
+        "token": "是",
+        "frequency": 322
+      },
+      {
+        "token": "大",
+        "frequency": 313
       },
       {
         "token": "无",
-        "frequency": 203
-      },
-      {
-        "token": "言",
-        "frequency": 200
-      },
-      {
-        "token": "国",
-        "frequency": 186
+        "frequency": 312
       },
       {
         "token": "王",
-        "frequency": 184
+        "frequency": 306
       },
       {
-        "token": "自",
-        "frequency": 178
+        "token": "中",
+        "frequency": 303
       },
       {
-        "token": "年",
-        "frequency": 169
+        "token": "所",
+        "frequency": 300
       },
       {
-        "token": "上",
-        "frequency": 167
-      },
-      {
-        "token": "事",
-        "frequency": 158
+        "token": "国",
+        "frequency": 272
       },
       {
         "token": "与",
-        "frequency": 153
+        "frequency": 267
+      },
+      {
+        "token": "公",
+        "frequency": 258
+      },
+      {
+        "token": "自",
+        "frequency": 251
+      },
+      {
+        "token": "言",
+        "frequency": 246
       },
       {
         "token": "可",
-        "frequency": 150
+        "frequency": 227
       },
       {
-        "token": "使",
-        "frequency": 145
+        "token": "上",
+        "frequency": 215
       },
       {
-        "token": "十",
-        "frequency": 142
+        "token": "年",
+        "frequency": 214
       },
       {
-        "token": "得",
-        "frequency": 142
-      },
-      {
-        "token": "此",
-        "frequency": 128
+        "token": "事",
+        "frequency": 212
       },
       {
         "token": "能",
-        "frequency": 128
+        "frequency": 211
       },
       {
         "token": "天",
-        "frequency": 127
+        "frequency": 204
+      },
+      {
+        "token": "使",
+        "frequency": 202
+      },
+      {
+        "token": "此",
+        "frequency": 202
+      },
+      {
+        "token": "吾",
+        "frequency": 200
+      },
+      {
+        "token": "得",
+        "frequency": 199
       },
       {
         "token": "则",
-        "frequency": 126
+        "frequency": 194
       },
       {
         "token": "时",
-        "frequency": 126
+        "frequency": 191
       }
     ],
     "top_textbook_note_titles": [
       {
-        "source_title": "燕歌行并序",
-        "count": 26
-      },
-      {
-        "source_title": "氓",
-        "count": 25
+        "source_title": "苏武传",
+        "count": 107
       },
       {
         "source_title": "孔雀东南飞并序",
-        "count": 25
+        "count": 105
       },
       {
-        "source_title": "琵琶行并序",
-        "count": 24
-      },
-      {
-        "source_title": "屈原列传",
-        "count": 22
-      },
-      {
-        "source_title": "劝学",
-        "count": 20
+        "source_title": "齐桓晋文之事",
+        "count": 78
       },
       {
         "source_title": "促织",
-        "count": 20
+        "count": 69
       },
       {
-        "source_title": "答司马谏议书",
-        "count": 19
+        "source_title": "屈原列传",
+        "count": 55
+      },
+      {
+        "source_title": "陈情表",
+        "count": 52
+      },
+      {
+        "source_title": "琵琶行并序",
+        "count": 48
+      },
+      {
+        "source_title": "鸿门宴",
+        "count": 42
+      },
+      {
+        "source_title": "登泰山记",
+        "count": 37
+      },
+      {
+        "source_title": "项脊轩志",
+        "count": 35
       },
       {
         "source_title": "赤壁赋",
-        "count": 19
+        "count": 34
       },
       {
-        "source_title": "庖丁解牛",
-        "count": 18
-      },
-      {
-        "source_title": "蜀道难",
-        "count": 18
-      },
-      {
-        "source_title": "苏武传",
-        "count": 17
-      },
-      {
-        "source_title": "阿房宫赋",
-        "count": 12
-      },
-      {
-        "source_title": "短歌行",
-        "count": 12
-      },
-      {
-        "source_title": "石钟山记",
-        "count": 12
+        "source_title": "过秦论",
+        "count": 30
       },
       {
         "source_title": "师说",
-        "count": 12
+        "count": 29
       },
       {
         "source_title": "子路、曾皙、冉有、公西华侍坐",
-        "count": 11
+        "count": 28
       },
       {
-        "source_title": "将进酒",
-        "count": 11
+        "source_title": "谏逐客书",
+        "count": 27
       },
       {
-        "source_title": "归园田居（其一）",
-        "count": 11
+        "source_title": "烛之武退秦师",
+        "count": 24
       },
       {
-        "source_title": "梦游天姥吟留别",
-        "count": 11
+        "source_title": "阿房宫赋",
+        "count": 23
+      },
+      {
+        "source_title": "氓",
+        "count": 23
+      },
+      {
+        "source_title": "兰亭集序",
+        "count": 23
+      },
+      {
+        "source_title": "五代史伶官传序",
+        "count": 21
       }
     ]
   },
   "runtime": {
     "challenge_counts": {
       "xuci_pair_compare": 16,
-      "function_gloss": 13,
+      "function_gloss": 43,
       "function_profile": 0,
       "content_gloss": 14,
-      "sentence_meaning": 347,
+      "sentence_meaning": 471,
       "passage_meaning": 0
     },
-    "answer_key_count": 390,
+    "answer_key_count": 544,
     "correct_label_distribution": {
-      "B": 98,
-      "C": 100,
-      "D": 101,
-      "A": 91
+      "B": 134,
+      "C": 154,
+      "D": 126,
+      "A": 130
     },
     "issue_counts": {},
     "issue_examples": [],

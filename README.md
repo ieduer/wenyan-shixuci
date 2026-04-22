@@ -38,6 +38,7 @@ npm run dev
 ```
 
 `npm run check:sources` 會硬失敗於來源缺失、SQLite 無法打開、北京卷年份覆蓋不足、教材對齊異常等問題，避免靜默生成殘缺 JSON。
+`npm run build:data` 會先重建教材正文/注釋 master tables，再生成 runtime 題庫與公開資產，避免題庫繼續吃舊 OCR 切分鏈路。
 
 ## 第一版範圍
 
