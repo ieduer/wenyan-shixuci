@@ -995,14 +995,21 @@ async function fetchRuntimeAsset<T>(env: Env, request: Request, fileName: string
 
 async function fetchOptionalRuntimeAsset<T>(env: Env, request: Request, fileName: string): Promise<T | null> {
   const assetUrl = new URL(`/runtime/${fileName}`, request.url);
-  const response = await env.ASSETS.fetch(new Request(assetUrl.toString(), { method: "GET" }));
-  if (response.status === 404) {
+  const bindingResponse = await env.ASSETS.fetch(new Request(assetUrl.toString(), { method: "GET" }));
+  if (bindingResponse.ok) {
+    return (await bindingResponse.json()) as T;
+  }
+  if (bindingResponse.status !== 404) {
+    throw new Error(`Runtime asset missing: ${fileName} (${bindingResponse.status})`);
+  }
+  const fallbackResponse = await fetch(assetUrl.toString(), { method: "GET" });
+  if (fallbackResponse.status === 404) {
     return null;
   }
-  if (!response.ok) {
-    throw new Error(`Runtime asset missing: ${fileName} (${response.status})`);
+  if (!fallbackResponse.ok) {
+    throw new Error(`Runtime asset missing: ${fileName} (${fallbackResponse.status})`);
   }
-  return (await response.json()) as T;
+  return (await fallbackResponse.json()) as T;
 }
 
 async function loadShardedAsset<T>(env: Env, request: Request, manifest: RuntimeManifest, assetKey: string): Promise<T> {

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-22T10:04:52.124439+00:00",
+  "generated_at": "2026-04-22T10:09:45.171252+00:00",
   "source_ok": true,
   "source_report": {
     "ok": true,
@@ -149,7 +149,7 @@
   },
   "manifest_stats": {
     "terms_function": 18,
-    "terms_content": 539,
+    "terms_content": 537,
     "exam_question_docs": 24,
     "challenge_counts": {
       "xuci_pair_compare": 16,
@@ -161,9 +161,9 @@
     }
   },
   "content": {
-    "term_count": 539,
+    "term_count": 537,
     "core_term_count": 11,
-    "secondary_term_count": 528,
+    "secondary_term_count": 526,
     "challenge_counts": {
       "content_gloss": 16,
       "sentence_meaning": 16,
