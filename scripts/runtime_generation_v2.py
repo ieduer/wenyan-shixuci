@@ -263,6 +263,13 @@ CHINESE_CHAR_RE = re.compile(r"[\u4e00-\u9fff]")
 CONTENT_GLOSS_BAD_HINT_RE = re.compile(
     r"(指.*?(王|帝|公|侯|君|将军|大夫|人|地名|县|州|国)|作者于|公元|前\d+|后\d+|年（?\d+|在今|版）|选自《)"
 )
+TEXTBOOK_CONTENT_TARGET_BAD_RE = re.compile(
+    r"(地名|古地名|在今|今[^。；;，,]{0,16}(?:东|西|南|北|县|市|省|一带)|山名|水名|渡口|都城|国名|郡名|县令|州治|源出|流入长江的地方|一带的人|人名|官名|职官名|職官名|年号|帝号|谥号|匈奴的一个亲王|生卒年不详|(?:春秋|战国|两汉|汉代|唐代|宋代|明代|清代)[^。；;，,]{0,18}(?:人|乐官|大夫|将军|国君|诗人|词人)|部首|复姓|複姓|^姓(?:的支系)?(?:。)?$|^名，姓(?:。)?$)"
+)
+TEXTBOOK_NON_MEANINGFUL_HEADWORD_RE = re.compile(r"^[一二三四五六七八九十百千万两廿卅\d]+(?:年|月|日|夜|鼓)?$")
+CONTENT_DICT_GLOSS_BAD_RE = re.compile(
+    r"^(?:(?:名|动|動|副|形|介|连|連|助|代)，)?(?:姓(?:的支系)?|名，姓|二一四部首之一|複姓|复姓|職官名|职官名|地名簡稱|地名简称|官名|官职|古代官名|古代地名|古代国名|人名用字|人名)$"
+)
 DIRECT_OPTION_GLOSS_BAD_PAREN_RE = re.compile(
     r"[（(][^）)]*(?:中午|下載|下载|教材|高考|学习|學習|創作|创作|作者于|在今|公元|年号|年號|链接|鏈接)[^）)]*[）)]"
 )
@@ -780,6 +787,8 @@ def filter_valid_content_glosses(values: list[str]) -> list[str]:
             continue
         if CONTENT_GLOSS_BAD_HINT_RE.search(value):
             continue
+        if CONTENT_DICT_GLOSS_BAD_RE.search(value):
+            continue
         if value in BANNED_GLOSS_CANDIDATES:
             continue
         if re.search(r"[……]|\.{2,}", value):
@@ -834,6 +843,7 @@ def derive_textbook_dict_headwords(ref: dict[str, Any], fallback_headword: str =
                     candidates.append(fragment[start : start + size])
         if len(normalized) > 1:
             candidates.extend(char for char in normalized if char not in COMMON_XUCI_HEADWORDS)
+            candidates.extend(char for char in normalized if char in COMMON_XUCI_HEADWORDS)
     return unique_clean_strings(candidates)
 
 
@@ -911,9 +921,8 @@ def select_textbook_dict_links(
             continue
         if len(clean_text(headword)) > 1 and len(candidate) == 1 and candidate in LOW_VALUE_SINGLE_CHAR_DICT_HEADWORDS:
             continue
-        before_count = len(selected)
         append_links(candidate)
-        if len(selected) > before_count:
+        if len(selected) >= 4:
             break
     return selected[:4]
 
@@ -1470,6 +1479,24 @@ def best_context_window(source_text: str, probe_text: str, headword: str = "") -
     return units[start:end]
 
 
+def best_textbook_focus_sentence(sentence: str, context_window: list[str], headword: str, label_text: str) -> str:
+    candidates = [clean_text(sentence)] + [clean_text(item) for item in context_window if clean_text(item)]
+    variants = textbook_target_variants(headword, label_text)
+    for variant in variants:
+        compact_variant = compact_hanzi_text(variant)
+        if not compact_variant:
+            continue
+        for candidate in candidates:
+            if not candidate:
+                continue
+            for unit in split_context_units(candidate):
+                if compact_variant in compact_hanzi_text(unit):
+                    return clean_text(unit)
+            if compact_variant in compact_hanzi_text(candidate):
+                return candidate
+    return clean_text(sentence or (candidates[0] if candidates else ""))
+
+
 def locate_progressive_probe(body_text: str, label_text: str, headword: str, start_index: int = 0) -> tuple[str, int]:
     candidates = unique_clean_strings(
         [
@@ -1866,6 +1893,63 @@ def normalize_label_headword(label_text: str) -> str:
     return "".join(re.findall(r"[\u4e00-\u9fff]+", label))
 
 
+def compact_hanzi_text(value: str) -> str:
+    return "".join(CHINESE_CHAR_RE.findall(clean_text(value)))
+
+
+def textbook_target_variants(headword: str, label_text: str) -> list[str]:
+    return sorted(
+        unique_clean_strings([normalize_label_headword(label_text), clean_text(headword)]),
+        key=len,
+        reverse=True,
+    )
+
+
+def textbook_target_in_text(text: str, headword: str, label_text: str) -> bool:
+    compact_text = compact_hanzi_text(text)
+    if not compact_text:
+        return False
+    for variant in textbook_target_variants(headword, label_text):
+        compact_variant = compact_hanzi_text(variant)
+        if compact_variant and compact_variant in compact_text:
+            return True
+    return False
+
+
+def truncate_excerpt_around_target(text: str, headword: str, label_text: str, limit: int = 160) -> str:
+    cleaned = clean_text(text)
+    if len(cleaned) <= limit:
+        return cleaned
+    for variant in textbook_target_variants(headword, label_text):
+        position = cleaned.find(variant)
+        if position < 0:
+            continue
+        start = max(0, position - max(0, (limit - len(variant)) // 2))
+        end = min(len(cleaned), start + limit)
+        start = max(0, end - limit)
+        prefix = "…" if start > 0 else ""
+        suffix = "…" if end < len(cleaned) else ""
+        return prefix + cleaned[start:end].strip() + suffix
+    return truncate_excerpt(cleaned, limit)
+
+
+def textbook_content_target_allowed(headword: str, label_text: str, note_text: str, gloss: str, answer_text: str = "") -> bool:
+    normalized_label = normalize_label_headword(label_text) or clean_text(headword)
+    compact_label = compact_hanzi_text(normalized_label)
+    combined = " ".join(
+        clean_text(item)
+        for item in (note_text, gloss, answer_text)
+        if clean_text(item)
+    )
+    if not compact_label:
+        return False
+    if TEXTBOOK_NON_MEANINGFUL_HEADWORD_RE.fullmatch(compact_label):
+        return False
+    if TEXTBOOK_CONTENT_TARGET_BAD_RE.search(combined):
+        return False
+    return True
+
+
 def infer_textbook_term_kind(headword: str, label_text: str, note_text: str, gloss: str) -> str:
     if headword not in COMMON_XUCI_HEADWORDS:
         return "content_word"
@@ -1892,7 +1976,7 @@ def textbook_ref_is_reliable(term_kind: str, headword: str, label_text: str, not
     normalized_label = normalize_label_headword(label_text)
     if not headword or not cleaned_gloss or not cleaned_sentence:
         return False
-    if headword not in cleaned_sentence:
+    if not textbook_target_in_text(cleaned_sentence, headword, label_text):
         return False
     if "仅供个人学习使用" in cleaned_note or "人民教育出版社" in cleaned_note:
         return False
@@ -1914,6 +1998,8 @@ def textbook_ref_is_reliable(term_kind: str, headword: str, label_text: str, not
         if headword in COMMON_XUCI_HEADWORDS and normalized_label == headword and not re.match(rf"^{re.escape(headword)}[，,:：]", cleaned_note):
             return False
         if len(cleaned_gloss) > 30:
+            return False
+        if not textbook_content_target_allowed(headword, label_text, note_text, gloss, cleaned_gloss):
             return False
     if normalized_label and len(normalized_label) > 12:
         return False
@@ -2076,6 +2162,19 @@ def build_textbook_sections() -> tuple[list[dict[str, Any]], dict[str, list[dict
                     if ref_dedupe_key in seen_refs[term_id]:
                         continue
                     seen_refs[term_id].add(ref_dedupe_key)
+                    display_sentence = best_textbook_focus_sentence(
+                        sentence,
+                        context_window,
+                        note["headword"],
+                        note["label_text"],
+                    )
+                    display_context = [
+                        truncate_excerpt_around_target(item_text, note["headword"], note["label_text"], 160)
+                        for item_text in context_window[:7]
+                    ]
+                    if display_sentence and display_sentence not in display_context:
+                        display_context.insert(min(len(display_context), 3), truncate_excerpt_around_target(display_sentence, note["headword"], note["label_text"], 160))
+                        display_context = display_context[:7]
                     refs_by_term[term_id].append(
                         {
                             "ref_id": f"{term_id}:{stable_slug(book_key)}:{stable_slug(title_part)}:{note_index}",
@@ -2085,8 +2184,8 @@ def build_textbook_sections() -> tuple[list[dict[str, Any]], dict[str, list[dict
                             "kind": str(item.get("kind") or ""),
                             "page_start": item.get("page_start"),
                             "page_end": item.get("page_end"),
-                            "sentence": truncate_excerpt(sentence, 160),
-                            "context_window": [truncate_excerpt(item_text, 160) for item_text in context_window[:7]],
+                            "sentence": truncate_excerpt_around_target(display_sentence or sentence, note["headword"], note["label_text"], 160),
+                            "context_window": display_context,
                             "note_block": note["note_text"],
                             "author": author,
                             "dynasty": dynasty,
@@ -2175,18 +2274,24 @@ def load_textbook_sections_from_master_tables() -> tuple[list[dict[str, Any]], d
             continue
         if not textbook_ref_is_reliable(term_kind, headword, label_text, note_text, gloss, sentence):
             continue
-        context_window = [truncate_excerpt(clean_text(str(item)), 160) for item in list(row.get("context_window") or []) if clean_text(str(item))][:7]
-        if sentence and sentence not in context_window:
+        raw_context_window = [clean_text(str(item)) for item in list(row.get("context_window") or []) if clean_text(str(item))][:7]
+        focus_sentence = best_textbook_focus_sentence(sentence, raw_context_window, headword, label_text)
+        context_window = [
+            truncate_excerpt_around_target(item, headword, label_text, 160)
+            for item in raw_context_window
+        ]
+        if focus_sentence and truncate_excerpt_around_target(focus_sentence, headword, label_text, 160) not in context_window:
             focus_index = int(row.get("context_focus_index") or 0)
+            focus_entry = truncate_excerpt_around_target(focus_sentence, headword, label_text, 160)
             if 0 <= focus_index < len(context_window):
-                context_window[focus_index] = truncate_excerpt(sentence, 160)
+                context_window[focus_index] = focus_entry
             else:
-                context_window.insert(min(len(context_window), 3), truncate_excerpt(sentence, 160))
+                context_window.insert(min(len(context_window), 3), focus_entry)
                 context_window = context_window[:7]
         term_id = f"{'function' if term_kind == 'function_word' else 'content'}::{headword}"
         ref_dedupe_key = (
             normalize_title(title),
-            clean_text(sentence),
+            clean_text(focus_sentence or sentence),
             clean_text(gloss),
             clean_text(headword),
         )
@@ -2203,7 +2308,7 @@ def load_textbook_sections_from_master_tables() -> tuple[list[dict[str, Any]], d
                 "kind": clean_text(str(row.get("kind") or article.get("kind") or "")),
                 "page_start": row.get("page_start_print") if row.get("page_start_print") is not None else article.get("page_start"),
                 "page_end": row.get("page_end_print") if row.get("page_end_print") is not None else article.get("page_end"),
-                "sentence": truncate_excerpt(sentence, 160),
+                "sentence": truncate_excerpt_around_target(focus_sentence or sentence, headword, label_text, 160),
                 "context_window": context_window,
                 "note_block": note_text,
                 "author": clean_text(str(article.get("author") or "")),
@@ -2222,7 +2327,7 @@ def load_textbook_sections_from_master_tables() -> tuple[list[dict[str, Any]], d
                 "match_status": clean_text(str(row.get("match_status") or "")),
                 "match_mode": clean_text(str(row.get("match_mode") or "")),
                 "match_confidence": row.get("match_confidence"),
-                "source_sentence": truncate_excerpt(sentence, 160),
+                "source_sentence": truncate_excerpt_around_target(focus_sentence or sentence, headword, label_text, 160),
                 "md_path": clean_text(str(row.get("md_path") or "")),
                 "middle_path": clean_text(str(row.get("middle_path") or "")),
             }
@@ -2970,7 +3075,35 @@ def build_textbook_question_bank(
             )
             if not correct_gloss or not answer_text:
                 continue
-            focus_text = clean_text(str(ref.get("label_text") or headword or ""))
+            label_text = str(ref.get("label_text") or "")
+            normalized_label = normalize_label_headword(label_text)
+            display_sentence = best_textbook_focus_sentence(
+                str(ref.get("sentence") or ""),
+                list(ref.get("context_window") or []),
+                headword,
+                label_text,
+            )
+            if not textbook_target_in_text(display_sentence, headword, str(ref.get("label_text") or "")):
+                continue
+            if normalized_label and len(normalized_label) > 1 and normalized_label not in compact_hanzi_text(display_sentence):
+                continue
+            focus_text = label_text if normalized_label and normalized_label in compact_hanzi_text(display_sentence) else headword
+            if kind == "content_word" and not textbook_content_target_allowed(
+                headword,
+                label_text,
+                str(ref.get("note_block") or ""),
+                str(ref.get("gloss") or ""),
+                answer_text,
+            ):
+                continue
+            display_context = [
+                truncate_excerpt_around_target(item, headword, label_text, 120)
+                for item in (ref.get("context_window") or [])[:7]
+            ]
+            display_sentence_truncated = truncate_excerpt_around_target(display_sentence, headword, label_text, 120)
+            if display_sentence_truncated and display_sentence_truncated not in display_context:
+                display_context.insert(min(len(display_context), 3), display_sentence_truncated)
+                display_context = display_context[:7]
             if kind == "function_word":
                 pool = build_function_distractor_pool(headword, answer_text, function_usage_catalog, record)
                 variant_sets = build_distractor_variants(pool, f"{term_id}:{index}", 1)
@@ -3025,15 +3158,15 @@ def build_textbook_question_bank(
                             "school_stage": ref.get("school_stage"),
                         },
                         "stem": stem,
-                        "sentence": str(ref.get("sentence") or ""),
-                        "context_window": [truncate_excerpt(item, 120) for item in (ref.get("context_window") or [])[:7]],
+                        "sentence": display_sentence_truncated,
+                        "context_window": display_context,
                         "options": [
                             {
                                 "label": label,
                                 "term_id": term_id,
                                 "headword": headword,
-                                "sentence": str(ref.get("sentence") or "") if kind == "function_word" else "",
-                                "context_window": [truncate_excerpt(item, 120) for item in (ref.get("context_window") or [])[:7]],
+                                "sentence": display_sentence_truncated if kind == "function_word" else "",
+                                "context_window": display_context,
                                 "text": option["text"],
                                 "origin": option["origin"],
                             }
@@ -3043,7 +3176,7 @@ def build_textbook_question_bank(
                 )
                 explanation = (
                     f"{source_label}中，这一处“{focus_text or headword}”的课下注释是“{answer_text}”。 "
-                    f"所在句为“{truncate_excerpt(str(ref.get('sentence') or ''), 100)}”。"
+                    f"所在句为“{truncate_excerpt_around_target(display_sentence or str(ref.get('sentence') or ''), headword, str(ref.get('label_text') or ''), 100)}”。"
                 )
                 if record.get("dict_refs"):
                     explanation += " 辞典参照：" + " ".join(
@@ -3058,7 +3191,7 @@ def build_textbook_question_bank(
                 ][:3]
                 if same_term_support:
                     explanation += " 同词课文参照：" + " ".join(
-                        f"{item.get('title')}“{truncate_excerpt(str(item.get('sentence') or ''), 52)}”。"
+                        f"{item.get('title')}“{truncate_excerpt_around_target(str(item.get('sentence') or ''), headword, str(item.get('label_text') or ''), 52)}”。"
                         for item in same_term_support
                         if clean_text(str(item.get("sentence") or ""))
                     )

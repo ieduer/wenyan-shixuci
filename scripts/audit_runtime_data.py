@@ -33,6 +33,22 @@ DATA_QUALITY_PATHS = [
     RUNTIME_MIRROR_DIR / "data_quality.json",
 ]
 SUSPICIOUS_RUNTIME_TEXT_RE = re.compile(r"(还中午|僅供個人學習使用|仅供个人学习使用|下載|下载|链接|鏈接)")
+TEXTBOOK_TARGET_BAD_RE = re.compile(
+    r"(地名|古地名|在今|今[^。；;，,]{0,16}(?:东|西|南|北|县|市|省|一带)|山名|水名|渡口|都城|国名|郡名|县令|州治|源出|流入长江的地方|一带的人|人名|官名|职官名|職官名|年号|帝号|谥号|匈奴的一个亲王|生卒年不详|(?:春秋|战国|两汉|汉代|唐代|宋代|明代|清代)[^。；;，,]{0,18}(?:人|乐官|大夫|将军|国君|诗人|词人)|部首|复姓|複姓|^姓(?:的支系)?(?:。)?$|^名，姓(?:。)?$)"
+)
+
+
+def compact_hanzi_text(value: str) -> str:
+    return "".join(re.findall(r"[\u4e00-\u9fff]+", clean_text(value)))
+
+
+def textbook_target_in_text(stem: str, sentence: str) -> bool:
+    match = re.search(r"“(.+?)”", clean_text(stem))
+    if not match:
+        return True
+    target = compact_hanzi_text(match.group(1))
+    context = compact_hanzi_text(sentence)
+    return bool(target and context and target in context)
 
 
 def looks_like_public_answer_leak(item: dict[str, Any]) -> bool:
@@ -170,8 +186,26 @@ def answer_key_issue_counts(
                         issue_counts["xuci_sentence_pair"] += 1
             elif question_type == "sentence_meaning" and str(item.get("source_kind") or "") == "textbook":
                 answer_label = clean_text(str(answer_key.get("correct_label") or ""))
+                if not textbook_target_in_text(str(item.get("stem") or ""), str(item.get("sentence") or "")):
+                    issue_counts["textbook_target_missing_from_sentence"] += 1
+                textbook_support = list(answer_key.get("textbook_support") or [])
+                expected_answer = clean_text(str((textbook_support[0] if textbook_support else {}).get("answer_text") or ""))
+                if expected_answer and clean_text(str(answer_key.get("correct_text") or "")) != expected_answer:
+                    issue_counts["textbook_answer_mismatch"] += 1
+                if TEXTBOOK_TARGET_BAD_RE.search(
+                    " ".join(
+                        clean_text(part)
+                        for part in (
+                            str(answer_key.get("correct_text") or ""),
+                            str((textbook_support[0] if textbook_support else {}).get("note_block") or ""),
+                        )
+                    )
+                ):
+                    issue_counts["textbook_nonmeaningful_target"] += 1
                 for option in item.get("options") or []:
                     if clean_text(str(option.get("label") or "")) == answer_label:
+                        if clean_text(str(option.get("origin") or "")) != "textbook_note":
+                            issue_counts["textbook_correct_option_origin"] += 1
                         continue
                     if clean_text(str(option.get("origin") or "")) != "dict_sense":
                         issue_counts["textbook_content_non_dict_distractor"] += 1
