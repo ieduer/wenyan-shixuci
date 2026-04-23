@@ -23,8 +23,12 @@ interface Env {
   ASSET_MAX_BYTES: string;
   TURNSTILE_ENABLED: string;
   TURNSTILE_SITE_KEY: string;
+  GITHUB_FEEDBACK_OWNER?: string;
+  GITHUB_FEEDBACK_REPO?: string;
+  FEEDBACK_MAX_IMAGE_BYTES?: string;
   LOCAL_DEV?: string;
   SIGNING_SECRET?: string;
+  GITHUB_FEEDBACK_TOKEN?: string;
 }
 
 interface UserCenterUser {
@@ -337,6 +341,10 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
     if (method === "GET" && path === "/api/leaderboard") return handleLeaderboard(env, url);
     if (method === "POST" && path === "/api/report/finalize") return handleReportFinalize(request, env);
     if (method === "GET" && path.startsWith("/api/report/")) return handleReportGet(request, env, path.slice("/api/report/".length), url);
+    if (method === "POST" && path === "/api/feedback") return handleFeedbackSubmit(request, env);
+    if ((method === "GET" || method === "HEAD") && path.startsWith("/api/feedback/file/")) {
+      return handleFeedbackFile(request, env, path.slice("/api/feedback/file/".length));
+    }
     return json({ error: "Not found" }, 404);
   } catch (error) {
     console.error("api error", error);
@@ -1000,6 +1008,125 @@ async function handleReportGet(request: Request, env: Env, reportId: string, url
     `attachment; filename="${format === "markdown" ? `${reportId}.md` : `${reportId}.json`}"`
   );
   return new Response(object.body, { headers });
+}
+
+async function handleFeedbackSubmit(request: Request, env: Env): Promise<Response> {
+  const sessionState = await ensureAnonSession(request, env);
+  const auth = await getAuthContext(request, env);
+  const owner = await resolveOwnerSession(env, sessionState, auth?.user || null);
+  const origin = new URL(request.url).origin;
+  const ipRaw = cleanString(request.headers.get("CF-Connecting-IP") || request.headers.get("x-forwarded-for"), 200);
+  const ipHash = ipRaw ? await sha256Hex(`feedback:${ipRaw}`) : "";
+  if (!(await enforceFeedbackSubmitRateLimit(env, owner.ownerId, auth?.user?.slug || "", ipHash))) {
+    return json({ error: "Feedback rate limit exceeded" }, 429);
+  }
+
+  const form = await request.formData();
+  const challengeId = formString(form, "challengeId", 200);
+  const stem = formString(form, "stem", 2000);
+  const message = formString(form, "message", 4000);
+  if (!challengeId || !stem || !message) {
+    return json({ error: "challengeId, stem, and message are required" }, 400);
+  }
+
+  const anonymous = formBoolean(form, "anonymous");
+  const requestedReporter = formString(form, "reporterName", 80);
+  const reporterName =
+    anonymous
+      ? "匿名"
+      : requestedReporter || cleanInlineText(auth?.user?.displayName || auth?.user?.slug || sessionState.alias || "匿名");
+
+  const feedbackId = crypto.randomUUID();
+  const screenshotFile = asUploadedFile(form.get("screenshot"));
+  let screenshotUrl = "";
+  let screenshotKey = "";
+  if (screenshotFile && Number(screenshotFile.size || 0) > 0) {
+    const maxImageBytes = clampNumber(Number(env.FEEDBACK_MAX_IMAGE_BYTES || 8 * 1024 * 1024), 1024, 25 * 1024 * 1024);
+    if (!screenshotFile.type.startsWith("image/")) {
+      return json({ error: "Screenshot must be an image" }, 400);
+    }
+    if (Number(screenshotFile.size || 0) > maxImageBytes) {
+      return json({ error: `Screenshot exceeds ${maxImageBytes} bytes` }, 400);
+    }
+    const extension = imageExtensionForMime(screenshotFile.type);
+    const filename = `screenshot.${extension}`;
+    screenshotKey = `feedback/${feedbackId}/${filename}`;
+    await env.REPORTS.put(screenshotKey, await screenshotFile.arrayBuffer(), {
+      httpMetadata: {
+        contentType: screenshotFile.type,
+        cacheControl: "public, max-age=31536000, immutable",
+        contentDisposition: `inline; filename="${filename}"`,
+      },
+    });
+    screenshotUrl = `${origin}/api/feedback/file/${feedbackId}/${filename}`;
+  }
+
+  try {
+    const issueTitle = buildFeedbackIssueTitle(formString(form, "sourceLabel", 160), stem, challengeId);
+    const issueBody = buildFeedbackIssueBody({
+      reporterName,
+      anonymous,
+      challengeId,
+      kind: formString(form, "kind", 40),
+      questionType: formString(form, "questionType", 80),
+      termId: formString(form, "termId", 160),
+      sourceKind: formString(form, "sourceKind", 40),
+      sourceLabel: formString(form, "sourceLabel", 160),
+      sourceTitle: formString(form, "sourceTitle", 240),
+      stem,
+      sentence: formString(form, "sentence", 4000),
+      passage: formString(form, "passage", 8000),
+      contextWindow: safeParseStringArray(form.get("contextWindow")),
+      correctLabel: formString(form, "correctLabel", 8),
+      correctText: formString(form, "correctText", 500),
+      explanation: formString(form, "explanation", 6000),
+      optionAnalyses: safeParseFeedbackAnalyses(form.get("optionAnalyses")),
+      message,
+      pageUrl: formString(form, "pageUrl", 500),
+      screenshotUrl,
+    });
+    const issue = await createGitHubIssue(env, issueTitle, issueBody);
+    await logAbuseEvent(env, owner.ownerId, auth?.user?.slug || "", ipHash, "feedback_submit", {
+      challengeId,
+      issueNumber: issue.number,
+      sourceLabel: formString(form, "sourceLabel", 160),
+    });
+    return json(
+      {
+        ok: true,
+        feedbackId,
+        issue,
+        screenshotUrl,
+      },
+      200
+    );
+  } catch (error) {
+    if (screenshotKey) {
+      await env.REPORTS.delete(screenshotKey).catch(() => null);
+    }
+    throw error;
+  }
+}
+
+async function handleFeedbackFile(request: Request, env: Env, tail: string): Promise<Response> {
+  const [feedbackId, ...filenameParts] = tail.split("/").filter(Boolean);
+  const filename = sanitizeFilename(filenameParts.join("/"));
+  if (!feedbackId || !filename) {
+    return json({ error: "Not found" }, 404);
+  }
+  const key = `feedback/${feedbackId}/${filename}`;
+  const object = await env.REPORTS.get(key);
+  if (!object) {
+    return json({ error: "Not found" }, 404);
+  }
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  headers.set("Content-Disposition", `inline; filename="${filename}"`);
+  if (object.httpEtag) {
+    headers.set("ETag", object.httpEtag);
+  }
+  return new Response(request.method.toUpperCase() === "HEAD" ? null : object.body, { headers });
 }
 
 async function buildExistingReportResponse(
@@ -2350,6 +2477,30 @@ async function enforceRateLimit(env: Env, sessionId: string, authSubject: string
   return false;
 }
 
+async function enforceFeedbackSubmitRateLimit(
+  env: Env,
+  sessionId: string,
+  authSubject: string,
+  ipHash: string
+): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT COUNT(*) AS c
+     FROM abuse_events
+     WHERE event_type = 'feedback_submit'
+       AND (
+         session_id = ?
+         OR (? <> '' AND ip_hash = ?)
+       )
+       AND created_at >= datetime('now', '-60 minutes')`
+  )
+    .bind(sessionId, ipHash, ipHash)
+    .first<Record<string, unknown>>();
+  const count = Number(row?.c || 0);
+  if (count < 10) return true;
+  await logAbuseEvent(env, sessionId, authSubject, ipHash, "feedback_rate_limit", { count });
+  return false;
+}
+
 async function logAbuseEvent(
   env: Env,
   sessionId: string,
@@ -2447,6 +2598,201 @@ function safeParseObject(input: unknown): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function safeParseStringArray(input: unknown): string[] {
+  if (!input) return [];
+  if (Array.isArray(input)) {
+    return input.map((item) => cleanInlineText(item)).filter(Boolean);
+  }
+  if (typeof input !== "string") return [];
+  try {
+    const parsed = JSON.parse(input) as unknown;
+    return Array.isArray(parsed) ? parsed.map((item) => cleanInlineText(item)).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function safeParseFeedbackAnalyses(
+  input: unknown
+): Array<{ label: string; text: string; is_correct: boolean; analysis: string }> {
+  if (!input || typeof input !== "string") return [];
+  try {
+    const parsed = JSON.parse(input) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        const row = item as Record<string, unknown>;
+        return {
+          label: cleanInlineText(row.label),
+          text: cleanInlineText(row.text),
+          is_correct: Boolean(row.is_correct),
+          analysis: cleanInlineText(row.analysis),
+        };
+      })
+      .filter((item) => item.label || item.text || item.analysis);
+  } catch {
+    return [];
+  }
+}
+
+function formString(form: FormData, key: string, maxLength: number): string {
+  const value = form.get(key);
+  return typeof value === "string" ? cleanString(value, maxLength) : "";
+}
+
+function formBoolean(form: FormData, key: string): boolean {
+  const value = form.get(key);
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function asUploadedFile(
+  value: unknown
+): { size: number; type: string; arrayBuffer: () => Promise<ArrayBuffer> } | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.arrayBuffer === "function" && typeof candidate.type === "string"
+    ? {
+        size: Number(candidate.size || 0),
+        type: String(candidate.type || ""),
+        arrayBuffer: () => (candidate.arrayBuffer as () => Promise<ArrayBuffer>)(),
+      }
+    : null;
+}
+
+function cleanInlineText(value: unknown): string {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function imageExtensionForMime(mime: string): string {
+  const normalized = cleanInlineText(mime).toLowerCase();
+  if (normalized === "image/jpeg" || normalized === "image/jpg") return "jpg";
+  if (normalized === "image/webp") return "webp";
+  if (normalized === "image/gif") return "gif";
+  if (normalized === "image/svg+xml") return "svg";
+  return "png";
+}
+
+function sanitizeFilename(value: string): string {
+  return cleanInlineText(decodeURIComponent(value || "")).replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 120);
+}
+
+function buildFeedbackIssueTitle(sourceLabel: string, stem: string, challengeId: string): string {
+  const source = cleanInlineText(sourceLabel) || "題目";
+  const stemSnippet = cleanInlineText(stem).slice(0, 56);
+  return `[題目反饋] ${source} · ${stemSnippet || challengeId || "未命名題目"}`;
+}
+
+function buildFeedbackIssueBody(input: {
+  reporterName: string;
+  anonymous: boolean;
+  challengeId: string;
+  kind: string;
+  questionType: string;
+  termId: string;
+  sourceKind: string;
+  sourceLabel: string;
+  sourceTitle: string;
+  stem: string;
+  sentence: string;
+  passage: string;
+  contextWindow: string[];
+  correctLabel: string;
+  correctText: string;
+  explanation: string;
+  optionAnalyses: Array<{ label: string; text: string; is_correct: boolean; analysis: string }>;
+  message: string;
+  pageUrl: string;
+  screenshotUrl: string;
+}): string {
+  const contextBlock = input.contextWindow.length
+    ? input.contextWindow.map((line) => `- ${line}`).join("\n")
+    : "- （無）";
+  const optionBlock = input.optionAnalyses.length
+    ? input.optionAnalyses
+        .map(
+          (item) =>
+            `- ${item.label || "?"} ${item.text || ""}${item.is_correct ? " [正解]" : ""}\n  - ${item.analysis || "（無解析）"}`
+        )
+        .join("\n")
+    : "- （無）";
+  const screenshotBlock = input.screenshotUrl
+    ? `\n## 截圖\n\n[打開截圖](${input.screenshotUrl})\n\n![](${input.screenshotUrl})\n`
+    : "";
+  return `## 用戶反饋
+
+- 反饋人：${input.reporterName}${input.anonymous ? "（匿名）" : ""}
+- challenge_id：${input.challengeId}
+- 詞類：${input.kind}
+- 題型：${input.questionType}
+- term_id：${input.termId}
+- 題源類型：${input.sourceKind}
+- 題源標籤：${input.sourceLabel || "（無）"}
+- 題源篇目：${input.sourceTitle || "（無）"}
+- 回報頁面：${input.pageUrl || "（無）"}
+
+## 問題描述
+
+${input.message}
+
+## 題幹
+
+${input.stem}
+
+## 原句 / 片段
+
+${input.sentence || input.passage || "（無）"}
+
+## 上下文
+
+${contextBlock}
+
+## 正解與解析
+
+- 正解：${input.correctLabel || "（無）"} ${input.correctText || ""}
+- 總解析：${input.explanation || "（無）"}
+
+## 選項逐項解析
+
+${optionBlock}${screenshotBlock}
+`;
+}
+
+async function createGitHubIssue(
+  env: Env,
+  title: string,
+  body: string
+): Promise<{ number: number; html_url: string }> {
+  const owner = cleanInlineText(env.GITHUB_FEEDBACK_OWNER);
+  const repo = cleanInlineText(env.GITHUB_FEEDBACK_REPO);
+  const token = cleanInlineText(env.GITHUB_FEEDBACK_TOKEN);
+  if (!owner || !repo || !token) {
+    throw new Error("GitHub feedback integration is not configured");
+  }
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues`, {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "User-Agent": "wenyan-shixuci-feedback",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify({ title, body }),
+  });
+  const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!response.ok) {
+    throw new Error(
+      cleanInlineText(payload?.message) || `GitHub issue creation failed with ${response.status}`
+    );
+  }
+  return {
+    number: Number(payload?.number || 0),
+    html_url: cleanInlineText(payload?.html_url),
+  };
 }
 
 function json(payload: unknown, status = 200): Response {

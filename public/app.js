@@ -18,6 +18,7 @@ const state = {
   roundComplete: null,
   player: null,
   leaderboard: null,
+  feedbackSubmitting: false,
 };
 
 const els = {
@@ -32,6 +33,17 @@ const els = {
   roundFraction: document.querySelector("#round-fraction"),
   roundGoal: document.querySelector("#round-goal"),
   themeSelect: document.querySelector("#theme-select"),
+  feedbackModal: document.querySelector("#feedback-modal"),
+  feedbackForm: document.querySelector("#feedback-form"),
+  feedbackPromptMeta: document.querySelector("#feedback-prompt-meta"),
+  feedbackAnonymous: document.querySelector("#feedback-anonymous"),
+  feedbackName: document.querySelector("#feedback-name"),
+  feedbackMessage: document.querySelector("#feedback-message"),
+  feedbackScreenshot: document.querySelector("#feedback-screenshot"),
+  feedbackStatus: document.querySelector("#feedback-status"),
+  feedbackClose: document.querySelector("#feedback-close"),
+  feedbackCancel: document.querySelector("#feedback-cancel"),
+  feedbackSubmit: document.querySelector("#feedback-submit"),
 };
 
 document.querySelectorAll("[data-kind]").forEach((button) => {
@@ -59,6 +71,7 @@ async function boot() {
       mobileInsetSide: 12,
     });
   }
+  initFeedbackModal();
   await refreshBootstrap();
   renderShell();
 }
@@ -260,6 +273,9 @@ function renderQuestion() {
   els.questionRoot.querySelector("#continue-btn")?.addEventListener("click", () => {
     void loadNextQuestion();
   });
+  els.questionRoot.querySelector("#feedback-btn")?.addEventListener("click", () => {
+    openFeedbackModal();
+  });
   els.questionRoot.querySelector("#redo-mistakes-btn")?.addEventListener("click", () => {
     void startChallenge(state.kind, "review", state.run?.id || "");
   });
@@ -307,9 +323,10 @@ function renderAnalysisCard() {
           : ""
       }
       ${
-        !state.roundComplete
-          ? `<div class="analysis-actions"><button id="continue-btn" class="next-round-btn" type="button">下一題</button></div>`
-          : ""
+        `<div class="analysis-actions">
+          <button id="feedback-btn" class="ghost-btn" type="button">問題反饋</button>
+          ${!state.roundComplete ? `<button id="continue-btn" class="next-round-btn" type="button">下一題</button>` : ""}
+        </div>`
       }
     </section>
   `;
@@ -602,13 +619,185 @@ function compactText(value) {
   return cleanInline(value).replace(/\s+/g, "");
 }
 
+function initFeedbackModal() {
+  els.feedbackClose?.addEventListener("click", closeFeedbackModal);
+  els.feedbackCancel?.addEventListener("click", closeFeedbackModal);
+  els.feedbackAnonymous?.addEventListener("change", syncFeedbackReporterState);
+  els.feedbackForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void submitFeedback();
+  });
+  els.feedbackModal?.addEventListener("click", (event) => {
+    if (event.target === els.feedbackModal) {
+      closeFeedbackModal();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !els.feedbackModal?.hidden) {
+      closeFeedbackModal();
+    }
+  });
+}
+
+function openFeedbackModal() {
+  if (!state.currentItem?.prompt || !state.answerCard || !els.feedbackModal) return;
+  els.feedbackForm?.reset();
+  const defaultName = defaultReporterName();
+  if (els.feedbackName) {
+    els.feedbackName.value = defaultName;
+  }
+  if (els.feedbackAnonymous) {
+    els.feedbackAnonymous.checked = !defaultName;
+  }
+  const sourceLabel = state.currentItem.prompt.sourceLabel || kindLabel(state.kind);
+  const stem = cleanInline(state.currentItem.prompt.stem || "");
+  if (els.feedbackPromptMeta) {
+    els.feedbackPromptMeta.textContent = `${sourceLabel} · ${stem}`;
+  }
+  setFeedbackStatus("");
+  syncFeedbackReporterState();
+  els.feedbackModal.hidden = false;
+  document.body.classList.add("modal-open");
+  els.feedbackMessage?.focus();
+}
+
+function closeFeedbackModal() {
+  if (!els.feedbackModal) return;
+  els.feedbackModal.hidden = true;
+  document.body.classList.remove("modal-open");
+  state.feedbackSubmitting = false;
+  if (els.feedbackSubmit) {
+    els.feedbackSubmit.disabled = false;
+  }
+}
+
+function syncFeedbackReporterState() {
+  const anonymous = Boolean(els.feedbackAnonymous?.checked);
+  if (els.feedbackName) {
+    els.feedbackName.disabled = anonymous;
+    if (anonymous) {
+      els.feedbackName.value = "";
+    } else if (!els.feedbackName.value) {
+      els.feedbackName.value = defaultReporterName();
+    }
+  }
+}
+
+function defaultReporterName() {
+  const user = state.bootstrap?.auth?.user;
+  return cleanInline(user?.displayName || user?.slug || "");
+}
+
+function currentFeedbackPayload() {
+  const prompt = state.currentItem?.prompt;
+  const answerCard = state.answerCard;
+  if (!prompt || !answerCard) return null;
+  return {
+    challengeId: prompt.challengeId || "",
+    kind: prompt.kind || state.kind || "",
+    questionType: prompt.questionType || "",
+    termId: prompt.termId || "",
+    sourceKind: prompt.sourceKind || "",
+    sourceLabel: prompt.sourceLabel || "",
+    sourceTitle: prompt.sourceTitle || "",
+    stem: prompt.stem || "",
+    sentence: prompt.sentence || "",
+    passage: prompt.passage || "",
+    contextWindow: JSON.stringify(prompt.contextWindow || []),
+    correctLabel: answerCard.correct_label || "",
+    correctText: answerCard.correct_text || "",
+    explanation: answerCard.explanation || "",
+    optionAnalyses: JSON.stringify(answerCard.option_analyses || []),
+    pageUrl: window.location.href,
+  };
+}
+
+async function submitFeedback() {
+  if (state.feedbackSubmitting) return;
+  const payload = currentFeedbackPayload();
+  if (!payload) {
+    setFeedbackStatus("當前題目資料不足，暫時無法提交。", "error");
+    return;
+  }
+  const message = cleanInline(els.feedbackMessage?.value || "");
+  if (!message) {
+    setFeedbackStatus("請先寫明這道題的問題。", "error");
+    els.feedbackMessage?.focus();
+    return;
+  }
+  const file = els.feedbackScreenshot?.files?.[0] || null;
+  if (file && (!file.type.startsWith("image/") || file.size > 8 * 1024 * 1024)) {
+    setFeedbackStatus("截圖需為圖片，且不能超過 8 MB。", "error");
+    return;
+  }
+
+  const formData = new FormData();
+  Object.entries(payload).forEach(([key, value]) => {
+    formData.append(key, value);
+  });
+  const anonymous = Boolean(els.feedbackAnonymous?.checked);
+  formData.append("anonymous", anonymous ? "1" : "0");
+  formData.append("reporterName", cleanInline(els.feedbackName?.value || ""));
+  formData.append("message", els.feedbackMessage?.value || "");
+  if (file) {
+    formData.append("screenshot", file, file.name || "feedback-image");
+  }
+
+  try {
+    state.feedbackSubmitting = true;
+    if (els.feedbackSubmit) {
+      els.feedbackSubmit.disabled = true;
+    }
+    setFeedbackStatus("正在提交到 GitHub…");
+    const result = await api("/api/feedback", {
+      method: "POST",
+      body: formData,
+    });
+    const issue = result?.issue;
+    const issueLabel = issue?.number ? `#${issue.number}` : "issue";
+    const issueUrl = issue?.html_url || "";
+    setFeedbackStatus(
+      issueUrl ? `已提交到 GitHub ${issueLabel}` : "已提交到 GitHub。",
+      "success",
+      issueUrl
+    );
+    if (els.feedbackMessage) {
+      els.feedbackMessage.value = "";
+    }
+    if (els.feedbackScreenshot) {
+      els.feedbackScreenshot.value = "";
+    }
+  } catch (error) {
+    console.error(error);
+    setFeedbackStatus(error.message || String(error), "error");
+  } finally {
+    state.feedbackSubmitting = false;
+    if (els.feedbackSubmit) {
+      els.feedbackSubmit.disabled = false;
+    }
+  }
+}
+
+function setFeedbackStatus(message, tone = "", link = "") {
+  if (!els.feedbackStatus) return;
+  els.feedbackStatus.className = `feedback-status ${tone}`.trim();
+  if (!message) {
+    els.feedbackStatus.textContent = "";
+    return;
+  }
+  els.feedbackStatus.innerHTML = link
+    ? `${escapeHtml(message)} <a href="${escapeAttr(link)}" target="_blank" rel="noopener noreferrer">打開 Issue</a>`
+    : escapeHtml(message);
+}
+
 async function api(url, init = {}) {
+  const headers = new Headers(init.headers || {});
+  if (!(init.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
   const response = await fetch(url, {
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init.headers || {}),
-    },
+    headers,
     ...init,
   });
   const payload = await response.json().catch(() => ({}));

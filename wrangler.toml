@@ -18,6 +18,9 @@ USER_CENTER_SESSION_ENDPOINT = "https://my.bdfz.net/api/session"
 ASSET_MAX_BYTES = "26214400"
 TURNSTILE_ENABLED = "0"
 TURNSTILE_SITE_KEY = ""
+GITHUB_FEEDBACK_OWNER = "ieduer"
+GITHUB_FEEDBACK_REPO = "wenyan-shixuci"
+FEEDBACK_MAX_IMAGE_BYTES = "8388608"
 
 [[d1_databases]]
 binding = "DB"

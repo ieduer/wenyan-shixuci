@@ -69,5 +69,48 @@
         </aside>
       </section>
     </main>
+
+    <div class="feedback-modal" id="feedback-modal" hidden>
+      <div class="feedback-dialog">
+        <div class="feedback-dialog-head">
+          <div>
+            <strong>題目問題反饋</strong>
+            <p id="feedback-prompt-meta">把這道題的問題直接提交到 GitHub。</p>
+          </div>
+          <button id="feedback-close" class="feedback-close" type="button" aria-label="關閉">×</button>
+        </div>
+        <form id="feedback-form" class="feedback-form">
+          <label class="feedback-field feedback-anon-row">
+            <span>匿名提交</span>
+            <input id="feedback-anonymous" name="anonymous" type="checkbox" />
+          </label>
+          <label class="feedback-field">
+            <span>顯示名稱</span>
+            <input id="feedback-name" name="reporterName" type="text" maxlength="80" placeholder="匿名" />
+          </label>
+          <label class="feedback-field">
+            <span>這道題有什麼問題？</span>
+            <textarea
+              id="feedback-message"
+              name="message"
+              rows="6"
+              maxlength="4000"
+              placeholder="例如：正確答案有誤、選項不成立、出處不對、解析有無關內容、考察詞不在題幹內。"
+              required
+            ></textarea>
+          </label>
+          <label class="feedback-field">
+            <span>截圖上傳</span>
+            <input id="feedback-screenshot" name="screenshot" type="file" accept="image/*" />
+            <em>支持 PNG / JPG / WebP / GIF，單張不超過 8 MB。</em>
+          </label>
+          <p class="feedback-status" id="feedback-status" aria-live="polite"></p>
+          <div class="feedback-actions">
+            <button id="feedback-cancel" class="ghost-btn" type="button">取消</button>
+            <button id="feedback-submit" class="next-round-btn" type="submit">提交到 GitHub</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </body>
 </html>
