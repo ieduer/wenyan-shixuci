@@ -1,0 +1,46 @@
+name: WY source candidate
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/wy-source-candidate.yml"
+      - ".nvmrc"
+      - "contracts/wy-server-graded-practice-v1.json"
+      - "docs/OPERATIONS.md"
+      - "migrations/0100_wy_server_graded_practice_candidate_v1.sql"
+      - "PROJECT_STATE.md"
+      - "src/wy-server-graded-practice-v1.ts"
+      - "src/generated/answer_keys.json"
+      - "tests/wy-server-graded-practice-v1.test.mjs"
+      - "package-lock.json"
+      - "package.json"
+      - "tsconfig.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-candidate:
+    name: Node ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version:
+          - 22.21.1
+          - 24.18.0
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Use exact Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Type-check Worker source
+        run: ./node_modules/.bin/tsc --noEmit
+      - name: Run hostile candidate tests
+        run: node --experimental-strip-types --test tests/wy-server-graded-practice-v1.test.mjs
