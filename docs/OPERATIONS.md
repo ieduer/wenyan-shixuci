@@ -123,6 +123,10 @@ binding, server answer-key grading, and immutable positive User Center user-id
 resolution. The envelope excludes submitted/correct answers, token, cookie,
 session, slug, names, class, grade, and weight. Same attempt plus same bytes is
 idempotent; changed bytes are quarantined without overwriting the first record.
+The candidate schema rejects `INSERT OR REPLACE` and UPSERT collisions before
+SQLite conflict handling can bypass append-only history, including when
+`recursive_triggers` is disabled. Concurrent identical commits resolve through
+readback to one inserted record plus idempotent replay.
 
 All candidate records remain `pending_mapping`, and candidate health always
 reports `blocked`. Activation remains forbidden until all of the following have

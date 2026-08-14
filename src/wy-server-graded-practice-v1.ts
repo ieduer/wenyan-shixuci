@@ -170,6 +170,15 @@ interface StoredOutboxRow {
   created_at: string;
 }
 
+interface StoredConflictRow {
+  conflict_id: string;
+  delivery_key: string;
+  source_attempt_id: string;
+  existing_payload_hash: string;
+  rejected_payload_hash: string;
+  rejection_code: string;
+}
+
 export class WyPracticeContractError extends Error {
   readonly code: string;
 
@@ -407,76 +416,126 @@ export class WyPracticeD1Store implements WyServerGradedAttemptLoader, WyPractic
   }
 
   async commitCandidate(record: WyPracticeCandidateRecord): Promise<WyPracticeCandidateCommit> {
-    const insertion = await this.db.prepare(
-      `INSERT OR IGNORE INTO wy_practice_evidence_outbox (
-         delivery_key, source_event_id, source_attempt_id, source_release_id,
-         contract_version, canonical_unit_id, resource_version, payload_hash,
-         envelope_json, delivery_status, occurred_at, academic_year, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_mapping', ?, ?, ?, ?)`,
-    ).bind(
-      record.deliveryKey,
-      record.sourceEventId,
-      record.sourceAttemptId,
-      record.sourceReleaseId,
-      record.contractVersion,
-      record.canonicalUnitId,
-      record.resourceVersion,
-      record.payloadHash,
-      record.envelopeJson,
-      record.occurredAt,
-      record.academicYear,
-      record.createdAt,
-      record.createdAt,
-    ).run();
-    const row = await this.db.prepare(
+    const readStored = async (): Promise<StoredOutboxRow | null> => this.db.prepare(
       `SELECT delivery_key, source_event_id, source_attempt_id, source_release_id,
               contract_version, canonical_unit_id, resource_version, payload_hash,
               envelope_json, occurred_at, academic_year, created_at
          FROM wy_practice_evidence_outbox
-        WHERE delivery_key = ? OR source_attempt_id = ?
+        WHERE delivery_key = ? OR source_event_id = ? OR source_attempt_id = ?
         ORDER BY CASE WHEN delivery_key = ? THEN 0 ELSE 1 END
         LIMIT 1`,
-    ).bind(record.deliveryKey, record.sourceAttemptId, record.deliveryKey).first<StoredOutboxRow>();
-    if (!row) throw new WyPracticeContractError('outbox_commit_readback_missing');
-    const stored = recordFromRow(row);
-    const same = stored.deliveryKey === record.deliveryKey
-      && stored.sourceEventId === record.sourceEventId
-      && stored.sourceAttemptId === record.sourceAttemptId
-      && stored.payloadHash === record.payloadHash
-      && stored.envelopeJson === record.envelopeJson;
-    if (same) {
-      return Number(insertion.meta?.changes || 0) > 0
-        ? { kind: 'inserted', record: stored }
-        : { kind: 'replay', record: stored };
-    }
-    const conflictId = `wy_conflict_sha256_${await sha256Hex({
-      deliveryKey: record.deliveryKey,
-      sourceAttemptId: record.sourceAttemptId,
-      existingDeliveryKey: stored.deliveryKey,
-      existingPayloadHash: stored.payloadHash,
-      rejectedPayloadHash: record.payloadHash,
-    })}`;
-    await this.db.prepare(
-      `INSERT OR IGNORE INTO wy_practice_evidence_conflicts (
-         conflict_id, delivery_key, source_attempt_id, existing_payload_hash,
-         rejected_payload_hash, rejection_code, observed_at
-       ) VALUES (?, ?, ?, ?, ?, 'immutable_attempt_payload_conflict', ?)`,
     ).bind(
-      conflictId,
-      stored.deliveryKey,
+      record.deliveryKey,
+      record.sourceEventId,
       record.sourceAttemptId,
-      stored.payloadHash,
-      record.payloadHash,
-      record.createdAt,
-    ).run();
-    return {
-      kind: 'conflict',
-      deliveryKey: stored.deliveryKey,
-      sourceAttemptId: record.sourceAttemptId,
-      existingPayloadHash: stored.payloadHash,
-      rejectedPayloadHash: record.payloadHash,
-      conflictId,
+      record.deliveryKey,
+    ).first<StoredOutboxRow>();
+
+    const classify = async (
+      row: StoredOutboxRow,
+      inserted: boolean,
+    ): Promise<WyPracticeCandidateCommit> => {
+      const stored = recordFromRow(row);
+      const same = stored.deliveryKey === record.deliveryKey
+        && stored.sourceEventId === record.sourceEventId
+        && stored.sourceAttemptId === record.sourceAttemptId
+        && stored.payloadHash === record.payloadHash
+        && stored.envelopeJson === record.envelopeJson;
+      if (same) {
+        return inserted
+          ? { kind: 'inserted', record: stored }
+          : { kind: 'replay', record: stored };
+      }
+      const conflictId = `wy_conflict_sha256_${await sha256Hex({
+        deliveryKey: record.deliveryKey,
+        sourceAttemptId: record.sourceAttemptId,
+        existingDeliveryKey: stored.deliveryKey,
+        existingPayloadHash: stored.payloadHash,
+        rejectedPayloadHash: record.payloadHash,
+      })}`;
+      const readConflict = async (): Promise<StoredConflictRow | null> => this.db.prepare(
+        `SELECT conflict_id, delivery_key, source_attempt_id, existing_payload_hash,
+                rejected_payload_hash, rejection_code
+           FROM wy_practice_evidence_conflicts
+          WHERE conflict_id = ?`,
+      ).bind(conflictId).first<StoredConflictRow>();
+      let conflict = await readConflict();
+      if (!conflict) {
+        try {
+          await this.db.prepare(
+            `INSERT INTO wy_practice_evidence_conflicts (
+               conflict_id, delivery_key, source_attempt_id, existing_payload_hash,
+               rejected_payload_hash, rejection_code, observed_at
+             ) VALUES (?, ?, ?, ?, ?, 'immutable_attempt_payload_conflict', ?)`,
+          ).bind(
+            conflictId,
+            stored.deliveryKey,
+            record.sourceAttemptId,
+            stored.payloadHash,
+            record.payloadHash,
+            record.createdAt,
+          ).run();
+        } catch (error) {
+          conflict = await readConflict();
+          if (!conflict) throw error;
+        }
+        conflict = conflict || await readConflict();
+      }
+      if (
+        !conflict
+        || conflict.delivery_key !== stored.deliveryKey
+        || conflict.source_attempt_id !== record.sourceAttemptId
+        || conflict.existing_payload_hash !== stored.payloadHash
+        || conflict.rejected_payload_hash !== record.payloadHash
+        || conflict.rejection_code !== 'immutable_attempt_payload_conflict'
+      ) throw new WyPracticeContractError('conflict_audit_readback_mismatch');
+      return {
+        kind: 'conflict',
+        deliveryKey: stored.deliveryKey,
+        sourceAttemptId: record.sourceAttemptId,
+        existingPayloadHash: stored.payloadHash,
+        rejectedPayloadHash: record.payloadHash,
+        conflictId,
+      };
     };
+
+    const existing = await readStored();
+    if (existing) return classify(existing, false);
+
+    let insertion: D1RunResultLike;
+    try {
+      insertion = await this.db.prepare(
+        `INSERT INTO wy_practice_evidence_outbox (
+           delivery_key, source_event_id, source_attempt_id, source_release_id,
+           contract_version, canonical_unit_id, resource_version, payload_hash,
+           envelope_json, delivery_status, occurred_at, academic_year, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_mapping', ?, ?, ?, ?)`,
+      ).bind(
+        record.deliveryKey,
+        record.sourceEventId,
+        record.sourceAttemptId,
+        record.sourceReleaseId,
+        record.contractVersion,
+        record.canonicalUnitId,
+        record.resourceVersion,
+        record.payloadHash,
+        record.envelopeJson,
+        record.occurredAt,
+        record.academicYear,
+        record.createdAt,
+        record.createdAt,
+      ).run();
+    } catch (error) {
+      const raced = await readStored();
+      if (!raced) throw error;
+      return classify(raced, false);
+    }
+    if (Number(insertion.meta?.changes || 0) !== 1) {
+      throw new WyPracticeContractError('outbox_commit_changes_invalid');
+    }
+    const inserted = await readStored();
+    if (!inserted) throw new WyPracticeContractError('outbox_commit_readback_missing');
+    return classify(inserted, true);
   }
 
   async readHealthCounts(): Promise<WyPracticeHealthCounts> {

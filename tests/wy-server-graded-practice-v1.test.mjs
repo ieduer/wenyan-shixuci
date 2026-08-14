@@ -280,6 +280,94 @@ test('candidate migration is additive, idempotent and append-only', () => {
   database.close();
 });
 
+test('append-only facts reject REPLACE and UPSERT bypasses with recursive triggers disabled', async () => {
+  const original = validAttempt();
+  const { database, store, service } = sqliteHarness(original);
+  database.exec('PRAGMA recursive_triggers=OFF');
+  await service.commitCandidate({ sourceAttemptId: original.source_attempt_id });
+
+  assert.throws(
+    () => database.exec(
+      `INSERT OR REPLACE INTO wy_practice_candidate_releases (
+         source_release_id, contract_version, adapter_class, source_catalog_digest,
+         answer_keys_file_digest, catalog_item_count, mapping_disposition,
+         activation_allowed, runtime_scoring_active, created_at
+       )
+       SELECT source_release_id, contract_version, adapter_class,
+              'sha256:hostile-release-replacement', answer_keys_file_digest,
+              catalog_item_count, mapping_disposition, activation_allowed,
+              runtime_scoring_active, created_at
+         FROM wy_practice_candidate_releases
+        WHERE source_release_id='wy-practice-0542ad12cb1babb6'`,
+    ),
+    /wy_practice_candidate_release_immutable/,
+  );
+  assert.throws(
+    () => database.exec(
+      `INSERT OR REPLACE INTO wy_practice_server_attempts
+       SELECT source_attempt_id, uc_user_id, challenge_id, kind, question_type,
+              0, attempt_no, answered_at, answer_token_binding_verified,
+              grading_authority, resource_version, created_at
+         FROM wy_practice_server_attempts
+        WHERE source_attempt_id='wy-attempt:test-00000001'`,
+    ),
+    /wy_practice_server_attempt_immutable/,
+  );
+  assert.throws(
+    () => database.exec(
+      `INSERT INTO wy_practice_server_attempts
+       SELECT * FROM wy_practice_server_attempts
+        WHERE source_attempt_id='wy-attempt:test-00000001'
+       ON CONFLICT(source_attempt_id) DO UPDATE SET correct=0`,
+    ),
+    /wy_practice_server_attempt_immutable/,
+  );
+  assert.throws(
+    () => database.exec(
+      `INSERT OR REPLACE INTO wy_practice_evidence_outbox
+       SELECT delivery_key, source_event_id, source_attempt_id, source_release_id,
+              contract_version, canonical_unit_id, resource_version,
+              '${'b'.repeat(64)}', envelope_json, delivery_status, sink_receipt_id,
+              last_error_code, delivery_attempts, occurred_at, academic_year,
+              created_at, updated_at
+         FROM wy_practice_evidence_outbox
+        WHERE source_attempt_id='wy-attempt:test-00000001'`,
+    ),
+    /wy_practice_evidence_identity_immutable/,
+  );
+
+  const changedLoader = {
+    async loadServerGradedAttempt() {
+      return validAttempt({ correct: 0 });
+    },
+  };
+  const changedService = new WyServerGradedPracticeCandidate({
+    loader: changedLoader,
+    outbox: store,
+    catalog: verifiedCatalog,
+    now: () => NOW,
+  });
+  const conflict = await changedService.commitCandidate({
+    sourceAttemptId: original.source_attempt_id,
+  });
+  assert.equal(conflict.status, 'quarantined');
+  const storedConflictId = database.prepare(
+    'SELECT conflict_id FROM wy_practice_evidence_conflicts LIMIT 1',
+  ).get().conflict_id;
+  assert.match(storedConflictId, /^wy_conflict_sha256_[a-f0-9]{64}$/);
+  assert.throws(
+    () => database.prepare(
+      `INSERT OR REPLACE INTO wy_practice_evidence_conflicts
+       SELECT conflict_id, delivery_key, source_attempt_id, existing_payload_hash,
+              rejected_payload_hash, rejection_code, '2026-09-03T00:00:00.000Z'
+         FROM wy_practice_evidence_conflicts
+        WHERE conflict_id=?`,
+    ).run(storedConflictId),
+    /wy_practice_evidence_conflict_immutable/,
+  );
+  database.close();
+});
+
 test('envelope uses only immutable UC identity and persisted server grade', async () => {
   const { database, service } = sqliteHarness();
   const { envelope, record } = await service.prepareCandidate({

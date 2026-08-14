@@ -15,6 +15,33 @@ CREATE TABLE IF NOT EXISTS wy_practice_candidate_releases (
   created_at TEXT NOT NULL
 );
 
+-- UPDATE/DELETE guards are not sufficient for immutable facts: SQLite
+-- INSERT OR REPLACE can remove the conflicting row without firing DELETE
+-- triggers when recursive_triggers is disabled. Reject any non-identical
+-- release collision before the conflict algorithm can replace history, while
+-- still allowing this migration's exact seed to be replayed idempotently.
+CREATE TRIGGER IF NOT EXISTS deny_wy_practice_release_conflicting_insert
+BEFORE INSERT ON wy_practice_candidate_releases
+WHEN EXISTS (
+  SELECT 1
+    FROM wy_practice_candidate_releases
+   WHERE source_release_id = NEW.source_release_id
+     AND (
+       contract_version IS NOT NEW.contract_version
+       OR adapter_class IS NOT NEW.adapter_class
+       OR source_catalog_digest IS NOT NEW.source_catalog_digest
+       OR answer_keys_file_digest IS NOT NEW.answer_keys_file_digest
+       OR catalog_item_count IS NOT NEW.catalog_item_count
+       OR mapping_disposition IS NOT NEW.mapping_disposition
+       OR activation_allowed IS NOT NEW.activation_allowed
+       OR runtime_scoring_active IS NOT NEW.runtime_scoring_active
+       OR created_at IS NOT NEW.created_at
+     )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'wy_practice_candidate_release_immutable');
+END;
+
 INSERT OR IGNORE INTO wy_practice_candidate_releases (
   source_release_id,
   contract_version,
@@ -61,6 +88,17 @@ CREATE TABLE IF NOT EXISTS wy_practice_server_attempts (
   created_at TEXT NOT NULL
 );
 
+CREATE TRIGGER IF NOT EXISTS deny_wy_practice_attempt_conflicting_insert
+BEFORE INSERT ON wy_practice_server_attempts
+WHEN EXISTS (
+  SELECT 1
+    FROM wy_practice_server_attempts
+   WHERE source_attempt_id = NEW.source_attempt_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'wy_practice_server_attempt_immutable');
+END;
+
 CREATE INDEX IF NOT EXISTS idx_wy_practice_attempts_user_time
   ON wy_practice_server_attempts(uc_user_id, answered_at);
 
@@ -92,6 +130,19 @@ CREATE TABLE IF NOT EXISTS wy_practice_evidence_outbox (
   updated_at TEXT NOT NULL
 );
 
+CREATE TRIGGER IF NOT EXISTS deny_wy_practice_outbox_conflicting_insert
+BEFORE INSERT ON wy_practice_evidence_outbox
+WHEN EXISTS (
+  SELECT 1
+    FROM wy_practice_evidence_outbox
+   WHERE delivery_key = NEW.delivery_key
+      OR source_event_id = NEW.source_event_id
+      OR source_attempt_id = NEW.source_attempt_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'wy_practice_evidence_identity_immutable');
+END;
+
 CREATE INDEX IF NOT EXISTS idx_wy_practice_outbox_status
   ON wy_practice_evidence_outbox(delivery_status, updated_at);
 
@@ -106,6 +157,17 @@ CREATE TABLE IF NOT EXISTS wy_practice_evidence_conflicts (
   rejection_code TEXT NOT NULL CHECK (rejection_code = 'immutable_attempt_payload_conflict'),
   observed_at TEXT NOT NULL
 );
+
+CREATE TRIGGER IF NOT EXISTS deny_wy_practice_conflict_conflicting_insert
+BEFORE INSERT ON wy_practice_evidence_conflicts
+WHEN EXISTS (
+  SELECT 1
+    FROM wy_practice_evidence_conflicts
+   WHERE conflict_id = NEW.conflict_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'wy_practice_evidence_conflict_immutable');
+END;
 
 -- Source attempts and candidate release facts are append-only. Delivery state
 -- may advance later, but its identity and envelope bytes cannot be rewritten.
