@@ -1,6 +1,6 @@
 # 文言 · 诗学辞 operations
 
-Last normalized: 2026-08-10 PDT
+Last normalized: 2026-08-14 PDT
 Owner: suen
 Lifecycle: active
 Data class: student_owned
@@ -10,7 +10,8 @@ Documentation status: generated from local source, Git/GitHub audit, project cat
 
 - Canonical local path: `/Users/ylsuen/CF/wenyan-shixuci`
 - Git authority: `ieduer/wenyan-shixuci`
-- Current local branch/HEAD: `main` / `e2c9682`
+- Canonical Git baseline read back for this candidate: `origin/main` / `d094f50879fa8a85bc68b745f641ae4e3ca1fab8` (`e2c9682` remains an ancestor and the accepted v3 script revision)
+- Source-only candidate branch: `codex/wy-server-graded-practice-v1-20260814`; it is not deployed and is not connected to `src/index.ts`
 - Runtime config: `wenyan-shixuci/wrangler.toml` (name `wenyan-shixuci`)
 - Current state: [PROJECT_STATE.md](../PROJECT_STATE.md)
 - Workspace resource routing: [project resource index](../../reports/operations/project_resource_index.md)
@@ -83,6 +84,66 @@ Detected package entrypoints (presence is not proof they currently pass):
 
 Run only commands supported by the current project toolchain and verify expected outputs in the project before using them as release evidence.
 
+## Source-only My scoring candidate (inactive)
+
+The `wy-server-graded-practice-v1` candidate is an additive foundation for the
+`server_graded_practice_v1` adapter class. It does not change the current
+`POST /api/challenge/answer` path, install a public route, apply a migration,
+add a binding, send an event, or activate My scoring.
+
+Audited source facts at Git `d094f50879fa8a85bc68b745f641ae4e3ca1fab8`:
+
+- the Worker validates a signed HMAC answer token bound to owner/run/item, loads
+  the persisted challenge item and tracked answer key, and computes correctness
+  server-side;
+- authenticated ownership currently resolves to a mutable User Center slug,
+  not an immutable positive User Center `userId`;
+- the existing `sync_outbox` is durable for legacy progress synchronization but
+  has neither the fixed evidence delivery identity nor payload-conflict
+  isolation required for A–F evidence;
+- `src/generated/answer_keys.json` contains 1,244/1,244 entries with a
+  `correct_label`; its raw file digest is
+  `sha256:a87511f0fbb008843bbdda583805d682b3d00203c9643f6b7de1c130b5fe6b19`,
+  and its canonical grading-identity digest is
+  `sha256:0542ad12cb1babb6d72e975f1167e71ff82cce187a532d7cf96b84884af515bc`.
+
+Candidate authorities:
+
+- machine-readable contract: `contracts/wy-server-graded-practice-v1.json`;
+- source envelope, catalog verification, D1 outbox/idempotency and aggregate
+  health foundation: `src/wy-server-graded-practice-v1.ts`;
+- unapplied additive schema: `migrations/0100_wy_server_graded_practice_candidate_v1.sql`;
+- hostile verification: `tests/wy-server-graded-practice-v1.test.mjs`;
+- exact CI authorities: Node `22.21.1` and `24.18.0`, with `.nvmrc` fixed to
+  `24.18.0`.
+
+The delivery boundary accepts only `sourceAttemptId`. Identity and grade must be
+loaded from an append-only source-owned attempt created after signed-token
+binding, server answer-key grading, and immutable positive User Center user-id
+resolution. The envelope excludes submitted/correct answers, token, cookie,
+session, slug, names, class, grade, and weight. Same attempt plus same bytes is
+idempotent; changed bytes are quarantined without overwriting the first record.
+
+All candidate records remain `pending_mapping`, and candidate health always
+reports `blocked`. Activation remains forbidden until all of the following have
+current evidence: a matching User Center registry contract, immutable live
+identity resolution, independently reviewed migration and deployment, and a
+real-account WY → My A–F acceptance/readback/rollback loop.
+
+Local verification from a clean checkout:
+
+```bash
+npm ci --ignore-scripts
+./node_modules/.bin/tsc --noEmit
+node --experimental-strip-types --test tests/wy-server-graded-practice-v1.test.mjs
+```
+
+Capability-fit receipt: `no-new-capability`. The candidate uses only the
+project's existing Cloudflare Worker, Web Crypto, and D1 programming model. It
+adds no binding, changes no compatibility date, and evaluates no preview or
+beta capability. This is source and test evidence only, not Cloudflare adoption
+or production authority.
+
 ## Health and business-path verification
 
 Catalog health probes:
@@ -103,6 +164,11 @@ Rollback/failback authorities:
 
 For data-backed projects, immutable code rollback does not restore D1/KV/R2/DO/Queue state. Use backup/restore or backward-compatible forward-fix procedures verified for the exact resource.
 
+Candidate rollback is source-only: close the draft PR or revert its eventual
+merge commit. Because the candidate is not imported, deployed, or migrated,
+there is no candidate D1/Queue/student-data rollback action and the production
+Worker rollback anchor above is unchanged.
+
 ## Monitoring, privacy, cost, and incidents
 
 - Monitoring coverage: required
@@ -119,7 +185,7 @@ For data-backed projects, immutable code rollback does not restore D1/KV/R2/DO/Q
 5. Dependency regression: matrix fan-out, shared hubs, clone family, App/VPS as applicable.
 6. Backup/restore: catalog evidence above; missing exact evidence is blocking for writes/deletion.
 7. Rollback/failback: catalog authority above, refreshed live before release.
-8. Last verified: 2026-07-15T10:45:14.366Z.
+8. Last verified: live authority 2026-07-15T10:45:14.366Z; source-only candidate tests 2026-08-14 PDT. Candidate tests are not live verification.
 
 ## Synchronized documentation and handoff
 

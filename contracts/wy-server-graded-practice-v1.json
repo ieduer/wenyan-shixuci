@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contractVersion": "wy-server-graded-practice-v1",
+  "adapterClass": "server_graded_practice_v1",
+  "eventSchema": "bdfz-learning-evidence-event-v2",
+  "sourceReleaseId": "wy-practice-0542ad12cb1babb6",
+  "mappingVersion": "wy-server-graded-practice-mapping-v1",
+  "registryVersion": "wy-practice-answer-key-registry-2026-08-14-v1",
+  "activation": {
+    "status": "blocked",
+    "candidate": true,
+    "mappingDisposition": "pending_mapping",
+    "runtimeScoringActive": false,
+    "productionDeploymentAuthorized": false,
+    "blockers": [
+      "user_center_contract_registry_entry_missing",
+      "immutable_user_center_user_id_resolver_missing",
+      "candidate_migration_not_applied",
+      "candidate_worker_not_deployed",
+      "real_account_my_a_to_f_acceptance_readback_rollback_missing"
+    ]
+  },
+  "producer": {
+    "sourceSystem": "wenyan-shixuci",
+    "sourceSiteKey": "wy",
+    "sourceOrigin": "https://wy.bdfz.net",
+    "serviceEntrypoint": "WyServerGradedPracticeCandidate",
+    "publicRoute": null,
+    "acceptedDeliveryRequestFields": [
+      "sourceAttemptId"
+    ],
+    "identityAuthority": "immutable_positive_user_center_user_id_loaded_from_source_owned_server_attempt",
+    "gradingAuthority": "source_answer_key_after_signed_answer_token_binding",
+    "rejectedClientAuthorities": [
+      "request_body_user_id",
+      "request_body_slug",
+      "request_body_correctness",
+      "request_body_score",
+      "request_body_grade",
+      "request_body_weight",
+      "request_body_answer",
+      "request_body_answer_token"
+    ]
+  },
+  "sourceAudit": {
+    "gitAuthority": "ieduer/wenyan-shixuci",
+    "auditedCommit": "d094f50879fa8a85bc68b745f641ae4e3ca1fab8",
+    "answerRoute": "POST /api/challenge/answer",
+    "answerToken": "hmac_sha256_owner_run_item_binding_with_10_minute_expiry",
+    "grading": "server_loads_persisted_item_and_tracked_answer_key_then_computes_correctness",
+    "answeredReplay": "returns_persisted_server_result",
+    "currentAuthenticatedIdentity": "mutable_user_center_slug_only",
+    "currentOutbox": "durable_legacy_sync_outbox_without_fixed_evidence_delivery_identity_or_payload_conflict_isolation",
+    "candidateIsolation": "not_imported_by_src_index_and_not_bound_to_a_public_route"
+  },
+  "resourceCatalog": {
+    "authority": "src/generated/answer_keys.json",
+    "itemCount": 1244,
+    "itemCountWithCorrectLabel": 1244,
+    "kinds": [
+      "content_word",
+      "function_word"
+    ],
+    "questionTypes": [
+      "content_gloss",
+      "function_gloss",
+      "sentence_meaning",
+      "xuci_pair_compare"
+    ],
+    "rawFileSha256": "sha256:a87511f0fbb008843bbdda583805d682b3d00203c9643f6b7de1c130b5fe6b19",
+    "taskPoolDigest": "sha256:0542ad12cb1babb6d72e975f1167e71ff82cce187a532d7cf96b84884af515bc",
+    "sourceRuleCoveragePercent": 100,
+    "centralMappingDisposition": "pending_mapping",
+    "historicalMutationAllowed": false,
+    "unknownResourceVersionDisposition": "pending_mapping"
+  },
+  "evidence": {
+    "dimensionKey": "practice",
+    "eventType": "server_graded_practice_answer",
+    "assessmentKind": "performance",
+    "scoringRole": "formative",
+    "verificationMethod": "source_answer_key",
+    "eligibilityStatus": "eligible",
+    "scoreScale": "binary_zero_or_one",
+    "academicYearBoundary": "september_1_asia_shanghai",
+    "deliveryEvidenceIdentity": "sourceSiteKey+contractVersion+sourceReleaseId+canonicalUnitId+resourceVersion+sourceAttemptId",
+    "sourceEventIdPattern": "^wy_event_sha256_[a-f0-9]{64}$",
+    "deliveryKeyPattern": "^wy_delivery_sha256_[a-f0-9]{64}$"
+  },
+  "delivery": {
+    "transport": "source_owned_d1_outbox_candidate",
+    "migration": "migrations/0100_wy_server_graded_practice_candidate_v1.sql",
+    "migrationApplied": false,
+    "sameAttemptSameEnvelope": "idempotent_replay",
+    "sameAttemptDifferentEnvelope": "quarantine_conflict_and_preserve_first_envelope",
+    "initialDisposition": "pending_mapping",
+    "sinkBinding": null
+  },
+  "privacy": {
+    "envelopeAllows": [
+      "positive_user_center_user_id",
+      "opaque_source_attempt_id",
+      "catalog_lineage",
+      "binary_server_grade",
+      "academic_year"
+    ],
+    "envelopeForbids": [
+      "slug",
+      "student_name",
+      "student_number",
+      "class_name",
+      "submitted_answer",
+      "correct_answer",
+      "answer_token",
+      "cookie",
+      "session_id"
+    ],
+    "healthOutput": "aggregate_counts_only"
+  },
+  "capabilityFit": {
+    "decision": "no-new-capability",
+    "runtime": "existing_cloudflare_worker_web_crypto_and_d1_only",
+    "newBinding": false,
+    "compatibilityDateChanged": false,
+    "nodeAuthority": "24.18.0",
+    "ciCompatibility": [
+      "22.21.1",
+      "24.18.0"
+    ]
+  }
+}
