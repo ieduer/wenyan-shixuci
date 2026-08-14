@@ -94,7 +94,32 @@
     "sameAttemptSameEnvelope": "idempotent_replay",
     "sameAttemptDifferentEnvelope": "quarantine_conflict_and_preserve_first_envelope",
     "initialDisposition": "pending_mapping",
-    "sinkBinding": null
+    "sinkBinding": null,
+    "statusStateMachine": {
+      "allowedTransitions": [
+        "pending_mapping->pending_mapping",
+        "pending_mapping->blocked",
+        "pending_mapping->accepted",
+        "pending_mapping->quarantined",
+        "blocked->blocked",
+        "blocked->accepted",
+        "blocked->quarantined",
+        "accepted->accepted",
+        "quarantined->quarantined"
+      ],
+      "history": "wy_practice_evidence_status_history",
+      "regression": "forbidden",
+      "terminalStates": [
+        "accepted",
+        "quarantined"
+      ]
+    },
+    "futureConsumerActivationRequirements": [
+      "CAS_claim_lease_before_delivery",
+      "lease_expiry_recovery_after_worker_crash",
+      "read_back_status_and_sink_receipt_before_acknowledgement",
+      "crash_safe_replay_must_preserve_delivery_identity_and_first_envelope"
+    ]
   },
   "privacy": {
     "envelopeAllows": [

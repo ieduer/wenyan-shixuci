@@ -164,6 +164,27 @@ test('machine-readable contract stays candidate, blocked and pending_mapping', a
   assert.deepEqual(contract.producer.acceptedDeliveryRequestFields, ['sourceAttemptId']);
   assert.equal(contract.delivery.migrationApplied, false);
   assert.equal(contract.delivery.sinkBinding, null);
+  assert.deepEqual(contract.delivery.statusStateMachine.allowedTransitions, [
+    'pending_mapping->pending_mapping',
+    'pending_mapping->blocked',
+    'pending_mapping->accepted',
+    'pending_mapping->quarantined',
+    'blocked->blocked',
+    'blocked->accepted',
+    'blocked->quarantined',
+    'accepted->accepted',
+    'quarantined->quarantined',
+  ]);
+  assert.deepEqual(contract.delivery.statusStateMachine.terminalStates, [
+    'accepted',
+    'quarantined',
+  ]);
+  assert.deepEqual(contract.delivery.futureConsumerActivationRequirements, [
+    'CAS_claim_lease_before_delivery',
+    'lease_expiry_recovery_after_worker_crash',
+    'read_back_status_and_sink_receipt_before_acknowledgement',
+    'crash_safe_replay_must_preserve_delivery_identity_and_first_envelope',
+  ]);
 });
 
 test('candidate is isolated from the current Worker route and bindings', async () => {
@@ -474,6 +495,102 @@ test('concurrent same-payload replay cannot create a second outbox record', asyn
     database.prepare('SELECT COUNT(*) AS count FROM wy_practice_evidence_outbox').get().count,
     1,
   );
+  database.close();
+});
+
+test('outbox status history is monotonic and terminal states cannot regress', async () => {
+  const { database, service } = sqliteHarness();
+  await service.commitCandidate({ sourceAttemptId: 'wy-attempt:test-00000001' });
+  const deliveryKey = database.prepare(
+    'SELECT delivery_key FROM wy_practice_evidence_outbox LIMIT 1',
+  ).get().delivery_key;
+
+  assert.equal(
+    database.prepare(
+      'SELECT COUNT(*) AS count FROM wy_practice_evidence_status_history',
+    ).get().count,
+    1,
+  );
+  database.exec('PRAGMA recursive_triggers=OFF');
+  assert.throws(() => database.prepare(
+    `INSERT OR REPLACE INTO wy_practice_evidence_status_history
+       (delivery_key, from_status, to_status, changed_at)
+     VALUES (?, 'initial', 'pending_mapping', '2026-09-02T00:00:01.000Z')`,
+  ).run(deliveryKey), /wy_practice_evidence_status_history_immutable/);
+  assert.throws(() => database.prepare(
+    `UPDATE wy_practice_evidence_status_history
+        SET to_status='blocked'
+      WHERE delivery_key=?`,
+  ).run(deliveryKey), /wy_practice_evidence_status_history_immutable/);
+  assert.throws(() => database.prepare(
+    'DELETE FROM wy_practice_evidence_status_history WHERE delivery_key=?',
+  ).run(deliveryKey), /wy_practice_evidence_status_history_immutable/);
+  database.exec(migrationSql);
+  assert.equal(
+    database.prepare(
+      'SELECT COUNT(*) AS count FROM wy_practice_evidence_status_history',
+    ).get().count,
+    1,
+  );
+
+  assert.doesNotThrow(() => database.prepare(
+    `UPDATE wy_practice_evidence_outbox
+        SET delivery_status='pending_mapping', updated_at='2026-09-02T00:01:00.000Z'
+      WHERE delivery_key=?`,
+  ).run(deliveryKey));
+  assert.doesNotThrow(() => database.prepare(
+    `UPDATE wy_practice_evidence_outbox
+        SET delivery_status='blocked', updated_at='2026-09-02T00:02:00.000Z'
+      WHERE delivery_key=?`,
+  ).run(deliveryKey));
+  assert.throws(() => database.prepare(
+    `UPDATE wy_practice_evidence_outbox
+        SET delivery_status='pending_mapping', updated_at='2026-09-02T00:03:00.000Z'
+      WHERE delivery_key=?`,
+  ).run(deliveryKey), /wy_practice_evidence_status_regression/);
+  assert.doesNotThrow(() => database.prepare(
+    `UPDATE wy_practice_evidence_outbox
+        SET delivery_status='accepted', updated_at='2026-09-02T00:04:00.000Z'
+      WHERE delivery_key=?`,
+  ).run(deliveryKey));
+  assert.doesNotThrow(() => database.prepare(
+    `UPDATE wy_practice_evidence_outbox
+        SET delivery_status='accepted', updated_at='2026-09-02T00:05:00.000Z'
+      WHERE delivery_key=?`,
+  ).run(deliveryKey));
+  assert.throws(() => database.prepare(
+    `UPDATE wy_practice_evidence_outbox
+        SET delivery_status='blocked', updated_at='2026-09-02T00:06:00.000Z'
+      WHERE delivery_key=?`,
+  ).run(deliveryKey), /wy_practice_evidence_status_regression/);
+  assert.equal(
+    database.prepare(
+      'SELECT COUNT(*) AS count FROM wy_practice_evidence_status_history',
+    ).get().count,
+    3,
+  );
+
+  const quarantined = sqliteHarness();
+  await quarantined.service.commitCandidate({ sourceAttemptId: 'wy-attempt:test-00000001' });
+  const quarantinedKey = quarantined.database.prepare(
+    'SELECT delivery_key FROM wy_practice_evidence_outbox LIMIT 1',
+  ).get().delivery_key;
+  assert.doesNotThrow(() => quarantined.database.prepare(
+    `UPDATE wy_practice_evidence_outbox
+        SET delivery_status='quarantined', updated_at='2026-09-02T00:07:00.000Z'
+      WHERE delivery_key=?`,
+  ).run(quarantinedKey));
+  assert.doesNotThrow(() => quarantined.database.prepare(
+    `UPDATE wy_practice_evidence_outbox
+        SET delivery_status='quarantined', updated_at='2026-09-02T00:08:00.000Z'
+      WHERE delivery_key=?`,
+  ).run(quarantinedKey));
+  assert.throws(() => quarantined.database.prepare(
+    `UPDATE wy_practice_evidence_outbox
+        SET delivery_status='accepted', updated_at='2026-09-02T00:09:00.000Z'
+      WHERE delivery_key=?`,
+  ).run(quarantinedKey), /wy_practice_evidence_status_regression/);
+  quarantined.database.close();
   database.close();
 });
 

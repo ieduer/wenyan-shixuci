@@ -47,6 +47,26 @@ npm run dev
 - 已登入用戶在報告下載與挑戰結束時同步 `progress`、`recordDownload`、`mastery report`
 - 週報月報、班級榜、自由文本簡答評分、PDF 報告暫不在第一版
 
+## A–F evidence candidate（inactive）
+
+`server_graded_practice_v1` is a source-only candidate. It is not imported by
+`src/index.ts`, has no public route or binding, and migration
+`0100_wy_server_graded_practice_candidate_v1.sql` must remain unapplied until
+the User Center registry, immutable user identity, independent deployment
+review, and real-account WY → My A–F acceptance/readback/rollback evidence are
+complete.
+
+The candidate outbox uses a monotonic status state machine and records each
+transition in `wy_practice_evidence_status_history`. `pending_mapping` may only
+advance to `blocked`, `accepted`, or `quarantined`; `accepted` and
+`quarantined` are terminal, apart from idempotent same-state writes.
+
+Any future delivery consumer must claim rows with a compare-and-set (CAS)
+lease, recover expired leases after a worker crash, and read back both the
+status and sink receipt before acknowledging delivery. A consumer that lacks
+lease expiry recovery or crash-safe readback is not activation-ready. These
+requirements do not add a runtime route, binding, queue, or deployment.
+
 ## 部署
 
 ```bash
