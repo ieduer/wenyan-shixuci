@@ -143,6 +143,96 @@ BEGIN
   SELECT RAISE(ABORT, 'wy_practice_evidence_identity_immutable');
 END;
 
+-- Delivery status is a monotonic state machine. Keep its transitions in an
+-- append-only audit table so a future sink can reconcile after a retry or
+-- crash without silently moving an evidence record backwards.
+CREATE TABLE IF NOT EXISTS wy_practice_evidence_status_history (
+  history_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  delivery_key TEXT NOT NULL REFERENCES wy_practice_evidence_outbox(delivery_key),
+  from_status TEXT NOT NULL CHECK (
+    from_status IN ('initial', 'pending_mapping', 'blocked', 'accepted', 'quarantined')
+  ),
+  to_status TEXT NOT NULL CHECK (
+    to_status IN ('pending_mapping', 'blocked', 'accepted', 'quarantined')
+  ),
+  changed_at TEXT NOT NULL,
+  UNIQUE(delivery_key, from_status, to_status)
+);
+
+-- Backfill an initial history row if this additive migration is applied after
+-- a pre-existing candidate outbox. Re-running the migration is idempotent.
+INSERT INTO wy_practice_evidence_status_history (
+  delivery_key, from_status, to_status, changed_at
+)
+SELECT delivery_key, 'initial', delivery_status, created_at
+  FROM wy_practice_evidence_outbox AS outbox
+ WHERE NOT EXISTS (
+   SELECT 1
+     FROM wy_practice_evidence_status_history AS history
+    WHERE history.delivery_key = outbox.delivery_key
+      AND history.from_status = 'initial'
+      AND history.to_status = outbox.delivery_status
+ );
+
+CREATE TRIGGER IF NOT EXISTS deny_wy_practice_status_history_conflicting_insert
+BEFORE INSERT ON wy_practice_evidence_status_history
+WHEN EXISTS (
+  SELECT 1
+    FROM wy_practice_evidence_status_history
+   WHERE delivery_key = NEW.delivery_key
+     AND from_status = NEW.from_status
+     AND to_status = NEW.to_status
+)
+BEGIN
+  SELECT RAISE(ABORT, 'wy_practice_evidence_status_history_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS deny_wy_practice_status_history_update
+BEFORE UPDATE ON wy_practice_evidence_status_history
+BEGIN
+  SELECT RAISE(ABORT, 'wy_practice_evidence_status_history_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS deny_wy_practice_status_history_delete
+BEFORE DELETE ON wy_practice_evidence_status_history
+BEGIN
+  SELECT RAISE(ABORT, 'wy_practice_evidence_status_history_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS deny_wy_practice_outbox_status_regression
+BEFORE UPDATE OF delivery_status ON wy_practice_evidence_outbox
+WHEN NOT (
+  OLD.delivery_status = NEW.delivery_status
+  OR (
+    OLD.delivery_status = 'pending_mapping'
+    AND NEW.delivery_status IN ('blocked', 'accepted', 'quarantined')
+  )
+  OR (
+    OLD.delivery_status = 'blocked'
+    AND NEW.delivery_status IN ('accepted', 'quarantined')
+  )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'wy_practice_evidence_status_regression');
+END;
+
+CREATE TRIGGER IF NOT EXISTS record_wy_practice_outbox_insert_status
+AFTER INSERT ON wy_practice_evidence_outbox
+BEGIN
+  INSERT OR IGNORE INTO wy_practice_evidence_status_history (
+    delivery_key, from_status, to_status, changed_at
+  ) VALUES (NEW.delivery_key, 'initial', NEW.delivery_status, NEW.created_at);
+END;
+
+CREATE TRIGGER IF NOT EXISTS record_wy_practice_outbox_status_transition
+AFTER UPDATE OF delivery_status ON wy_practice_evidence_outbox
+WHEN OLD.delivery_status <> NEW.delivery_status
+BEGIN
+  INSERT OR IGNORE INTO wy_practice_evidence_status_history (
+    delivery_key, from_status, to_status, changed_at
+  ) VALUES (NEW.delivery_key, OLD.delivery_status, NEW.delivery_status, NEW.updated_at);
+END;
+
 CREATE INDEX IF NOT EXISTS idx_wy_practice_outbox_status
   ON wy_practice_evidence_outbox(delivery_status, updated_at);
 

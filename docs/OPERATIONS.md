@@ -128,7 +128,20 @@ SQLite conflict handling can bypass append-only history, including when
 `recursive_triggers` is disabled. Concurrent identical commits resolve through
 readback to one inserted record plus idempotent replay.
 
-All candidate records remain `pending_mapping`, and candidate health always
+Delivery status is guarded by an append-only
+`wy_practice_evidence_status_history`: `pending_mapping` can only advance to
+`blocked`, `accepted`, or `quarantined`; `blocked` can only advance to
+`accepted` or `quarantined`; `accepted` and `quarantined` are terminal apart
+from same-state idempotent writes. Status regressions abort before SQLite
+conflict handling can rewrite the state.
+
+A future sink consumer is not activation-ready unless it claims each row with
+a compare-and-set lease, recovers expired leases after a worker crash, and
+reads back both the delivery status and sink receipt before acknowledgement.
+The current candidate has no consumer, route, binding, queue, or deployment;
+these are future activation requirements only.
+
+New candidate records start at `pending_mapping`, and candidate health always
 reports `blocked`. Activation remains forbidden until all of the following have
 current evidence: a matching User Center registry contract, immutable live
 identity resolution, independently reviewed migration and deployment, and a
