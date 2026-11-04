@@ -3679,6 +3679,39 @@ def choose_gloss_distractors(correct_gloss: str, pool: list[str], seed: str) -> 
     return stable_pick(unique_clean_strings(candidates), seed, 3)
 
 
+def textbook_function_gloss_attributed(headword: str, label_text: str, note_block: str) -> bool:
+    """A function-word gloss must explain the function word itself.
+
+    Textbook notes on a phrase often gloss another character (唯求则非邦也与 →
+    "唯，语气助词，用于句首") or translate the whole phrase (执者失之). Such a
+    note cannot be the answer to "the meaning/usage of 与/之".
+    """
+    label = normalize_label_headword(label_text)
+    if not label or label == headword:
+        return True
+    note = clean_text(note_block)
+    attributed = {ch for ch in set(label) if f"{ch}，" in note}
+    if headword in attributed:
+        return True
+    if attributed:
+        return False
+    return len(label) <= 2
+
+
+def textbook_dict_refs_for_target(record: dict[str, Any], headword: str, label_text: str) -> list[dict[str, Any]]:
+    """Only dictionary entries whose headword is the question's own target word."""
+    targets = {headword, normalize_label_headword(label_text)}
+    kept = []
+    for item in list(record.get("dict_refs") or []):
+        if str(item.get("headword") or "") not in targets:
+            continue
+        summary = re.sub(r"\s*部首外筆畫數：.*$", "", clean_text(str(item.get("summary") or "")))
+        if not summary or re.match(r"^「.+?」的異體字。?$", summary):
+            continue
+        kept.append({**item, "summary": summary})
+    return kept[:2]
+
+
 def build_textbook_question_bank(
     textbook_refs: dict[str, list[dict[str, Any]]],
     record_by_term: dict[str, dict[str, Any]],
@@ -3739,6 +3772,11 @@ def build_textbook_question_bank(
                 continue
             if kind == "content_word" and textbook_content_phrase_like(headword, label_text, str(ref.get("note_block") or "")):
                 continue
+            if kind == "function_word" and not textbook_function_gloss_attributed(
+                headword, label_text, str(ref.get("note_block") or "")
+            ):
+                continue
+            target_dict_refs = textbook_dict_refs_for_target(record, headword, label_text)
             display_context = [
                 truncate_excerpt_around_target(item, headword, label_text, 120)
                 for item in (ref.get("context_window") or [])[:7]
@@ -3833,11 +3871,10 @@ def build_textbook_question_bank(
                     f"{source_label}中，这一处“{focus_text or headword}”的课下注释是“{answer_text}”。 "
                     f"所在句为“{truncate_excerpt_around_target(display_sentence or str(ref.get('sentence') or ''), headword, str(ref.get('label_text') or ''), 100)}”。"
                 )
-                if record.get("dict_refs"):
+                if target_dict_refs:
                     explanation += " 辞典参照：" + " ".join(
                         truncate_excerpt(str(item.get("summary") or ""), 90) + "。"
-                        for item in list(record.get("dict_refs") or [])[:2]
-                        if clean_text(str(item.get("summary") or ""))
+                        for item in target_dict_refs
                     )
                 same_term_support = [
                     item
@@ -3845,7 +3882,7 @@ def build_textbook_question_bank(
                     if str(item.get("ref_id") or "") != str(ref.get("ref_id") or "")
                 ][:3]
                 if same_term_support:
-                    explanation += " 同词课文参照：" + " ".join(
+                    explanation += " 同词其他课文用例（义项不一定相同）：" + " ".join(
                         f"{item.get('title')}“{truncate_excerpt_around_target(str(item.get('sentence') or ''), headword, str(item.get('label_text') or ''), 52)}”。"
                         for item in same_term_support
                         if clean_text(str(item.get("sentence") or ""))
@@ -3874,7 +3911,7 @@ def build_textbook_question_bank(
                     "correct_label": correct_label,
                     "correct_text": answer_text,
                     "explanation": explanation,
-                    "dict_support": record.get("dict_refs", [])[:2],
+                    "dict_support": target_dict_refs,
                     "textbook_support": [ref],
                     "option_analyses": [
                         {

@@ -15,7 +15,8 @@
     "deploy": "wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply wenyan-shixuci-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply wenyan-shixuci-db --remote",
-    "predeploy": "bash /Users/ylsuen/CF/scripts/git-deploy-gate.sh"
+    "predeploy": "bash /Users/ylsuen/CF/scripts/git-deploy-gate.sh",
+    "apply:fixes": "/Users/ylsuen/.venv/bin/python scripts/v3/apply_bank_fixes.py"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250410.0",

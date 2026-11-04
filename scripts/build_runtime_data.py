@@ -27,6 +27,10 @@ def main() -> int:
     rc = int(v3_build.main() or 0)
     if rc != 0:
         return rc
+    # reviewed per-item fixes + dictionary/same-term rules (data/manual/v3/bank_fixes_*.json)
+    rc = int(importlib.import_module("apply_bank_fixes").main() or 0)
+    if rc != 0:
+        return rc
     return int(v3_audit.main() or 0)
 
 
