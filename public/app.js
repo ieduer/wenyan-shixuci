@@ -1,11 +1,16 @@
 const THEME_KEY = "wy-theme";
+const AUDIT_DEVICE_KEY = "wy-audit-device-id-v1";
 const THEMES = ["parchment", "forest", "ink"];
 const ROUND_SIZE = 10;
+const MIXED_KIND = "textbook_word";
+const GAOKAO_KIND = "gaokao_mix";
 
 const state = {
   bootstrap: null,
   theme: loadTheme(),
-  kind: "",
+  kind: MIXED_KIND,
+  articleId: "",
+  activeArticle: null,
   mode: "ladder",
   sourceRunId: "",
   run: null,
@@ -18,16 +23,23 @@ const state = {
   roundComplete: null,
   player: null,
   leaderboard: null,
+  leaderboardScope: "total",
+  challengeRequestSeq: 0,
   feedbackSubmitting: false,
 };
 
 const els = {
+  arenaGrid: document.querySelector("#arena-grid"),
   questionRoot: document.querySelector("#question-root"),
   roundTrack: document.querySelector("#round-track"),
+  battleStage: document.querySelector(".battle-stage"),
+  modePanel: document.querySelector("#mode-panel"),
+  articlePanel: document.querySelector("#article-panel"),
+  articleCatalog: document.querySelector("#article-catalog"),
   leaderboardRoot: document.querySelector("#leaderboard-root"),
-  leaderboardKind: document.querySelector("#leaderboard-kind"),
+  leaderboardMeta: document.querySelector("#leaderboard-meta"),
+  accountSummary: document.querySelector("#account-summary"),
   rankBadge: document.querySelector("#rank-badge"),
-  rankKicker: document.querySelector("#rank-kicker"),
   rankName: document.querySelector("#rank-name"),
   rankMode: document.querySelector("#rank-mode"),
   roundFraction: document.querySelector("#round-fraction"),
@@ -44,10 +56,14 @@ const els = {
   feedbackClose: document.querySelector("#feedback-close"),
   feedbackCancel: document.querySelector("#feedback-cancel"),
   feedbackSubmit: document.querySelector("#feedback-submit"),
+  leaderboardTabs: Array.from(document.querySelectorAll(".leaderboard-tab")),
 };
 
-document.querySelectorAll("[data-kind]").forEach((button) => {
-  button.addEventListener("click", () => startChallenge(button.dataset.kind || ""));
+els.leaderboardTabs.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.leaderboardScope = button.dataset.scope || "total";
+    renderLeaderboard();
+  });
 });
 
 els.themeSelect?.addEventListener("change", (event) => {
@@ -56,6 +72,7 @@ els.themeSelect?.addEventListener("change", (event) => {
 });
 
 applyTheme(state.theme);
+applyInitialViewMode();
 
 boot().catch((error) => {
   console.error(error);
@@ -73,21 +90,39 @@ async function boot() {
   }
   initFeedbackModal();
   await refreshBootstrap();
-  renderShell();
+  const requested = initialRoute();
+  if (requested.articleId) {
+    await startChallenge(MIXED_KIND, requested.articleId, "ladder", "", { focus: "question", scroll: false });
+    return;
+  }
+  await chooseTrack(MIXED_KIND, { scroll: false });
+}
+
+function initialRoute() {
+  const params = new URLSearchParams(window.location.search);
+  const kind = params.get("kind") || "";
+  const articleId = params.get("articleId") || params.get("article_id") || "";
+  if (kind === MIXED_KIND && articleId) {
+    return { kind, articleId };
+  }
+  return { kind: "", articleId: "" };
+}
+
+function applyInitialViewMode() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("embed") === "1") {
+    document.body.classList.add("embed-mode");
+  }
 }
 
 async function refreshBootstrap() {
   state.bootstrap = await api("/api/bootstrap");
-  if (state.kind) {
-    state.player = currentPlayerState();
-  }
-  syncEntryButtons();
+  state.leaderboard = state.bootstrap?.leaderboard || state.leaderboard;
+  state.player = currentPlayerState();
+  state.activeArticle = currentArticle();
 }
 
-async function startChallenge(kind, mode = "ladder", sourceRunId = "") {
-  state.kind = kind;
-  state.mode = mode;
-  state.sourceRunId = sourceRunId;
+function resetRoundState() {
   state.run = null;
   state.currentItem = null;
   state.answered = false;
@@ -96,25 +131,76 @@ async function startChallenge(kind, mode = "ladder", sourceRunId = "") {
   state.answerCard = null;
   state.roundMarks = [];
   state.roundComplete = null;
-  state.player = currentPlayerState();
-  syncEntryButtons();
-  await loadLeaderboard(kind);
-  await loadNextQuestion();
 }
 
-async function loadLeaderboard(kind) {
-  const payload = await api(`/api/leaderboard?kind=${encodeURIComponent(kind || "content_word")}`);
+async function chooseTrack(kind, viewOptions = {}) {
+  const requestSeq = ++state.challengeRequestSeq;
+  state.kind = kind;
+  state.articleId = "";
+  state.activeArticle = null;
+  state.mode = "ladder";
+  state.sourceRunId = "";
+  resetRoundState();
+  state.player = currentPlayerState(kind);
+  renderShell();
+  revealInteractionTarget(kind === MIXED_KIND ? "articles" : "question", viewOptions);
+  try {
+    await loadLeaderboard(kind, requestSeq);
+  } catch (error) {
+    if (requestSeq !== state.challengeRequestSeq) return;
+    console.error(error);
+    renderError(error.message || String(error));
+  }
+}
+
+async function startChallenge(kind = state.kind, articleId = "", mode = "ladder", sourceRunId = "", viewOptions = {}) {
+  const requestSeq = ++state.challengeRequestSeq;
+  state.kind = kind;
+  state.articleId = kind === MIXED_KIND ? articleId : "";
+  state.activeArticle = kind === MIXED_KIND ? currentArticle(articleId) : null;
+  state.mode = mode;
+  state.sourceRunId = sourceRunId;
+  resetRoundState();
+  state.player = currentPlayerState(kind);
+  renderShell();
+  try {
+    await loadLeaderboard(kind, requestSeq);
+    if (kind === MIXED_KIND && !state.articleId && mode !== "review") {
+      revealInteractionTarget("articles", viewOptions);
+      return;
+    }
+    await loadNextQuestion(requestSeq, {
+      focus: viewOptions.focus || "question",
+      scroll: viewOptions.scroll,
+    });
+  } catch (error) {
+    if (requestSeq !== state.challengeRequestSeq) return;
+    if (kind === MIXED_KIND && articleId !== state.articleId) return;
+    console.error(error);
+    renderError(error.message || String(error));
+  }
+}
+
+async function loadLeaderboard(kind, requestSeq = state.challengeRequestSeq) {
+  const payload = await api(`/api/leaderboard?kind=${encodeURIComponent(kind || state.kind || GAOKAO_KIND)}&limit=10`);
+  if (requestSeq !== state.challengeRequestSeq) return;
   state.leaderboard = payload;
   renderLeaderboard();
 }
 
-async function loadNextQuestion() {
-  if (!state.kind) {
+async function loadNextQuestion(requestSeq = state.challengeRequestSeq, viewOptions = {}) {
+  if (state.kind === MIXED_KIND && !state.articleId && state.mode !== "review") {
     renderShell();
+    revealInteractionTarget("articles", viewOptions);
     return;
   }
-  const search = new URLSearchParams({ kind: state.kind });
+  const requestedKind = state.kind || GAOKAO_KIND;
+  const requestedArticleId = state.articleId;
+  const search = new URLSearchParams({ kind: requestedKind });
   search.set("mode", state.mode || "ladder");
+  if (requestedArticleId && state.mode !== "review") {
+    search.set("articleId", requestedArticleId);
+  }
   if (state.run?.id && !state.roundComplete) {
     search.set("runId", state.run.id);
   }
@@ -122,6 +208,8 @@ async function loadNextQuestion() {
     search.set("sourceRunId", state.sourceRunId);
   }
   const payload = await api(`/api/challenge/next?${search.toString()}`);
+  if (requestSeq !== state.challengeRequestSeq) return;
+  if (requestedKind === MIXED_KIND && requestedArticleId !== state.articleId) return;
   state.run = payload.run || null;
   state.mode = payload.run?.mode || state.mode || "ladder";
   state.currentItem = payload.item || null;
@@ -131,16 +219,22 @@ async function loadNextQuestion() {
   state.answerCard = null;
   state.roundComplete = payload.roundCompleted ? payload.round || null : null;
   state.player = payload.player || currentPlayerState();
+  state.activeArticle = currentArticle(requestedArticleId || payload.run?.targetKey || payload.item?.prompt?.articleId || "");
   if (state.roundComplete && !state.currentItem) {
     await refreshBootstrap();
+    if (requestSeq !== state.challengeRequestSeq) return;
+    if (requestedKind === MIXED_KIND && requestedArticleId !== state.articleId) return;
     state.player = currentPlayerState();
-    await loadLeaderboard(state.kind);
+    await loadLeaderboard(requestedKind, requestSeq);
   }
   renderShell();
+  revealInteractionTarget(viewOptions.focus || "question", viewOptions);
 }
 
 function renderShell() {
   renderStatus();
+  renderModeSelector();
+  renderArticleCatalog();
   renderQuestion();
   renderRoundTrack();
   renderLeaderboard();
@@ -148,25 +242,109 @@ function renderShell() {
 
 function renderStatus() {
   const player = state.player || currentPlayerState();
-  const kindLabelText = kindLabel(state.kind || player?.kind || "content_word");
-  els.rankKicker.textContent = kindLabelText;
   els.rankName.textContent = player?.tierName || "工蜂";
-  els.rankMode.textContent = state.mode === "review" ? "錯題回看" : player?.modeName || "常規排位";
+  els.rankMode.textContent = player?.modeName || "常規排位";
   const answeredCount = Number(state.run?.answeredCount || state.roundMarks.length || 0);
   const targetCount = Number(state.run?.targetCount || state.roundComplete?.targetCount || ROUND_SIZE);
   const correctCount = Number(state.run?.correctCount || countTrue(state.roundMarks) || 0);
   els.roundFraction.textContent = `${answeredCount} / ${targetCount}`;
   els.roundGoal.textContent = `${correctCount} / ${targetCount}`;
   els.rankBadge.dataset.kind = state.kind || player?.kind || "";
+  const summary = buildAccountSummary(player);
+  if (els.accountSummary) {
+    els.accountSummary.textContent = summary;
+    els.accountSummary.hidden = !summary;
+  }
+}
+
+function renderModeSelector() {
+  if (!els.modePanel) return;
+  const gaokaoActive = state.kind === GAOKAO_KIND;
+  const articleActive = state.kind === MIXED_KIND;
+  els.modePanel.innerHTML = `
+    <div class="mode-switch" role="tablist" aria-label="挑戰模式">
+      <button class="mode-switch-btn ${gaokaoActive ? "active" : ""}" type="button" data-track="${GAOKAO_KIND}">
+        高考混編
+      </button>
+      <button class="mode-switch-btn ${articleActive ? "active" : ""}" type="button" data-track="${MIXED_KIND}">
+        選篇掌握
+      </button>
+    </div>
+  `;
+  els.modePanel.querySelector(`[data-track="${GAOKAO_KIND}"]`)?.addEventListener("click", () => {
+    void startChallenge(GAOKAO_KIND, "", "ladder", "", { focus: "question" });
+  });
+  els.modePanel.querySelector(`[data-track="${MIXED_KIND}"]`)?.addEventListener("click", () => {
+    void chooseTrack(MIXED_KIND, { focus: "articles" });
+  });
+}
+
+function renderArticleCatalog() {
+  if (els.articlePanel) {
+    els.articlePanel.hidden = state.kind !== MIXED_KIND;
+  }
+  if (els.arenaGrid) {
+    els.arenaGrid.classList.toggle("no-left", state.kind !== MIXED_KIND);
+  }
+  if (!els.articleCatalog) return;
+  if (state.kind !== MIXED_KIND) {
+    els.articleCatalog.innerHTML = "";
+    return;
+  }
+  const articles = Array.isArray(state.bootstrap?.articles) ? state.bootstrap.articles : [];
+  if (!articles.length) {
+    els.articleCatalog.innerHTML = "";
+    return;
+  }
+  const grouped = new Map();
+  articles.forEach((article) => {
+    const key = article.book_title || article.book_key || "教材";
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(article);
+  });
+  els.articleCatalog.innerHTML = [...grouped.entries()]
+    .map(([groupTitle, items]) => {
+      return `
+        <section class="article-group">
+          <h2 class="article-group-title">${escapeHtml(groupTitle)}</h2>
+          <div class="article-grid">
+            ${items
+              .map((article) => {
+                const active = article.article_id === state.articleId;
+                return `
+                  <button
+                    class="article-entry ${active ? "active" : ""}"
+                    type="button"
+                    data-article-id="${escapeAttr(article.article_id || "")}"
+                  >
+                    <span class="article-entry-line">
+                      <strong>${escapeHtml(article.title || "")}</strong>
+                      <span class="article-entry-count">${Number(article.challenge_count || 0)}</span>
+                    </span>
+                  </button>
+                `;
+              })
+              .join("")}
+          </div>
+        </section>
+      `;
+    })
+    .join("");
+  els.articleCatalog.querySelectorAll("[data-article-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      void startChallenge(MIXED_KIND, button.dataset.articleId || "", "ladder", "", { focus: "question" });
+    });
+  });
 }
 
 function renderQuestion() {
-  if (!state.kind) {
-    els.questionRoot.innerHTML = `
-      <div class="empty-state">
-        <p>選擇實詞或虛詞後直接進題。</p>
-      </div>
-    `;
+  if (state.kind === MIXED_KIND && !state.articleId && state.mode !== "review") {
+    els.questionRoot.innerHTML = `<div class="empty-state empty-state-quiet"></div>`;
+    return;
+  }
+
+  if (!state.currentItem?.prompt && !state.run && !state.roundComplete) {
+    els.questionRoot.innerHTML = `<div class="empty-state empty-state-quiet"></div>`;
     return;
   }
 
@@ -177,7 +355,8 @@ function renderQuestion() {
 
   const prompt = state.currentItem.prompt;
   const headword = termHeadword(prompt.termId);
-  const visibleContext = prompt.sourceKind === "textbook" ? buildVisibleContext(prompt, headword) : [];
+  const visibleContext = buildVisibleContextForPrompt(prompt, headword);
+  const focusTexts = collectFocusTexts(prompt);
   const parts = [
     `<article class="question-card">`,
     prompt.sourceLabel ? `<div class="question-source">${escapeHtml(prompt.sourceLabel)}</div>` : "",
@@ -189,8 +368,10 @@ function renderQuestion() {
       `<div class="question-context context-preview" title="${escapeAttr(contextTooltip(prompt.contextWindow || [], prompt.sentence || prompt.passage || "", headword))}">
         ${visibleContext
           .map((line) => {
-            const focus = isFocusContextLine(line, prompt.sentence || prompt.passage || "", headword);
-            return `<p class="context-line ${focus ? "is-focus" : ""}">${highlightTerm(line, headword)}</p>`;
+            const focus = focusTexts.some((focusText) => isFocusContextLine(line, focusText, headword)) ||
+              isFocusContextLine(line, prompt.sentence || prompt.passage || "", headword);
+            const headwords = collectHighlightHeadwords(prompt, headword);
+            return `<p class="context-line ${focus ? "is-focus" : ""}">${highlightTerms(line, headwords)}</p>`;
           })
           .join("")}
       </div>`
@@ -220,38 +401,12 @@ function renderQuestion() {
       .filter(Boolean)
       .join(" ");
 
-    if (prompt.questionType === "xuci_pair_compare") {
-      const sentences = Array.isArray(option.sentences)
-        ? option.sentences
-            .map((sentence, index) => {
-              const contexts = Array.isArray(option.sentence_contexts) ? option.sentence_contexts[index] || [] : [];
-              return `<div class="pair-sentence" title="${escapeAttr(contextTooltip(contexts, sentence, option.headword || headword))}">${highlightTerm(sentence, option.headword || headword)}</div>`;
-            })
-            .join("")
-        : "";
-      parts.push(`
-        <button class="${classes}" type="button" data-option="${escapeAttr(key)}" ${state.answered ? "disabled" : ""}>
-          <div class="option-head">
-            <span class="option-tag">${escapeHtml(key)}</span>
-            <strong>${escapeHtml(option.headword || "")}</strong>
-          </div>
-          <div class="pair-sentences">${sentences}</div>
-        </button>
-      `);
-      return;
-    }
-
     parts.push(`
-      <button class="${classes}" type="button" data-option="${escapeAttr(key)}" title="${escapeAttr(contextTooltip(option.context_window || [], option.sentence || "", option.headword || headword))}" ${state.answered ? "disabled" : ""}>
-        <div class="option-head">
+      <button class="${classes}" type="button" data-option="${escapeAttr(key)}" title="${escapeAttr(optionTooltip(prompt, option, headword))}" ${state.answered ? "disabled" : ""}>
+        <div class="option-line">
           <span class="option-tag">${escapeHtml(key)}</span>
+          <span class="option-line-text">${renderOptionInlineText(prompt, option, headword)}</span>
         </div>
-        ${
-          prompt.sourceKind === "exam" && option.sentence
-            ? `<div class="option-sentence">${highlightTerm(option.sentence || "", option.headword || headword)}</div>
-               <p class="option-gloss">${highlightTerm(option.text || "", option.headword || headword)}</p>`
-            : `<p class="option-gloss">${highlightTerm(option.text || "", headword)}</p>`
-        }
       </button>
     `);
   });
@@ -271,16 +426,16 @@ function renderQuestion() {
     button.addEventListener("click", () => submitAnswer(button.dataset.option || ""));
   });
   els.questionRoot.querySelector("#continue-btn")?.addEventListener("click", () => {
-    void loadNextQuestion();
+    void loadNextQuestion(undefined, { focus: "question" });
   });
   els.questionRoot.querySelector("#feedback-btn")?.addEventListener("click", () => {
     openFeedbackModal();
   });
   els.questionRoot.querySelector("#redo-mistakes-btn")?.addEventListener("click", () => {
-    void startChallenge(state.kind, "review", state.run?.id || "");
+    void startChallenge(state.kind, state.articleId, "review", state.run?.id || "");
   });
   els.questionRoot.querySelector("#next-round-btn")?.addEventListener("click", () => {
-    void startChallenge(state.kind, "ladder");
+    void startChallenge(state.kind, state.articleId || state.activeArticle?.article_id || "", "ladder");
   });
 }
 
@@ -338,29 +493,20 @@ function renderCompletionCard() {
   const toTier = state.roundComplete.toTier || {};
   const fromTier = state.roundComplete.fromTier || {};
   const reviewAvailable = Boolean(state.roundComplete.reviewAvailable);
-  const reviewCount = Number(state.roundComplete.reviewCount || 0);
   const isReview = (state.roundComplete.mode || state.mode) === "review";
-  const authNote = state.bootstrap?.auth?.authenticated
-    ? `<p class="completion-note">已登入，本輪結果已自動寫入用戶系統。</p>`
-    : "";
+  const challengeDoneLabel = state.kind === MIXED_KIND ? "通篇完成" : "本輪完成";
   return `
     <section class="completion-card ${promoted ? "up" : "hold"}">
       <div class="completion-crest">${escapeHtml(toTier.tierName || fromTier.tierName || "工蜂")}</div>
       <div class="completion-copy">
         <strong>${
           isReview
-            ? "這輪錯題回看已完成"
-            : promoted
-              ? "本輪全對，段位晉升"
-              : "本輪未全對，段位保持"
+            ? "錯題回看"
+            : promoted && state.kind === MIXED_KIND
+              ? "通篇完成"
+              : challengeDoneLabel
         }</strong>
         <span>${state.roundComplete.correctCount} / ${state.roundComplete.targetCount || ROUND_SIZE}</span>
-        ${
-          reviewAvailable
-            ? `<p class="completion-note">要不要把做錯的題再來一遍？目前還有 ${reviewCount} 題待回看。</p>`
-            : ""
-        }
-        ${authNote}
       </div>
       <div class="completion-actions">
         ${
@@ -375,16 +521,12 @@ function renderCompletionCard() {
 }
 
 function renderRoundCompletion() {
-  els.questionRoot.innerHTML = renderCompletionCard() || `
-    <div class="empty-state">
-      <p>本輪已結束，點擊詞類開始下一輪。</p>
-    </div>
-  `;
+  els.questionRoot.innerHTML = renderCompletionCard() || `<div class="empty-state empty-state-quiet"></div>`;
   els.questionRoot.querySelector("#redo-mistakes-btn")?.addEventListener("click", () => {
-    void startChallenge(state.kind, "review", state.run?.id || "");
+    void startChallenge(state.kind, state.articleId, "review", state.run?.id || "");
   });
   els.questionRoot.querySelector("#next-round-btn")?.addEventListener("click", () => {
-    void startChallenge(state.kind, "ladder");
+    void startChallenge(state.kind, state.articleId || state.activeArticle?.article_id || "", "ladder");
   });
 }
 
@@ -392,6 +534,13 @@ function renderRoundTrack() {
   const targetCount = Number(state.run?.targetCount || state.roundComplete?.targetCount || ROUND_SIZE);
   const marks = state.roundMarks.slice(0, targetCount);
   const currentIndex = state.currentItem?.prompt && !state.roundComplete ? Math.min(marks.length, targetCount - 1) : -1;
+  const hasQuestion = Boolean(state.currentItem?.prompt || state.roundComplete);
+  const hasAnswer = Boolean(state.answered || state.answerCard || state.roundComplete);
+  placeRoundTrack(hasAnswer);
+  els.roundTrack.classList.toggle("is-idle", !hasQuestion);
+  els.roundTrack.classList.toggle("after-answer", hasAnswer);
+  els.questionRoot.classList.toggle("has-answer", hasAnswer);
+  els.questionRoot.classList.toggle("is-idle", !hasQuestion);
   els.roundTrack.style.gridTemplateColumns = `repeat(${targetCount}, minmax(0, 1fr))`;
   els.roundTrack.innerHTML = Array.from({ length: targetCount }, (_, index) => {
     const status =
@@ -400,30 +549,40 @@ function renderRoundTrack() {
   }).join("");
 }
 
+function placeRoundTrack(hasAnswer) {
+  if (!els.roundTrack) return;
+  if (hasAnswer) {
+    if (els.roundTrack.parentElement !== els.questionRoot) {
+      els.questionRoot.appendChild(els.roundTrack);
+    }
+    return;
+  }
+  if (els.battleStage && els.roundTrack.parentElement !== els.battleStage) {
+    els.battleStage.appendChild(els.roundTrack);
+  }
+}
+
 function renderLeaderboard() {
-  els.leaderboardKind.textContent = kindLabel(state.kind || state.leaderboard?.kind || "content_word");
-  const entries = Array.isArray(state.leaderboard?.entries) ? state.leaderboard.entries : [];
-  if (!entries.length) {
+  els.leaderboardTabs.forEach((button) => {
+    button.classList.toggle("active", button.dataset.scope === state.leaderboardScope);
+  });
+  if (els.leaderboardMeta) {
+    els.leaderboardMeta.textContent = formatPeriodLabel(state.leaderboardScope, state.leaderboard?.period);
+  }
+  const entries = Array.isArray(state.leaderboard?.[state.leaderboardScope]) ? state.leaderboard[state.leaderboardScope] : [];
+  const me = state.leaderboard?.me?.[state.leaderboardScope] || null;
+  if (!entries.length && !me) {
     els.leaderboardRoot.innerHTML = `<div class="leaderboard-empty">暫無榜單資料。</div>`;
     return;
   }
-  const maxTier = Math.max(...entries.map((entry) => Number(entry.tier?.tierIndex || 1)), 1);
-  els.leaderboardRoot.innerHTML = entries
-    .slice(0, 8)
-    .map((entry) => {
-      const fill = Math.max(18, Math.round((Number(entry.tier?.tierIndex || 1) / maxTier) * 100));
-      return `
-        <div class="leaderboard-row">
-          <span class="leaderboard-rank">#${entry.rank}</span>
-          <div class="leaderboard-main">
-            <strong>${escapeHtml(entry.displayName || "")}</strong>
-            <div class="leaderboard-tier">${escapeHtml(entry.tier?.tierName || "工蜂")} · ${Number(entry.perfectRounds || 0)} 胜</div>
-            <div class="leaderboard-bar"><i style="width:${fill}%"></i></div>
-          </div>
-        </div>
-      `;
-    })
-    .join("");
+  const topRows = entries.slice(0, state.leaderboardScope === "total" ? 10 : 8);
+  const meShown = Boolean(me && topRows.some((entry) => entry.sessionId === me.sessionId));
+  const parts = topRows.map((entry) => renderLeaderboardRow(entry, Boolean(me && entry.sessionId === me.sessionId)));
+  if (me && !meShown) {
+    parts.push(`<div class="leaderboard-divider">我的位置</div>`);
+    parts.push(renderLeaderboardRow(me, true, true));
+  }
+  els.leaderboardRoot.innerHTML = parts.join("");
 }
 
 function optionState(prompt, option, key) {
@@ -452,7 +611,7 @@ async function submitAnswer(label) {
       state.answerReveal = null;
       state.answerCard = null;
       renderShell();
-      await loadNextQuestion();
+      await loadNextQuestion(undefined, { focus: "question" });
       return;
     }
     const correct = Boolean(payload?.result?.correct);
@@ -466,6 +625,7 @@ async function submitAnswer(label) {
     }
     state.roundComplete = payload?.roundCompleted ? payload.round || null : null;
     renderShell();
+    revealInteractionTarget(state.roundComplete ? "completion" : "analysis", { focus: state.roundComplete ? "completion" : "analysis" });
     if (state.roundComplete) {
       await refreshBootstrap();
       state.player = currentPlayerState();
@@ -490,23 +650,27 @@ function buildAnswerReveal(correctAnswer, submittedAnswer) {
   return { correct, submitted };
 }
 
-function currentPlayerState() {
+function currentPlayerState(kind = state.kind) {
   if (!state.bootstrap?.player) return null;
-  return state.kind === "function_word" ? state.bootstrap.player.function : state.bootstrap.player.content;
+  if (kind === GAOKAO_KIND) return state.bootstrap.player.gaokao || null;
+  if (kind === MIXED_KIND) return state.bootstrap.player.mixed || null;
+  return kind === "function_word" ? state.bootstrap.player.function : state.bootstrap.player.content;
 }
 
-function syncEntryButtons() {
-  document.querySelectorAll("[data-kind]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.kind === state.kind);
-    button.disabled = !hasAvailableChallenges(button.dataset.kind || "");
-  });
+function buildAccountSummary(player) {
+  const auth = state.bootstrap?.auth;
+  if (!auth?.authenticated || !auth.user || !player) return "";
+  const displayName = cleanInline(auth.user.displayName || auth.user.slug || "");
+  const tierName = cleanInline(player.tierName || "工蜂");
+  const modeName = cleanInline(player.modeName || "常規排位");
+  const totalScore = Number(player.totalScore || 0);
+  const roundsPlayed = Number(player.roundsPlayed || 0);
+  return `已登錄：${displayName}｜段位：${tierName}（${modeName}）｜總積分：${totalScore}｜參與：${roundsPlayed} 次`;
 }
 
-function hasAvailableChallenges(kind) {
-  const stats = state.bootstrap?.stats || {};
-  if (kind === "function_word") return Number(stats.functionChallenges || 0) > 0;
-  if (kind === "content_word") return Number(stats.contentChallenges || 0) > 0;
-  return false;
+function currentArticle(articleId = state.articleId) {
+  const articles = Array.isArray(state.bootstrap?.articles) ? state.bootstrap.articles : [];
+  return articles.find((article) => article.article_id === articleId) || null;
 }
 
 function setTheme(theme) {
@@ -529,11 +693,110 @@ function loadTheme() {
 }
 
 function kindLabel(kind) {
+  if (kind === GAOKAO_KIND) return "高考混編";
+  if (kind === MIXED_KIND) return "選篇掌握";
   return kind === "function_word" ? "虛詞" : "實詞";
+}
+
+function formatPeriodLabel(scope, periodInfo) {
+  if (!periodInfo) return "統計範圍：全部歷史";
+  if (scope === "daily") return `日期：${periodInfo.dailyKey || "-"}`;
+  if (scope === "weekly") return `週次：${periodInfo.weeklyKey || "-"}`;
+  return "統計範圍：全部歷史";
+}
+
+function leaderboardValue(entry, scope) {
+  if (scope === "total") {
+    return `${Number(entry.tier?.tierIndex || 1)}段`;
+  }
+  return `${Math.round(Number(entry.score || 0))}分`;
+}
+
+function leaderboardSubline(entry, scope) {
+  if (scope === "total") {
+    return `全對 ${Number(entry.perfectRounds || 0)} 輪｜作答 ${Number(entry.roundsPlayed || 0)} 輪`;
+  }
+  return `本期 ${Number(entry.runs || 0)} 輪｜段位 ${escapeHtml(entry.tier?.tierName || "工蜂")}`;
+}
+
+function renderLeaderboardRow(entry, isMe = false, pinned = false) {
+  return `
+    <div class="leaderboard-row ${isMe ? "me" : ""} ${pinned ? "pinned" : ""}">
+      <span class="leaderboard-rank">#${Number(entry.rank || 0)}</span>
+      <div class="leaderboard-main">
+        <strong>${escapeHtml(entry.displayName || "")}</strong>
+        <div class="leaderboard-tier">${escapeHtml(entry.tier?.tierName || "工蜂")} · ${escapeHtml(entry.tier?.modeName || "常規排位")}</div>
+      </div>
+      <div class="leaderboard-score">
+        ${leaderboardValue(entry, state.leaderboardScope)}
+        <small>${leaderboardSubline(entry, state.leaderboardScope)}</small>
+      </div>
+    </div>
+  `;
 }
 
 function termHeadword(termId) {
   return String(termId || "").split("::").pop() || "";
+}
+
+function optionTooltip(prompt, option, headword) {
+  if (prompt.questionType !== "xuci_pair_compare") {
+    return contextTooltip(
+      option.context_window || prompt.contextWindow || [],
+      option.sentence || prompt.sentence || prompt.passage || "",
+      option.headword || headword
+    );
+  }
+  const optionHeadword = option.headword || headword;
+  const sentences = normalizedOptionSentences(option);
+  const contextGroups = Array.isArray(option.sentence_contexts) ? option.sentence_contexts : [];
+  const sections = sentences
+    .map((sentence, index) => {
+      const tooltip = contextTooltip(contextGroups[index] || [], sentence, optionHeadword);
+      return cleanInline(tooltip);
+    })
+    .filter(Boolean);
+  return sections.join("\n\n");
+}
+
+function renderOptionInlineText(prompt, option, headword) {
+  if (prompt.questionType === "xuci_pair_compare") {
+    const optionHeadword = option.headword || headword || "";
+    const sentences = normalizedOptionSentences(option);
+    const sentenceHtml = sentences
+      .map((sentence) => highlightTerm(sentence, optionHeadword))
+      .filter(Boolean)
+      .join(`<span class="option-inline-sep">；</span>`);
+    const headwordHtml = optionHeadword
+      ? `<strong class="option-inline-headword">${escapeHtml(optionHeadword)}</strong>`
+      : "";
+    return [headwordHtml, sentenceHtml].filter(Boolean).join(`<span class="option-inline-sep">｜</span>`);
+  }
+
+  if (prompt.sourceKind === "exam" && option.sentence) {
+    const optionHeadword = option.headword || headword;
+    const sentence = cleanInline(option.sentence || "");
+    const text = cleanInline(option.text || "");
+    if (!text || compactText(text) === compactText(sentence)) {
+      return highlightTerm(option.sentence || "", optionHeadword);
+    }
+    if (compactText(text).includes(compactText(sentence))) {
+      return highlightTerm(option.text || "", optionHeadword);
+    }
+    return `${highlightTerm(option.sentence || "", optionHeadword)}<span class="option-inline-sep">——</span><span class="option-inline-detail">${highlightTerm(option.text || "", optionHeadword)}</span>`;
+  }
+
+  return highlightTerm(option.text || "", option.headword || headword);
+}
+
+function normalizedOptionSentences(option) {
+  if (Array.isArray(option.sentences) && option.sentences.length) {
+    return option.sentences.map((item) => cleanInline(item)).filter(Boolean);
+  }
+  return String(option.text || "")
+    .split(/◆|；|;/)
+    .map((item) => cleanInline(item))
+    .filter(Boolean);
 }
 
 function highlightTerm(text, headword) {
@@ -549,6 +812,34 @@ function renderError(message) {
       <p>${escapeHtml(message)}</p>
     </div>
   `;
+  revealInteractionTarget("question", { focus: "question" });
+}
+
+function revealInteractionTarget(target, options = {}) {
+  if (options.scroll === false || !isCompactLayout()) return;
+  const element = targetElement(target);
+  if (!element) return;
+  const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  window.requestAnimationFrame(() => {
+    element.scrollIntoView({ behavior, block: "start", inline: "nearest" });
+  });
+}
+
+function targetElement(target) {
+  if (target === "articles") {
+    return els.articlePanel && !els.articlePanel.hidden ? els.articlePanel : els.modePanel;
+  }
+  if (target === "analysis") {
+    return els.questionRoot?.querySelector(".analysis-card") || els.questionRoot;
+  }
+  if (target === "completion") {
+    return els.questionRoot?.querySelector(".completion-card") || els.questionRoot;
+  }
+  return els.questionRoot?.querySelector(".question-card") || document.querySelector(".battle-stage") || els.questionRoot;
+}
+
+function isCompactLayout() {
+  return window.matchMedia("(max-width: 980px)").matches;
 }
 
 function countTrue(values) {
@@ -589,6 +880,56 @@ function pickContextLines(items, focusText = "", headword = "") {
 
 function buildVisibleContext(prompt, headword = "") {
   return pickContextLines(prompt.contextWindow || [], prompt.sentence || prompt.passage || "", headword);
+}
+
+function buildVisibleContextForPrompt(prompt, headword = "") {
+  if (prompt.sourceKind === "exam") {
+    return expandContextSentences(prompt.contextWindow || []);
+  }
+  if (prompt.sourceKind === "textbook") {
+    return buildVisibleContext(prompt, headword);
+  }
+  return [];
+}
+
+function collectFocusTexts(prompt) {
+  const texts = [];
+  if (prompt.sentence) texts.push(prompt.sentence);
+  if (prompt.passage) texts.push(prompt.passage);
+  const options = Array.isArray(prompt.options) ? prompt.options : [];
+  options.forEach((option) => {
+    if (option?.sentence) texts.push(option.sentence);
+    if (Array.isArray(option?.sentences)) {
+      option.sentences.forEach((s) => {
+        if (s) texts.push(s);
+      });
+    } else if (prompt.questionType === "xuci_pair_compare") {
+      normalizedOptionSentences(option).forEach((s) => texts.push(s));
+    }
+  });
+  return texts;
+}
+
+function collectHighlightHeadwords(prompt, fallback = "") {
+  const words = new Set();
+  if (fallback) words.add(fallback);
+  const options = Array.isArray(prompt.options) ? prompt.options : [];
+  options.forEach((option) => {
+    if (option?.headword) words.add(option.headword);
+  });
+  return [...words].filter(Boolean);
+}
+
+function highlightTerms(text, headwords) {
+  if (!headwords || !headwords.length) return escapeHtml(text || "");
+  let safe = escapeHtml(text || "");
+  const sorted = [...headwords].sort((a, b) => b.length - a.length);
+  sorted.forEach((word) => {
+    if (!word) return;
+    const escaped = escapeRegex(escapeHtml(word));
+    safe = safe.replace(new RegExp(escaped, "g"), `<span class="term-hit">${escapeHtml(word)}</span>`);
+  });
+  return safe;
 }
 
 function expandContextSentences(items) {
@@ -795,16 +1136,31 @@ async function api(url, init = {}) {
   if (!(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
+  headers.set("X-WY-Device-Id", getAuditDeviceId());
   const response = await fetch(url, {
+    ...init,
     credentials: "include",
     headers,
-    ...init,
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(payload.detail || payload.error || `HTTP ${response.status}`);
   }
   return payload;
+}
+
+function getAuditDeviceId() {
+  try {
+    const existing = window.localStorage.getItem(AUDIT_DEVICE_KEY);
+    if (existing && /^[a-z0-9_-]{12,128}$/i.test(existing)) return existing;
+    const bytes = new Uint8Array(18);
+    crypto.getRandomValues(bytes);
+    const generated = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    window.localStorage.setItem(AUDIT_DEVICE_KEY, generated);
+    return generated;
+  } catch (error) {
+    return `ephemeral-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
 }
 
 function escapeHtml(value) {

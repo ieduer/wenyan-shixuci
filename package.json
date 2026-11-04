@@ -6,17 +6,20 @@
   "scripts": {
     "check:sources": "/Users/ylsuen/.venv/bin/python scripts/check_sources.py",
     "build:data": "/Users/ylsuen/.venv/bin/python scripts/build_runtime_data.py",
+    "build:v3": "/Users/ylsuen/.venv/bin/python scripts/v3/build_v3.py",
     "audit:data": "/Users/ylsuen/.venv/bin/python scripts/audit_runtime_data.py",
-    "refresh:data": "npm run build:data && npm run audit:data",
+    "audit:v3": "/Users/ylsuen/.venv/bin/python scripts/v3/audit_v3.py",
+    "refresh:data": "npm run build:data && npm run build:v3 && npm run audit:v3",
     "check": "tsc --noEmit",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply wenyan-shixuci-db --local",
-    "db:migrate:remote": "wrangler d1 migrations apply wenyan-shixuci-db --remote"
+    "db:migrate:remote": "wrangler d1 migrations apply wenyan-shixuci-db --remote",
+    "predeploy": "bash /Users/ylsuen/CF/scripts/git-deploy-gate.sh"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250410.0",
     "typescript": "^5.8.3",
-    "wrangler": "^4.14.4"
+    "wrangler": "^4.100.0"
   }
 }

@@ -34,9 +34,15 @@ RUNTIME_MIRROR_DIR = REPO_ROOT / "data" / "runtime"
 PUBLIC_RUNTIME_DIR = REPO_ROOT / "public" / "runtime"
 PRIVATE_RUNTIME_DIR = REPO_ROOT / "data" / "runtime_private"
 GENERATED_DIR = REPO_ROOT / "src" / "generated"
+DOCS_DIR = REPO_ROOT / "docs"
 QUESTION_TEMPLATES_DIR = REPO_ROOT / "question_templates"
 TEXTBOOK_ARTICLE_MASTER_PATH = PRIVATE_RUNTIME_DIR / "textbook_article_master_table.json"
 TEXTBOOK_NOTE_MASTER_PATH = PRIVATE_RUNTIME_DIR / "textbook_note_master_table.json"
+TEXTBOOK_PROOFREAD_TABLE_PATH = PRIVATE_RUNTIME_DIR / "textbook_note_proofread_table.json"
+TEXTBOOK_PROOFREAD_TABLE_CSV_PATH = PRIVATE_RUNTIME_DIR / "textbook_note_proofread_table.csv"
+TEXTBOOK_PROOFREAD_MD_PATH = DOCS_DIR / "TEXTBOOK_NOTE_PROOFREADING.md"
+TEXTBOOK_ARTICLE_PACKET_DIR = PRIVATE_RUNTIME_DIR / "textbook_article_packets"
+TEXTBOOK_ARTICLE_PACKET_MD_DIR = DOCS_DIR / "TEXTBOOK_ARTICLES"
 VERSION_MANIFEST_PATH = SOURCE_ROOT / "platform" / "backend" / "textbook_version_manifest.json.pre_chuzhong"
 MINERU_OUTPUT_ROOT = SOURCE_ROOT / "data" / "mineru_output"
 ANSWER_OVERRIDE_PATH = REPO_ROOT / "data" / "manual" / "beijing_exam_answer_overrides.json"
@@ -244,6 +250,19 @@ TEXTBOOK_FUNCTION_VALUE_RE = re.compile(r"(何|怎么|为什么|还是|竟|于�
 TEXTBOOK_FUNCTION_BAD_HINT_RE = re.compile(
     r"(这里指|古代|人名|地名|匈奴|创作|性情|江面|媒人|不久后|备办|除去以前|武帝|流去的|广阔的江面)"
 )
+TEXTBOOK_FUNCTION_VALUE_PREFIXES = (
+    "为什么呢",
+    "为什么",
+    "怎么",
+    "还是",
+    "于是",
+    "如果",
+    "那么",
+    "就",
+    "趁着（机会）",
+    "趁着",
+    "难道",
+)
 NUMBER_COMBO_OPTION_RE = re.compile(r"^\d{2,3}$")
 FUNCTION_PROFILE_DISTRACTOR_FALLBACK = [
     "连词，表示并列或承接",
@@ -254,6 +273,8 @@ FUNCTION_PROFILE_DISTRACTOR_FALLBACK = [
     "语气词，表示感叹或疑问",
 ]
 FUNCTION_PROFILE_BAD_RE = re.compile(r"(其谁|其孰|用千|小旬|旬之前|前或代词后|一分句|…|[A-Za-z])")
+TEXTBOOK_EXTRA_FUNCTION_HEADWORDS = {"来", "将", "言", "载"}
+TEXTBOOK_FUNCTION_HEADWORD_ALLOW = COMMON_XUCI_HEADWORDS | TEXTBOOK_EXTRA_FUNCTION_HEADWORDS
 DICT_SENSE_NUMBERED_RE = re.compile(r"(?:\[[^\]]+\]\s*)?\d+\.\s*([^\[\]]+?)(?=(?:\s*(?:\[[^\]]+\]\s*)?\d+\.)|\s*\[[^\]]+\]|$)")
 DICT_SENSE_TAGGED_RE = re.compile(r"\[([^\]]+)\]\s*([^。\[\]]+)")
 DICT_META_NOISE_RE = re.compile(r"(部首外筆畫數|總筆畫數|部首字|部首外笔画数|总笔画数)")
@@ -264,9 +285,10 @@ CONTENT_GLOSS_BAD_HINT_RE = re.compile(
     r"(指.*?(王|帝|公|侯|君|将军|大夫|人|地名|县|州|国)|作者于|公元|前\d+|后\d+|年（?\d+|在今|版）|选自《)"
 )
 TEXTBOOK_CONTENT_TARGET_BAD_RE = re.compile(
-    r"(地名|古地名|在今|今[^。；;，,]{0,16}(?:东|西|南|北|县|市|省|一带)|山名|水名|渡口|都城|国名|郡名|县令|州治|源出|流入长江的地方|一带的人|人名|官名|职官名|職官名|年号|帝号|谥号|匈奴的一个亲王|生卒年不详|(?:春秋|战国|两汉|汉代|唐代|宋代|明代|清代)[^。；;，,]{0,18}(?:人|乐官|大夫|将军|国君|诗人|词人)|部首|复姓|複姓|^姓(?:的支系)?(?:。)?$|^名，姓(?:。)?$)"
+    r"(地名|古地名|在今|今[^。；;，,]{0,16}(?:东|西|南|北|县|市|省|一带)|山名|水名|渡口|都城|国名|郡名|县令|州治|源出|流入长江的地方|一带的人|人名|官名|职官名|職官名|年号|帝号|谥号|匈奴的一个亲王|生卒年不详|请教过|问过礼|，字[\u4e00-\u9fff]{1,4}|(?:春秋|战国|两汉|汉代|唐代|宋代|明代|清代)[^。；;，,]{0,18}(?:人|乐官|大夫|将军|国君|诗人|词人)|部首|复姓|複姓|^姓(?:的支系)?(?:。)?$|^名，姓(?:。)?$)"
 )
 TEXTBOOK_NON_MEANINGFUL_HEADWORD_RE = re.compile(r"^[一二三四五六七八九十百千万两廿卅\d]+(?:年|月|日|夜|鼓)?$")
+TEXTBOOK_CONTENT_EXACT_SKIP = {"知方", "吾与", "湯武", "汤武"}
 CONTENT_DICT_GLOSS_BAD_RE = re.compile(
     r"^(?:(?:名|动|動|副|形|介|连|連|助|代)，)?(?:姓(?:的支系)?|名，姓|二一四部首之一|複姓|复姓|職官名|职官名|地名簡稱|地名简称|官名|官职|古代官名|古代地名|古代国名|人名用字|人名)$"
 )
@@ -276,6 +298,7 @@ DIRECT_OPTION_GLOSS_BAD_PAREN_RE = re.compile(
 DIRECT_OPTION_GLOSS_BAD_FRAGMENT_RE = re.compile(
     r"(还中午|僅供個人學習使用|仅供个人学习使用|教材|高考|下載|下载|链接|鏈接)"
 )
+NOTE_LEADING_LABEL_RE = re.compile(r"^[﹝〔［【\[]([^﹞〕］】\]]{1,48})[﹞〕］】\]]\s*(.*)$")
 
 
 def load_json(path: Path) -> Any:
@@ -800,12 +823,39 @@ def filter_valid_content_glosses(values: list[str]) -> list[str]:
 
 
 def textbook_content_ref_style(ref: dict[str, Any]) -> str:
-    label = normalize_label_headword(str(ref.get("label_text") or ""))
     headword = clean_text(str(ref.get("headword") or ""))
-    target = label or headword
-    if len(target) > 4:
+    target = (
+        normalize_label_headword(str(ref.get("label_text") or ""))
+        or normalize_label_headword(leading_note_annotation(str(ref.get("note_block") or "")))
+        or normalize_label_headword(headword)
+    )
+    if len(target) > 2:
         return "phrase"
     return "word"
+
+
+def textbook_answer_shape(ref: dict[str, Any], kind: str, answer_text: str) -> str:
+    if kind == "function_word":
+        return "function"
+    style = textbook_content_ref_style(ref)
+    cleaned = clean_text(answer_text)
+    if re.search(r"(心里|内心|痛快|高兴|快乐|忧愁|担心|害怕|惭愧|怜悯|吝惜|舍不得|不忍)", cleaned):
+        return "state"
+    if re.search(r"(地区|地方|地带|中原|都城|京城|城邑|境内|所在地|黄河|长江|江南|江北|河东|河西|山东|山西)", cleaned):
+        return "place"
+    if re.search(r"^(地名|国名)", cleaned):
+        return "place"
+    if re.search(r"^(古代|古人|古时|人名|官名|爵名|年号|星宿|一种|某种)", cleaned):
+        return "term"
+    if re.search(r"(地区|地方|地带|官职|官名|人名|国名|族名|衣服|牲畜|祭品|钟|鼓|车|马|牛|羊|猪)", cleaned):
+        return "term"
+    if re.search(r"^(用|把|使|让|给|向|对|为|替|被|从|到|达到|希望|愿意|听任|效法|侍奉|敬爱|率领|治理|安抚|保全|驱使|朝见|攻打|征伐)", cleaned):
+        return "action"
+    if re.search(r"(这里|此处|比喻|形容|指的是|意思是)", cleaned):
+        return "explain"
+    if style == "phrase":
+        return "phrase"
+    return "gloss"
 
 
 def derive_textbook_dict_headwords(ref: dict[str, Any], fallback_headword: str = "") -> list[str]:
@@ -954,6 +1004,183 @@ def textbook_phrase_gloss_ok(value: str) -> bool:
     if CONTENT_GLOSS_BAD_HINT_RE.search(cleaned):
         return False
     return True
+
+
+def textbook_distractor_text_ok(value: str, kind: str) -> bool:
+    cleaned = clean_text(value)
+    if not cleaned:
+        return False
+    if cleaned in BANNED_GLOSS_CANDIDATES:
+        return False
+    if "仅供个人学习使用" in cleaned or "人民教育出版社" in cleaned:
+        return False
+    if re.search(r"[……]|\.{2,}", cleaned):
+        return False
+    if kind == "function_word":
+        if len(cleaned) > 40:
+            return False
+        if TEXTBOOK_FUNCTION_BAD_HINT_RE.search(cleaned):
+            return False
+        if FUNCTION_PROFILE_BAD_RE.search(cleaned):
+            return False
+        return True
+    if len(cleaned) > 90:
+        return False
+    if CONTENT_GLOSS_BAD_HINT_RE.search(cleaned):
+        return False
+    if CONTENT_DICT_GLOSS_BAD_RE.search(cleaned):
+        return False
+    if re.search(r"\d{3,}", cleaned):
+        return False
+    return True
+
+
+def textbook_distractor_answer_text(ref: dict[str, Any], kind: str, headword: str) -> str:
+    if kind == "function_word":
+        return normalize_function_profile_text(
+            str(ref.get("answer_text") or ref.get("gloss") or ref.get("note_block") or "")
+        )
+    raw_answer = str(
+        ref.get("answer_text")
+        or build_textbook_answer_text(
+            str(ref.get("label_text") or ""),
+            str(ref.get("note_block") or ""),
+            str(ref.get("gloss") or ""),
+            headword,
+        )
+    )
+    return clean_textbook_answer_text(raw_answer, headword, str(ref.get("label_text") or ""))
+
+
+def build_textbook_distractor_catalog(textbook_refs: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    catalog: list[dict[str, Any]] = []
+    for term_id, refs in sorted(textbook_refs.items()):
+        kind = "function_word" if str(term_id).startswith("function::") else "content_word"
+        fallback_headword = str(term_id).split("::", 1)[1] if "::" in str(term_id) else str(term_id)
+        for ref in refs:
+            headword = clean_text(str(ref.get("headword") or fallback_headword))
+            label_text = str(ref.get("label_text") or "")
+            note_text = str(ref.get("note_block") or "")
+            gloss = str(ref.get("gloss") or "")
+            sentence = best_textbook_focus_sentence(
+                str(ref.get("sentence") or ""),
+                list(ref.get("context_window") or []),
+                headword,
+                label_text,
+            )
+            answer_text = textbook_distractor_answer_text(ref, kind, headword)
+            if not answer_text:
+                continue
+            if not textbook_ref_is_reliable(kind, headword, label_text, note_text, gloss or answer_text, sentence):
+                continue
+            if not textbook_distractor_text_ok(answer_text, kind):
+                continue
+            book_key = clean_text(str(ref.get("book_key") or ""))
+            title = clean_text(str(ref.get("title") or ""))
+            catalog.append(
+                {
+                    "text": answer_text,
+                    "kind": kind,
+                    "term_id": term_id,
+                    "headword": headword,
+                    "ref_id": clean_text(str(ref.get("ref_id") or "")),
+                    "book_key": book_key,
+                    "title": title,
+                    "article_id": stable_slug(f"{book_key}:{title}") if book_key or title else "",
+                    "school_stage": clean_text(str(ref.get("school_stage") or "")),
+                    "style": textbook_content_ref_style(ref) if kind == "content_word" else "function",
+                    "answer_shape": textbook_answer_shape(ref, kind, answer_text),
+                    "note_order": int(ref.get("note_order") or 0),
+                }
+            )
+    return catalog
+
+
+def text_too_close_for_distractor(candidate: str, correct: str) -> bool:
+    left = clean_text(candidate)
+    right = clean_text(correct)
+    if not left or not right:
+        return True
+    if left == right:
+        return True
+    left_compact = compact_hanzi_text(left)
+    right_compact = compact_hanzi_text(right)
+    if not left_compact or not right_compact:
+        return False
+    shorter, longer = sorted([left_compact, right_compact], key=len)
+    return len(shorter) >= 3 and shorter in longer
+
+
+def build_textbook_note_distractors(
+    ref: dict[str, Any],
+    term_id: str,
+    kind: str,
+    correct_text: str,
+    catalog: list[dict[str, Any]],
+    seed: str,
+) -> list[dict[str, str]]:
+    ref_id = clean_text(str(ref.get("ref_id") or ""))
+    book_key = clean_text(str(ref.get("book_key") or ""))
+    title = clean_text(str(ref.get("title") or ""))
+    school_stage = clean_text(str(ref.get("school_stage") or ""))
+    article_id = stable_slug(f"{book_key}:{title}") if book_key or title else ""
+    style = textbook_content_ref_style(ref) if kind == "content_word" else "function"
+    answer_shape = textbook_answer_shape(ref, kind, correct_text)
+
+    scored: list[tuple[int, str, dict[str, Any]]] = []
+    for candidate in catalog:
+        if str(candidate.get("kind") or "") != kind:
+            continue
+        if clean_text(str(candidate.get("ref_id") or "")) == ref_id:
+            continue
+        text = clean_text(str(candidate.get("text") or ""))
+        if text_too_close_for_distractor(text, correct_text):
+            continue
+        score = 0
+        if clean_text(str(candidate.get("term_id") or "")) == clean_text(term_id):
+            score += 110
+        if clean_text(str(candidate.get("article_id") or "")) == article_id:
+            score += 90
+        if clean_text(str(candidate.get("book_key") or "")) == book_key:
+            score += 45
+        if clean_text(str(candidate.get("school_stage") or "")) == school_stage:
+            score += 20
+        if clean_text(str(candidate.get("style") or "")) == style:
+            score += 80
+        else:
+            score -= 60
+        candidate_shape = clean_text(str(candidate.get("answer_shape") or ""))
+        if candidate_shape == answer_shape:
+            score += 90
+        elif answer_shape in {"state", "action", "place", "term"} or candidate_shape in {"state", "action", "place", "term"}:
+            score -= 85
+        else:
+            score -= 35
+        score -= min(80, abs(len(text) - len(clean_text(correct_text))) * 2)
+        tie_break = hashlib.sha1(
+            f"{seed}:{candidate.get('ref_id')}:{candidate.get('text')}".encode("utf-8")
+        ).hexdigest()
+        scored.append((score, tie_break, candidate))
+
+    chosen: list[dict[str, str]] = []
+    seen_texts: set[str] = set()
+    for _score, _tie_break, candidate in sorted(scored, key=lambda item: (-item[0], item[1])):
+        text = clean_text(str(candidate.get("text") or ""))
+        if not text or text in seen_texts:
+            continue
+        seen_texts.add(text)
+        chosen.append(
+            {
+                "text": text,
+                "origin": "textbook_note_distractor",
+                "source_ref_id": clean_text(str(candidate.get("ref_id") or "")),
+                "source_title": clean_text(str(candidate.get("title") or "")),
+                "source_headword": clean_text(str(candidate.get("headword") or "")),
+            }
+        )
+        if len(chosen) >= 3:
+            break
+    return chosen
 
 
 def group_textbook_refs_by_source(textbook_refs: dict[str, list[dict[str, Any]]]) -> dict[tuple[str, str], list[dict[str, Any]]]:
@@ -1825,13 +2052,54 @@ def extract_note_headword(label_text: str, note_text: str = "") -> str:
     label = re.sub(r"《.*?》", "", label)
     label = "".join(re.findall(r"[\u4e00-\u9fff]+", label))
     body = clean_text(note_text)
+    stripped_body = strip_leading_note_annotation(note_text) or body
+    function_like_note = bool(
+        TEXTBOOK_FUNCTION_GRAMMAR_RE.search(body)
+        or TEXTBOOK_FUNCTION_VALUE_RE.search(body)
+        or TEXTBOOK_FUNCTION_GRAMMAR_RE.search(stripped_body)
+        or TEXTBOOK_FUNCTION_VALUE_RE.search(stripped_body)
+    )
+    quoted_targets = [
+        clean_text(match.group(1))
+        for match in re.finditer(r"[“\"]([\u4e00-\u9fff]{1,3})[”\"]", stripped_body)
+        if clean_text(match.group(1))
+    ]
+    for candidate in quoted_targets:
+        if candidate in label and candidate in TEXTBOOK_FUNCTION_HEADWORD_ALLOW:
+            return candidate
     body_token_match = re.search(r"^([\u4e00-\u9fff]{1,4})[，,:：]", body)
     if body_token_match:
         candidate = body_token_match.group(1)
-        if candidate in label or candidate in COMMON_XUCI_HEADWORDS:
+        if candidate in label or candidate in TEXTBOOK_FUNCTION_HEADWORD_ALLOW:
             return candidate
-    if label in COMMON_XUCI_HEADWORDS:
+    stripped_body_token_match = re.search(r"^([\u4e00-\u9fff]{1,4})[，,:：]", stripped_body)
+    if stripped_body_token_match:
+        candidate = stripped_body_token_match.group(1)
+        if candidate in label or candidate in TEXTBOOK_FUNCTION_HEADWORD_ALLOW:
+            return candidate
+    clause_matches = re.finditer(r"(?:^|[。；;，,？！!?])\s*([\u4e00-\u9fff]{1,2})\s*[，,:：]\s*([^。；;]{1,28})", body)
+    for match in clause_matches:
+        candidate = clean_text(match.group(1))
+        detail = clean_text(match.group(2))
+        if not candidate:
+            continue
+        if len(candidate) == 1 and TEXTBOOK_FUNCTION_GRAMMAR_RE.search(detail):
+            return candidate
+        if candidate in TEXTBOOK_FUNCTION_HEADWORD_ALLOW and (
+            TEXTBOOK_FUNCTION_GRAMMAR_RE.search(detail) or TEXTBOOK_FUNCTION_VALUE_RE.search(detail)
+        ):
+            return candidate
+    if label in TEXTBOOK_FUNCTION_HEADWORD_ALLOW:
         return label
+    if function_like_note and label:
+        if len(label) > 1 and label[-1] in TEXTBOOK_FUNCTION_HEADWORD_ALLOW:
+            if TEXTBOOK_FUNCTION_GRAMMAR_RE.search(body):
+                return label[-1]
+            if TEXTBOOK_FUNCTION_VALUE_RE.search(body) and label[0] not in COMMON_XUCI_HEADWORDS:
+                return label[-1]
+        function_chars = [char for char in label if char in TEXTBOOK_FUNCTION_HEADWORD_ALLOW]
+        if len(dict.fromkeys(function_chars)) == 1:
+            return function_chars[0]
     if len(label) <= 4:
         return label
     if body:
@@ -1845,12 +2113,150 @@ def extract_note_headword(label_text: str, note_text: str = "") -> str:
     return label[:8]
 
 
+def extract_textbook_note_explicit_targets(note_text: str) -> list[str]:
+    stripped = strip_leading_note_annotation(note_text) or clean_text(note_text)
+    if not stripped:
+        return []
+    candidates: list[str] = []
+    candidates.extend(
+        clean_text(match.group(1))
+        for match in re.finditer(r"[“\"]([\u4e00-\u9fff]{1,3})[”\"]", stripped)
+        if clean_text(match.group(1))
+    )
+    candidates.extend(
+        clean_text(match.group(1))
+        for match in re.finditer(r"(?:^|[。；;，,？！!?])\s*([\u4e00-\u9fff]{1,3})\s*[，,:：]", stripped)
+        if clean_text(match.group(1))
+    )
+    return unique_clean_strings(candidates)
+
+
+def textbook_primary_target(headword: str, label_text: str, note_text: str) -> str:
+    normalized_headword = normalize_label_headword(headword)
+    normalized_label = normalize_label_headword(label_text)
+    leading_label = normalize_label_headword(leading_note_annotation(note_text))
+    if normalized_headword and normalized_label and normalized_headword in normalized_label and len(normalized_headword) < len(normalized_label):
+        return normalized_headword
+    if leading_label and normalized_label and leading_label in normalized_label and len(leading_label) < len(normalized_label):
+        return leading_label
+    return normalized_label or normalized_headword
+
+
+def resolve_textbook_bank_headword(row: dict[str, Any], initial_headword: str, term_kind: str) -> str:
+    label = normalize_label_headword(str(row.get("label_text") or ""))
+    note_text = clean_text(str(row.get("note_text") or ""))
+    stripped_note = strip_leading_note_annotation(note_text) or note_text
+    sentence = compact_hanzi_text(
+        clean_text(
+            str(
+                row.get("source_sentence")
+                or row.get("text_source_sentence")
+                or row.get("layout_source_sentence")
+                or ""
+            )
+        )
+    )
+    explicit_targets = extract_textbook_note_explicit_targets(note_text)
+    dict_targets = unique_clean_strings(str(item) for item in list(row.get("dict_headwords") or []) if clean_text(str(item)))
+    normalized_initial = normalize_label_headword(initial_headword)
+
+    def sentence_has(candidate: str) -> bool:
+        compact_candidate = compact_hanzi_text(candidate)
+        return bool(compact_candidate and compact_candidate in sentence)
+
+    if term_kind == "function_word":
+        scored: list[tuple[int, str]] = []
+        for candidate in unique_clean_strings([*explicit_targets, normalized_initial, label, *dict_targets]):
+            normalized_candidate = normalize_label_headword(candidate)
+            if not normalized_candidate or len(normalized_candidate) > 2:
+                continue
+            if normalized_candidate not in TEXTBOOK_FUNCTION_HEADWORD_ALLOW:
+                continue
+            if not sentence_has(normalized_candidate):
+                continue
+            score = 0
+            if normalized_candidate in explicit_targets:
+                score += 60
+            if re.search(rf"[“\"]{re.escape(normalized_candidate)}[”\"]", stripped_note):
+                score += 30
+            if re.search(rf"(?:^|[。；;，,？！!?])\s*{re.escape(normalized_candidate)}\s*[，,:：]", stripped_note):
+                score += 30
+            if normalized_candidate == normalized_initial:
+                score += 18
+            if normalized_candidate in label:
+                score += 12
+            score += 8 - len(normalized_candidate)
+            scored.append((score, normalized_candidate))
+        if scored:
+            return sorted(scored, key=lambda item: (-item[0], len(item[1]), item[1]))[0][1]
+        return ""
+
+    if len(label) <= 2 and sentence_has(label):
+        return label
+
+    scored_content: list[tuple[int, str]] = []
+    label_suffixes = [label[-size:] for size in (2, 1) if len(label) >= size]
+    if "之" in label:
+        prefix = label.split("之", 1)[0]
+        if 1 <= len(prefix) <= 2:
+            label_suffixes.insert(0, prefix)
+    if label.startswith("如") and len(label) >= 3:
+        for size in (2, 1):
+            candidate = label[1 : 1 + size]
+            if len(candidate) == size:
+                label_suffixes.insert(0, candidate)
+    for explicit in explicit_targets:
+        normalized_explicit = normalize_label_headword(explicit)
+        if len(normalized_explicit) == 1 and label.endswith(normalized_explicit) and len(label) >= 2:
+            label_suffixes.insert(0, label[-2:])
+    candidate_pool = unique_clean_strings(
+        [normalized_initial, *explicit_targets, *dict_targets, *label_suffixes]
+    )
+    for candidate in candidate_pool:
+        normalized_candidate = normalize_label_headword(candidate)
+        if not normalized_candidate or len(normalized_candidate) > 2:
+            continue
+        if normalized_candidate in COMMON_XUCI_HEADWORDS and normalized_candidate not in explicit_targets:
+            continue
+        if not sentence_has(normalized_candidate):
+            continue
+        score = 0
+        if normalized_candidate in explicit_targets:
+            score += 70
+        if re.search(rf"(?:^|[。；;，,？！!?])\s*{re.escape(normalized_candidate)}\s*[，,:：]", stripped_note):
+            score += 40
+        if normalized_candidate in dict_targets:
+            score += 28
+        if label.endswith(normalized_candidate):
+            score += 18
+        if label.startswith(normalized_candidate):
+            score += 10
+        if normalized_candidate in stripped_note:
+            score += 8
+        score += len(normalized_candidate) * 6
+        scored_content.append((score, normalized_candidate))
+    if scored_content:
+        return sorted(scored_content, key=lambda item: (-item[0], -len(item[1]), item[1]))[0][1]
+    if len(normalized_initial) <= 2 and sentence_has(normalized_initial):
+        return normalized_initial
+    return ""
+
+
 def summarize_note_gloss(headword: str, note_text: str) -> str:
-    cleaned = clean_text(note_text)
+    original_cleaned = clean_text(note_text)
+    cleaned = strip_leading_note_annotation(note_text)
+    if not cleaned:
+        cleaned = original_cleaned
     if not cleaned:
         return ""
     if cleaned.startswith("选自《") or "仅供个人学习使用" in cleaned:
         return ""
+    if headword:
+        inline_match = re.search(rf"(?:^|[。；;，,？！!?])\s*{re.escape(headword)}\s*[，,:：]\s*([^。；;]+)", cleaned)
+        if inline_match:
+            candidate = clean_text(inline_match.group(1))
+            if looks_like_clean_gloss(candidate) or TEXTBOOK_FUNCTION_GRAMMAR_RE.search(candidate):
+                return truncate_excerpt(candidate, 28)
     for marker in ("意思是", "这里是", "这里指", "这里借指", "即", "指"):
         if marker in cleaned and len(cleaned.split(marker, 1)[1]) <= 22:
             candidate = clean_text(cleaned.split(marker, 1)[1])
@@ -1868,22 +2274,86 @@ def summarize_note_gloss(headword: str, note_text: str) -> str:
     return truncate_excerpt(first_clause, 28)
 
 
-def build_textbook_answer_text(label_text: str, note_text: str, gloss: str) -> str:
+def summarize_textbook_function_gloss_candidate(value: str) -> str:
+    cleaned = normalize_function_profile_text(value)
+    if not cleaned:
+        return ""
+    if TEXTBOOK_FUNCTION_GRAMMAR_RE.search(cleaned) and cleaned.startswith(
+        ("助词", "语气助词", "语助词", "副词", "连词", "介词", "代词", "句中助词", "表示", "用于", "用在", "表")
+    ):
+        return truncate_excerpt(cleaned, 18)
+    if cleaned in {"无实义", "句中助词", "语助词", "语气助词", "表被动", "表示被动"}:
+        return cleaned
+    if len(cleaned) <= 12 and not TEXTBOOK_FUNCTION_BAD_HINT_RE.search(cleaned):
+        if not re.search(r"[。；;]", cleaned):
+            return cleaned
+    for prefix in TEXTBOOK_FUNCTION_VALUE_PREFIXES:
+        if not cleaned.startswith(prefix):
+            continue
+        tail = cleaned[len(prefix) :]
+        if tail.startswith(("、", "，")) and len(cleaned) <= 12:
+            return cleaned
+        return prefix
+    return ""
+
+
+def summarize_textbook_function_gloss(headword: str, note_text: str, gloss: str) -> str:
+    sources = [
+        clean_text(gloss),
+        strip_leading_note_annotation(note_text),
+        clean_text(note_text),
+    ]
+    for source in sources:
+        if not source:
+            continue
+        if headword:
+            inline_match = re.search(rf"(?:^|[。；;，,？！!?])\s*{re.escape(headword)}\s*[，,:：]\s*([^。；;]+)", source)
+            if inline_match:
+                summary = summarize_textbook_function_gloss_candidate(inline_match.group(1))
+                if summary:
+                    return summary
+        summary = summarize_textbook_function_gloss_candidate(source)
+        if summary:
+            return summary
+    return ""
+
+
+def build_textbook_answer_text(label_text: str, note_text: str, gloss: str, headword: str = "") -> str:
     cleaned_note = clean_text(note_text)
+    stripped_note = strip_leading_note_annotation(note_text) or cleaned_note
     cleaned_gloss = clean_text(gloss)
-    normalized_label = normalize_label_headword(label_text)
+    normalized_label = textbook_primary_target(headword, label_text, note_text)
     if not cleaned_note:
         return cleaned_gloss
     compact_note = "".join(
         part
-        for part in [clean_text(item) for item in re.split(r"(?<=[。；;])", cleaned_note)][:2]
+        for part in [clean_text(item) for item in re.split(r"(?<=[。；;])", stripped_note)][:2]
         if part
     )
     if len(normalized_label) >= 4:
-        return truncate_excerpt(compact_note or cleaned_note, 120)
+        return truncate_excerpt(compact_note or stripped_note or cleaned_note, 120)
     if cleaned_gloss in {"意思是", "这里是", "这里指", "指"} or len(cleaned_gloss) <= 2:
-        return truncate_excerpt(compact_note or cleaned_note, 120)
+        return truncate_excerpt(compact_note or stripped_note or cleaned_note, 120)
     return cleaned_gloss
+
+
+def clean_textbook_answer_text(answer_text: str, headword: str = "", label_text: str = "") -> str:
+    cleaned = clean_text(answer_text)
+    if not cleaned:
+        return ""
+    cleaned = re.sub(r"([。！？；，、,.!?;])\1+", r"\1", cleaned)
+    stripped = strip_leading_note_annotation(cleaned)
+    if stripped and stripped != cleaned:
+        return re.sub(r"([。！？；，、,.!?;])\1+", r"\1", stripped)
+    for target in textbook_target_variants(headword, label_text):
+        target_compact = compact_hanzi_text(target)
+        if not target_compact:
+            continue
+        pattern = rf"^[﹝〔［【\[]\s*{re.escape(target_compact)}(?:[（(][^）)]*[）)])?\s*"
+        candidate = re.sub(pattern, "", cleaned, count=1)
+        if candidate != cleaned and clean_text(candidate):
+            return re.sub(r"([。！？；，、,.!?;])\1+", r"\1", clean_text(candidate))
+    return cleaned
 
 
 def normalize_label_headword(label_text: str) -> str:
@@ -1891,6 +2361,24 @@ def normalize_label_headword(label_text: str) -> str:
     label = re.sub(r"[（(].*?[)）]", "", label)
     label = re.sub(r"《.*?》", "", label)
     return "".join(re.findall(r"[\u4e00-\u9fff]+", label))
+
+
+def split_leading_note_annotation(note_text: str) -> tuple[str, str]:
+    cleaned = clean_text(note_text)
+    if not cleaned:
+        return "", ""
+    match = NOTE_LEADING_LABEL_RE.match(cleaned)
+    if not match:
+        return "", cleaned
+    return clean_text(match.group(1)), clean_text(match.group(2))
+
+
+def leading_note_annotation(note_text: str) -> str:
+    return split_leading_note_annotation(note_text)[0]
+
+
+def strip_leading_note_annotation(note_text: str) -> str:
+    return split_leading_note_annotation(note_text)[1]
 
 
 def compact_hanzi_text(value: str) -> str:
@@ -1934,14 +2422,23 @@ def truncate_excerpt_around_target(text: str, headword: str, label_text: str, li
 
 
 def textbook_content_target_allowed(headword: str, label_text: str, note_text: str, gloss: str, answer_text: str = "") -> bool:
-    normalized_label = normalize_label_headword(label_text) or clean_text(headword)
+    normalized_label = textbook_primary_target(headword, label_text, note_text)
     compact_label = compact_hanzi_text(normalized_label)
+    compact_raw_label = compact_hanzi_text(label_text)
+    compact_headword = compact_hanzi_text(headword)
     combined = " ".join(
         clean_text(item)
-        for item in (note_text, gloss, answer_text)
+        for item in (label_text, note_text, gloss, answer_text)
         if clean_text(item)
     )
     if not compact_label:
+        return False
+    if (
+        normalized_label in TEXTBOOK_CONTENT_EXACT_SKIP
+        or compact_label in TEXTBOOK_CONTENT_EXACT_SKIP
+        or compact_raw_label in TEXTBOOK_CONTENT_EXACT_SKIP
+        or compact_headword in TEXTBOOK_CONTENT_EXACT_SKIP
+    ):
         return False
     if TEXTBOOK_NON_MEANINGFUL_HEADWORD_RE.fullmatch(compact_label):
         return False
@@ -1950,21 +2447,80 @@ def textbook_content_target_allowed(headword: str, label_text: str, note_text: s
     return True
 
 
+def textbook_content_phrase_like(headword: str, label_text: str, note_text: str) -> bool:
+    raw_label = normalize_label_headword(label_text)
+    if raw_label and len(raw_label) > 2:
+        return True
+    normalized_label = raw_label or normalize_label_headword(headword)
+    if not normalized_label:
+        return True
+    if len(normalized_label) > 2:
+        return True
+    note_target = normalize_label_headword(leading_note_annotation(note_text))
+    if note_target and note_target != normalized_label:
+        if normalized_label in note_target or len(note_target) > len(normalized_label):
+            return True
+    return False
+
+
+TEXTBOOK_SPLIT_TARGET_STOPWORDS = {
+    "一说",
+    "意思",
+    "即",
+    "是",
+    "指",
+    "为",
+    "作",
+}
+
+
+def extract_textbook_split_targets(label_text: str, note_text: str, sentence: str) -> list[dict[str, str]]:
+    sentence_compact = compact_hanzi_text(sentence)
+    label_compact = compact_hanzi_text(label_text)
+    if len(label_compact) <= 2:
+        return []
+    results: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for match in re.finditer(r"(?:^|[。；;])\s*([\u4e00-\u9fff]{1,2})[，,]\s*([^。；;]{1,48})", clean_text(note_text)):
+        headword = normalize_label_headword(match.group(1))
+        if not headword or headword in TEXTBOOK_SPLIT_TARGET_STOPWORDS:
+            continue
+        if headword not in sentence_compact:
+            continue
+        gloss = clean_text(match.group(2))
+        gloss = re.sub(r"^(?:即|就是|是|指|作|为)\s*", "", gloss)
+        gloss = gloss.strip(" ：:，,。；;")
+        if not gloss or len(gloss) > 30:
+            continue
+        if CONTENT_GLOSS_BAD_HINT_RE.search(gloss) or CONTENT_DICT_GLOSS_BAD_RE.search(gloss):
+            continue
+        key = f"{headword}:{gloss}"
+        if key in seen:
+            continue
+        seen.add(key)
+        results.append(
+            {
+                "headword": headword,
+                "label_text": headword,
+                "gloss": gloss,
+                "note_text": f"{headword}，{gloss}。",
+            }
+        )
+    return results
+
+
 def infer_textbook_term_kind(headword: str, label_text: str, note_text: str, gloss: str) -> str:
-    if headword not in COMMON_XUCI_HEADWORDS:
-        return "content_word"
     cleaned_note = clean_text(note_text)
     cleaned_gloss = clean_text(gloss)
-    normalized_label = normalize_label_headword(label_text)
-    if TEXTBOOK_FUNCTION_GRAMMAR_RE.search(cleaned_note) or TEXTBOOK_FUNCTION_GRAMMAR_RE.search(cleaned_gloss):
-        return "function_word"
-    if re.match(rf"^{re.escape(headword)}[，,:：]", cleaned_note) and (
+    has_grammar_hint = bool(
+        TEXTBOOK_FUNCTION_GRAMMAR_RE.search(cleaned_note) or TEXTBOOK_FUNCTION_GRAMMAR_RE.search(cleaned_gloss)
+    )
+    has_value_hint = bool(
         TEXTBOOK_FUNCTION_VALUE_RE.search(cleaned_note) or TEXTBOOK_FUNCTION_VALUE_RE.search(cleaned_gloss)
-    ):
+    )
+    if headword in TEXTBOOK_FUNCTION_HEADWORD_ALLOW and (has_grammar_hint or has_value_hint):
         return "function_word"
-    if normalized_label == headword and (
-        TEXTBOOK_FUNCTION_VALUE_RE.search(cleaned_note) or TEXTBOOK_FUNCTION_VALUE_RE.search(cleaned_gloss)
-    ):
+    if len(headword) == 1 and has_grammar_hint:
         return "function_word"
     return "content_word"
 
@@ -1974,6 +2530,7 @@ def textbook_ref_is_reliable(term_kind: str, headword: str, label_text: str, not
     cleaned_gloss = clean_text(gloss)
     cleaned_sentence = clean_text(sentence)
     normalized_label = normalize_label_headword(label_text)
+    explicit_targets = extract_textbook_note_explicit_targets(note_text)
     if not headword or not cleaned_gloss or not cleaned_sentence:
         return False
     if not textbook_target_in_text(cleaned_sentence, headword, label_text):
@@ -1985,16 +2542,23 @@ def textbook_ref_is_reliable(term_kind: str, headword: str, label_text: str, not
             return False
         if len(cleaned_gloss) > 18:
             return False
-        if len(cleaned_note) > 64 and not TEXTBOOK_FUNCTION_GRAMMAR_RE.search(cleaned_note):
+        if (
+            len(cleaned_note) > 64
+            and not TEXTBOOK_FUNCTION_GRAMMAR_RE.search(cleaned_note)
+            and clean_text(headword) not in explicit_targets
+        ):
             return False
         if not (
             TEXTBOOK_FUNCTION_GRAMMAR_RE.search(cleaned_note)
             or TEXTBOOK_FUNCTION_GRAMMAR_RE.search(cleaned_gloss)
             or TEXTBOOK_FUNCTION_VALUE_RE.search(cleaned_note)
             or TEXTBOOK_FUNCTION_VALUE_RE.search(cleaned_gloss)
+            or clean_text(headword) in explicit_targets
         ):
             return False
     else:
+        if textbook_content_phrase_like(headword, label_text, note_text):
+            return False
         if headword in COMMON_XUCI_HEADWORDS and normalized_label == headword and not re.match(rf"^{re.escape(headword)}[，,:：]", cleaned_note):
             return False
         if len(cleaned_gloss) > 30:
@@ -2076,6 +2640,16 @@ def build_textbook_sections() -> tuple[list[dict[str, Any]], dict[str, list[dict
                     gloss = summarize_note_gloss(headword, note["note_text"])
                     if not headword or not gloss:
                         continue
+                    term_kind = infer_textbook_term_kind(
+                        headword,
+                        note["label_text"],
+                        note["note_text"],
+                        gloss,
+                    )
+                    if term_kind == "function_word":
+                        gloss = summarize_textbook_function_gloss(headword, note["note_text"], gloss)
+                        if not gloss:
+                            continue
                     note_entries.append(
                         {
                             "headword": headword,
@@ -2193,7 +2767,11 @@ def build_textbook_sections() -> tuple[list[dict[str, Any]], dict[str, list[dict
                             "headword": note["headword"],
                             "label_text": note["label_text"],
                             "gloss": note["gloss"],
-                            "answer_text": build_textbook_answer_text(note["label_text"], note["note_text"], note["gloss"]),
+                            "answer_text": (
+                                note["gloss"]
+                                if term_kind == "function_word"
+                                else build_textbook_answer_text(note["label_text"], note["note_text"], note["gloss"], note["headword"])
+                            ),
                             "dict_headwords": derive_textbook_dict_headwords(
                                 {"headword": note["headword"], "label_text": note["label_text"]},
                                 note["headword"],
@@ -2223,8 +2801,12 @@ def load_textbook_source_master_tables() -> tuple[list[dict[str, Any]], list[dic
     return article_rows, note_rows
 
 
-def load_textbook_sections_from_master_tables() -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
-    article_rows, note_rows = load_textbook_source_master_tables()
+def load_textbook_sections_from_master_tables(
+    article_rows: list[dict[str, Any]] | None = None,
+    note_rows: list[dict[str, Any]] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
+    if article_rows is None or note_rows is None:
+        article_rows, note_rows = load_textbook_source_master_tables()
     sections: list[dict[str, Any]] = []
     article_meta: dict[tuple[str, str], dict[str, Any]] = {}
 
@@ -2262,76 +2844,133 @@ def load_textbook_sections_from_master_tables() -> tuple[list[dict[str, Any]], d
             continue
         book_key = clean_text(str(row.get("book_key") or ""))
         title = clean_text(str(row.get("title") or ""))
-        headword = clean_text(str(row.get("headword") or ""))
+        raw_headword = clean_text(str(row.get("headword") or ""))
         label_text = clean_text(str(row.get("label_text") or ""))
         note_text = clean_text(str(row.get("note_text") or ""))
-        gloss = clean_text(str(row.get("gloss") or ""))
-        term_kind = str(row.get("kind") or "")
-        if term_kind not in {"content_word", "function_word"}:
-            term_kind = infer_textbook_term_kind(headword, label_text, note_text, gloss)
+        raw_gloss = clean_text(str(row.get("gloss") or ""))
+        initial_headword = extract_note_headword(label_text, note_text) or raw_headword
+        initial_gloss = raw_gloss or summarize_note_gloss(initial_headword, note_text)
+        initial_kind = infer_textbook_term_kind(initial_headword, label_text, note_text, initial_gloss)
+        headword = resolve_textbook_bank_headword(row, initial_headword, initial_kind)
+        if not headword:
+            continue
         sentence = clean_text(str(row.get("source_sentence") or ""))
-        if not (book_key and title and headword and gloss and sentence):
-            continue
-        if not textbook_ref_is_reliable(term_kind, headword, label_text, note_text, gloss, sentence):
-            continue
-        raw_context_window = [clean_text(str(item)) for item in list(row.get("context_window") or []) if clean_text(str(item))][:7]
-        focus_sentence = best_textbook_focus_sentence(sentence, raw_context_window, headword, label_text)
-        context_window = [
-            truncate_excerpt_around_target(item, headword, label_text, 160)
-            for item in raw_context_window
-        ]
-        if focus_sentence and truncate_excerpt_around_target(focus_sentence, headword, label_text, 160) not in context_window:
-            focus_index = int(row.get("context_focus_index") or 0)
-            focus_entry = truncate_excerpt_around_target(focus_sentence, headword, label_text, 160)
-            if 0 <= focus_index < len(context_window):
-                context_window[focus_index] = focus_entry
-            else:
-                context_window.insert(min(len(context_window), 3), focus_entry)
-                context_window = context_window[:7]
-        term_id = f"{'function' if term_kind == 'function_word' else 'content'}::{headword}"
-        ref_dedupe_key = (
-            normalize_title(title),
-            clean_text(focus_sentence or sentence),
-            clean_text(gloss),
-            clean_text(headword),
-        )
-        if ref_dedupe_key in seen_refs[term_id]:
-            continue
-        seen_refs[term_id].add(ref_dedupe_key)
-        article = article_meta.get((book_key, title), {})
-        refs_by_term[term_id].append(
+        gloss = raw_gloss or summarize_note_gloss(headword, note_text)
+        term_kind = infer_textbook_term_kind(headword, label_text, note_text, gloss)
+        candidates = [
             {
-                "ref_id": f"{term_id}:{stable_slug(book_key)}:{stable_slug(title)}:{int(row.get('note_order') or 0)}",
-                "school_stage": article.get("school_stage") or textbook_school_stage(book_key),
-                "book_key": book_key,
-                "title": title,
-                "kind": clean_text(str(row.get("kind") or article.get("kind") or "")),
-                "page_start": row.get("page_start_print") if row.get("page_start_print") is not None else article.get("page_start"),
-                "page_end": row.get("page_end_print") if row.get("page_end_print") is not None else article.get("page_end"),
-                "sentence": truncate_excerpt_around_target(focus_sentence or sentence, headword, label_text, 160),
-                "context_window": context_window,
-                "note_block": note_text,
-                "author": clean_text(str(article.get("author") or "")),
-                "dynasty": clean_text(str(article.get("dynasty") or "")),
-                "book_title": clean_text(str(row.get("book_title") or article.get("book_title") or "")),
                 "headword": headword,
                 "label_text": label_text,
+                "note_text": note_text,
                 "gloss": gloss,
-                "answer_text": clean_text(str(row.get("answer_text") or build_textbook_answer_text(label_text, note_text, gloss))),
-                "dict_headwords": [clean_text(str(item)) for item in list(row.get("dict_headwords") or []) if clean_text(str(item))],
-                "manifest_title": clean_text(str(row.get("manifest_title") or article.get("manifest_title") or "")),
-                "note_order": row.get("note_order"),
-                "body_source_mode": clean_text(str(row.get("body_source_mode") or article.get("body_source_mode") or "")),
-                "body_source_title": clean_text(str(row.get("body_source_title") or article.get("body_source_title") or "")),
-                "body_source_path": clean_text(str(row.get("body_source_path") or article.get("body_source_path") or "")),
-                "match_status": clean_text(str(row.get("match_status") or "")),
-                "match_mode": clean_text(str(row.get("match_mode") or "")),
-                "match_confidence": row.get("match_confidence"),
-                "source_sentence": truncate_excerpt_around_target(focus_sentence or sentence, headword, label_text, 160),
-                "md_path": clean_text(str(row.get("md_path") or "")),
-                "middle_path": clean_text(str(row.get("middle_path") or "")),
+                "term_kind": term_kind,
+                "split_index": 0,
+                "answer_text": clean_text(str(row.get("answer_text") or "")),
             }
-        )
+        ]
+        if term_kind == "content_word" and textbook_content_phrase_like(headword, label_text, note_text):
+            candidates = [
+                {
+                    **candidate,
+                    "term_kind": "content_word",
+                    "split_index": split_index,
+                    "answer_text": candidate["gloss"],
+                }
+                for split_index, candidate in enumerate(extract_textbook_split_targets(label_text, note_text, sentence), start=1)
+            ]
+        for candidate in candidates:
+            candidate_headword = clean_text(str(candidate.get("headword") or ""))
+            candidate_label_text = clean_text(str(candidate.get("label_text") or candidate_headword))
+            candidate_note_text = clean_text(str(candidate.get("note_text") or note_text))
+            candidate_gloss = clean_text(str(candidate.get("gloss") or ""))
+            candidate_kind = clean_text(str(candidate.get("term_kind") or term_kind))
+            if candidate_kind == "function_word":
+                candidate_gloss = summarize_textbook_function_gloss(candidate_headword, candidate_note_text, candidate_gloss)
+                if not candidate_gloss:
+                    continue
+            if not (book_key and title and candidate_headword and candidate_gloss and sentence):
+                continue
+            if not textbook_ref_is_reliable(
+                candidate_kind,
+                candidate_headword,
+                candidate_label_text,
+                candidate_note_text,
+                candidate_gloss,
+                sentence,
+            ):
+                continue
+            raw_context_window = [clean_text(str(item)) for item in list(row.get("context_window") or []) if clean_text(str(item))][:7]
+            focus_sentence = best_textbook_focus_sentence(sentence, raw_context_window, candidate_headword, candidate_label_text)
+            context_window = [
+                truncate_excerpt_around_target(item, candidate_headword, candidate_label_text, 160)
+                for item in raw_context_window
+            ]
+            focus_entry = truncate_excerpt_around_target(focus_sentence or sentence, candidate_headword, candidate_label_text, 160)
+            if focus_entry and focus_entry not in context_window:
+                focus_index = int(row.get("context_focus_index") or 0)
+                if 0 <= focus_index < len(context_window):
+                    context_window[focus_index] = focus_entry
+                else:
+                    context_window.insert(min(len(context_window), 3), focus_entry)
+                    context_window = context_window[:7]
+            term_id = f"{'function' if candidate_kind == 'function_word' else 'content'}::{candidate_headword}"
+            ref_dedupe_key = (
+                normalize_title(title),
+                clean_text(focus_sentence or sentence),
+                clean_text(candidate_gloss),
+                clean_text(candidate_headword),
+            )
+            if ref_dedupe_key in seen_refs[term_id]:
+                continue
+            seen_refs[term_id].add(ref_dedupe_key)
+            article = article_meta.get((book_key, title), {})
+            split_suffix = f":s{int(candidate.get('split_index') or 0)}" if int(candidate.get("split_index") or 0) else ""
+            answer_text = (
+                candidate_gloss
+                if candidate_kind == "function_word"
+                else clean_text(
+                    str(
+                        candidate.get("answer_text")
+                        or build_textbook_answer_text(candidate_label_text, candidate_note_text, candidate_gloss, candidate_headword)
+                    )
+                )
+            )
+            refs_by_term[term_id].append(
+                {
+                    "ref_id": f"{term_id}:{stable_slug(book_key)}:{stable_slug(title)}:{int(row.get('note_order') or 0)}{split_suffix}",
+                    "school_stage": article.get("school_stage") or textbook_school_stage(book_key),
+                    "book_key": book_key,
+                    "title": title,
+                    "kind": clean_text(str(row.get("kind") or article.get("kind") or "")),
+                    "page_start": row.get("page_start_print") if row.get("page_start_print") is not None else article.get("page_start"),
+                    "page_end": row.get("page_end_print") if row.get("page_end_print") is not None else article.get("page_end"),
+                    "sentence": focus_entry,
+                    "context_window": context_window,
+                    "note_block": candidate_note_text,
+                    "author": clean_text(str(article.get("author") or "")),
+                    "dynasty": clean_text(str(article.get("dynasty") or "")),
+                    "book_title": clean_text(str(row.get("book_title") or article.get("book_title") or "")),
+                    "headword": candidate_headword,
+                    "label_text": candidate_label_text,
+                    "gloss": candidate_gloss,
+                    "answer_text": answer_text,
+                    "dict_headwords": unique_clean_strings(
+                        [candidate_headword]
+                        + [clean_text(str(item)) for item in list(row.get("dict_headwords") or []) if clean_text(str(item))]
+                    ),
+                    "manifest_title": clean_text(str(row.get("manifest_title") or article.get("manifest_title") or "")),
+                    "note_order": row.get("note_order"),
+                    "body_source_mode": clean_text(str(row.get("body_source_mode") or article.get("body_source_mode") or "")),
+                    "body_source_title": clean_text(str(row.get("body_source_title") or article.get("body_source_title") or "")),
+                    "body_source_path": clean_text(str(row.get("body_source_path") or article.get("body_source_path") or "")),
+                    "match_status": clean_text(str(row.get("match_status") or "")),
+                    "match_mode": clean_text(str(row.get("match_mode") or "")),
+                    "match_confidence": row.get("match_confidence"),
+                    "source_sentence": focus_entry,
+                    "md_path": clean_text(str(row.get("md_path") or "")),
+                    "middle_path": clean_text(str(row.get("middle_path") or "")),
+                }
+            )
     return sections, {key: value[:20] for key, value in refs_by_term.items()}
 
 
@@ -3054,6 +3693,8 @@ def build_textbook_question_bank(
         "passage_meaning": [],
     }
     answer_keys: dict[str, dict[str, Any]] = {}
+    textbook_distractor_catalog = build_textbook_distractor_catalog(textbook_refs)
+    seen_textbook_prompt_targets: set[tuple[str, str, str, str]] = set()
 
     for term_id, refs in sorted(textbook_refs.items()):
         if not refs:
@@ -3063,13 +3704,9 @@ def build_textbook_question_bank(
         kind = str(record.get("kind") or ("function_word" if term_id.startswith("function::") else "content_word"))
         question_type = "function_gloss" if kind == "function_word" else "sentence_meaning"
         for index, ref in enumerate(refs):
-            answer_text = (
-                normalize_function_profile_text(str(ref.get("note_block") or ref.get("answer_text") or ref.get("gloss") or ""))
-                if kind == "function_word"
-                else clean_text(str(ref.get("answer_text") or ref.get("gloss") or ref.get("note_block") or ""))
-            )
+            answer_text = textbook_distractor_answer_text(ref, kind, headword)
             correct_gloss = (
-                normalize_function_profile_text(str(ref.get("gloss") or ref.get("note_block") or ""))
+                normalize_function_profile_text(str(ref.get("gloss") or ref.get("answer_text") or ref.get("note_block") or ""))
                 if kind == "function_word"
                 else clean_text(str(ref.get("gloss") or ref.get("note_block") or ""))
             )
@@ -3087,7 +3724,11 @@ def build_textbook_question_bank(
                 continue
             if normalized_label and len(normalized_label) > 1 and normalized_label not in compact_hanzi_text(display_sentence):
                 continue
-            focus_text = label_text if normalized_label and normalized_label in compact_hanzi_text(display_sentence) else headword
+            focus_text = (
+                headword
+                if kind == "function_word"
+                else (label_text if normalized_label and normalized_label in compact_hanzi_text(display_sentence) else headword)
+            )
             if kind == "content_word" and not textbook_content_target_allowed(
                 headword,
                 label_text,
@@ -3095,6 +3736,8 @@ def build_textbook_question_bank(
                 str(ref.get("gloss") or ""),
                 answer_text,
             ):
+                continue
+            if kind == "content_word" and textbook_content_phrase_like(headword, label_text, str(ref.get("note_block") or "")):
                 continue
             display_context = [
                 truncate_excerpt_around_target(item, headword, label_text, 120)
@@ -3104,14 +3747,26 @@ def build_textbook_question_bank(
             if display_sentence_truncated and display_sentence_truncated not in display_context:
                 display_context.insert(min(len(display_context), 3), display_sentence_truncated)
                 display_context = display_context[:7]
-            if kind == "function_word":
-                pool = build_function_distractor_pool(headword, answer_text, function_usage_catalog, record)
-                variant_sets = build_distractor_variants(pool, f"{term_id}:{index}", 1)
-            else:
-                pool = build_content_distractor_pool(ref, record)
-                variant_sets = build_distractor_variants(pool, f"{term_id}:{index}", 1)
-            if not variant_sets:
+            prompt_target_signature = (
+                question_type,
+                term_id,
+                re.sub(r"\s+", "", display_sentence_truncated),
+                clean_text(focus_text or headword),
+            )
+            if prompt_target_signature in seen_textbook_prompt_targets:
                 continue
+            seen_textbook_prompt_targets.add(prompt_target_signature)
+            distractors = build_textbook_note_distractors(
+                ref,
+                term_id,
+                kind,
+                answer_text,
+                textbook_distractor_catalog,
+                f"{term_id}:{index}",
+            )
+            if len(distractors) < 3:
+                continue
+            article_id = stable_slug(f"{ref.get('book_key')}:{ref.get('title')}")
             source_label = f"{ref.get('school_stage')}教材《{ref.get('title')}》"
             if ref.get("book_title"):
                 source_label += f"（{ref.get('book_title')}）"
@@ -3120,14 +3775,8 @@ def build_textbook_question_bank(
                 if kind == "content_word"
                 else f"根据课下注释，下列对句中“{focus_text or headword}”的意义和用法概括，最恰当的一项是"
             )
-            for variant_index, distractors in enumerate(variant_sets, start=1):
-                option_candidates = [{"text": answer_text, "origin": "textbook_note"}] + [
-                    {
-                        "text": option_text,
-                        "origin": "function_catalog" if kind == "function_word" else "dict_sense",
-                    }
-                    for option_text in distractors
-                ]
+            for variant_index, distractor_options in enumerate([distractors], start=1):
+                option_candidates = [{"text": answer_text, "origin": "textbook_note"}] + distractor_options
                 ordered_indices = sorted(
                     range(len(option_candidates)),
                     key=lambda idx: hashlib.sha1(
@@ -3156,6 +3805,12 @@ def build_textbook_question_bank(
                             "dynasty": ref.get("dynasty"),
                             "book_title": ref.get("book_title"),
                             "school_stage": ref.get("school_stage"),
+                            "book_key": ref.get("book_key"),
+                            "article_id": article_id,
+                            "article_title": ref.get("title"),
+                            "label_text": ref.get("label_text"),
+                            "note_order": ref.get("note_order"),
+                            "term_kind": kind,
                         },
                         "stem": stem,
                         "sentence": display_sentence_truncated,
@@ -3209,6 +3864,13 @@ def build_textbook_question_bank(
                         "paper_key": str(ref.get("book_key") or ""),
                         "question_number": None,
                     },
+                    "source_meta": {
+                        "article_id": article_id,
+                        "article_title": str(ref.get("title") or ""),
+                        "book_key": str(ref.get("book_key") or ""),
+                        "note_order": ref.get("note_order"),
+                        "term_kind": kind,
+                    },
                     "correct_label": correct_label,
                     "correct_text": answer_text,
                     "explanation": explanation,
@@ -3223,11 +3885,11 @@ def build_textbook_question_bank(
                                 f"本项与教材注释一致。“{focus_text or headword}”在这里应解释为“{answer_text}”。"
                                 if label == correct_label
                                 else (
-                                    f"本项不当。该项是同词在辞典中的其他义项，不能落实到本句；课下注释应落实为“{answer_text}”。"
-                                    if option["origin"] == "dict_sense"
-                                    else f"本项不当。该项是“{focus_text or headword}”的其他常见意义或用法；课下注释应落实为“{answer_text}”。"
-                                )
-                            ),
+                                f"本项不当。该项虽来自其他课下注释，但不能落实到本句；本句这一处“{focus_text or headword}”应按教材注释解释为“{answer_text}”。"
+                                if option["origin"] == "textbook_note_distractor"
+                                else f"本项不当。该项不是本句这一处“{focus_text or headword}”的课下注释；应落实为“{answer_text}”。"
+                            )
+                        ),
                         }
                         for label, option in zip(labels, ordered_options)
                     ],
@@ -3399,6 +4061,720 @@ def build_textbook_note_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "top_titles": [{"source_title": key, "count": value} for key, value in by_title.most_common(30)],
         "top_headwords": [{"headword": key, "count": value} for key, value in by_headword.most_common(40)],
     }
+
+
+def build_textbook_article_challenge_assets(
+    article_rows: list[dict[str, Any]],
+    textbook_bank: dict[str, list[dict[str, Any]]],
+    answer_keys: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    article_index = {
+        stable_slug(f"{clean_text(str(row.get('book_key') or ''))}:{clean_text(str(row.get('title') or ''))}"): row
+        for row in article_rows
+        if clean_text(str(row.get("book_key") or "")) and clean_text(str(row.get("title") or ""))
+    }
+    grouped_items: dict[str, list[dict[str, Any]]] = defaultdict(list)
+
+    for items in textbook_bank.values():
+        for item in items:
+            challenge_id = clean_text(str(item.get("challenge_id") or ""))
+            answer_key = answer_keys.get(challenge_id)
+            if not answer_key:
+                continue
+            support_ref = list(answer_key.get("textbook_support") or [])[:1]
+            ref = support_ref[0] if support_ref else {}
+            article_id = clean_text(str((item.get("source_meta") or {}).get("article_id") or ""))
+            if not article_id:
+                article_id = stable_slug(f"{clean_text(str(ref.get('book_key') or ''))}:{clean_text(str(ref.get('title') or ''))}")
+            if not article_id:
+                continue
+            normalized_item = dict(item)
+            source_meta = dict(item.get("source_meta") or {})
+            source_meta["article_id"] = article_id
+            source_meta["article_title"] = clean_text(str(source_meta.get("article_title") or ref.get("title") or item.get("source_title") or ""))
+            source_meta["book_key"] = clean_text(str(source_meta.get("book_key") or ref.get("book_key") or ""))
+            source_meta["note_order"] = source_meta.get("note_order") if source_meta.get("note_order") is not None else ref.get("note_order")
+            source_meta["term_kind"] = clean_text(str(source_meta.get("term_kind") or answer_key.get("kind") or item.get("kind") or ""))
+            normalized_item["source_meta"] = source_meta
+            normalized_item["article_id"] = article_id
+            grouped_items[article_id].append(normalized_item)
+
+    article_catalog: list[dict[str, Any]] = []
+    article_bank: dict[str, dict[str, Any]] = {}
+    for article_id, raw_items in grouped_items.items():
+        article = article_index.get(article_id, {})
+        items = sorted(
+            raw_items,
+            key=lambda item: (
+                int((item.get("source_meta") or {}).get("note_order") or 0),
+                0 if clean_text(str((item.get("source_meta") or {}).get("term_kind") or "")) == "content_word" else 1,
+                clean_text(str(item.get("challenge_id") or "")),
+            ),
+        )
+        content_count = sum(
+            1 for item in items if clean_text(str((item.get("source_meta") or {}).get("term_kind") or "")) == "content_word"
+        )
+        function_count = sum(
+            1 for item in items if clean_text(str((item.get("source_meta") or {}).get("term_kind") or "")) == "function_word"
+        )
+        meta = {
+            "article_id": article_id,
+            "book_key": clean_text(str(article.get("book_key") or (items[0].get("source_meta") or {}).get("book_key") or "")),
+            "book_title": clean_text(str(article.get("book_title") or "")),
+            "school_stage": textbook_school_stage(clean_text(str(article.get("book_key") or "")))
+            if clean_text(str(article.get("book_key") or ""))
+            else "",
+            "title": clean_text(str(article.get("title") or (items[0].get("source_meta") or {}).get("article_title") or "")),
+            "manifest_title": clean_text(str(article.get("manifest_title") or "")),
+            "author": clean_text(str(article.get("author") or "")),
+            "dynasty": clean_text(str(article.get("dynasty") or "")),
+            "page_start": article.get("page_start_print"),
+            "page_end": article.get("page_end_print"),
+            "challenge_count": len(items),
+            "content_count": content_count,
+            "function_count": function_count,
+            "note_count": int(article.get("note_count") or 0),
+        }
+        article_catalog.append(meta)
+        article_bank[article_id] = {
+            "article": meta,
+            "items": items,
+        }
+
+    article_catalog = sorted(
+        article_catalog,
+        key=lambda item: (
+            clean_text(str(item.get("book_key") or "")),
+            int(item.get("page_start") or 0),
+            clean_text(str(item.get("title") or "")),
+        ),
+    )
+    return article_catalog, article_bank
+
+
+def textbook_note_review_key(
+    book_key: str,
+    title: str,
+    note_order: Any,
+    annotation_scope: str,
+    label_text: str,
+    note_text: str,
+) -> tuple[str, str, int, str, str, str]:
+    return (
+        clean_text(book_key),
+        clean_text(title),
+        int(note_order or 0),
+        clean_text(annotation_scope or "body"),
+        clean_text(label_text),
+        clean_text(note_text),
+    )
+
+
+def build_textbook_challenge_index(answer_keys: dict[str, dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    index: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for challenge_id, payload in answer_keys.items():
+        if str(payload.get("source_type") or "") != "textbook":
+            continue
+        for ref in list(payload.get("textbook_support") or [])[:1]:
+            ref_id = clean_text(str(ref.get("ref_id") or ""))
+            if not ref_id:
+                continue
+            index[ref_id].append(
+                {
+                    "challenge_id": clean_text(challenge_id),
+                    "question_type": clean_text(str(payload.get("question_type") or "")),
+                    "kind": clean_text(str(payload.get("kind") or "")),
+                    "correct_text": clean_text(str(payload.get("correct_text") or "")),
+                }
+            )
+    return {
+        key: sorted(value, key=lambda item: (str(item.get("question_type") or ""), str(item.get("challenge_id") or "")))
+        for key, value in index.items()
+    }
+
+
+def summarize_dict_review_links(
+    headword_candidates: list[str],
+    revised_links: dict[str, list[dict[str, Any]]],
+    idiom_links: dict[str, list[dict[str, Any]]],
+    limit: int = 6,
+) -> list[str]:
+    lines: list[str] = []
+    seen: set[str] = set()
+    for headword in unique_clean_strings(headword_candidates):
+        if not headword:
+            continue
+        for item in list(revised_links.get(headword, []))[:2]:
+            summary = clean_text(str(item.get("summary") or ""))
+            if not summary:
+                continue
+            line = f"{headword}｜教育部重编：{truncate_excerpt(summary, 120)}"
+            if line not in seen:
+                seen.add(line)
+                lines.append(line)
+        for item in list(idiom_links.get(headword, []))[:2]:
+            summary = clean_text(str(item.get("summary") or ""))
+            if not summary:
+                continue
+            line = f"{headword}｜成语典：{truncate_excerpt(summary, 100)}"
+            if line not in seen:
+                seen.add(line)
+                lines.append(line)
+        if len(lines) >= limit:
+            break
+    return lines[:limit]
+
+
+def suggest_review_split(headword: str, label_text: str, note_text: str, auto_kind: str) -> tuple[bool, str]:
+    normalized_label = normalize_label_headword(label_text)
+    leading_label = normalize_label_headword(leading_note_annotation(note_text))
+    if not normalized_label:
+        return True, "标注对象为空，需人工重定词目。"
+    if re.search(r"[、，,；;/／]", clean_text(label_text)):
+        return True, "标注对象包含并列或分隔符，建议拆开后再判。"
+    if auto_kind == "content_word":
+        if textbook_content_phrase_like(headword, label_text, note_text):
+            return True, "当前标注更像短语或整句，不宜直接作为实词题目。"
+        if len(normalized_label) > 2:
+            return True, "实词标注超过两字，优先收敛到更小词目。"
+    if auto_kind == "function_word":
+        if len(normalized_label) > max(1, len(clean_text(headword))):
+            return True, "虚词应优先收敛到单字或最小功能词。"
+    if leading_label and leading_label != normalized_label:
+        return True, "注释前导标记与当前标签不一致，建议拆分确认。"
+    return False, ""
+
+
+def build_review_flags(
+    review_headword: str,
+    label_text: str,
+    note_text: str,
+    row: dict[str, Any],
+    auto_kind: str,
+    auto_should_split: bool,
+    auto_reliable: bool,
+    in_current_bank: bool,
+    dict_summary_lines: list[str],
+) -> list[str]:
+    flags: list[str] = []
+    if clean_text(str(row.get("annotation_scope") or "body")) != "body":
+        flags.append("annotation_not_body")
+    if clean_text(str(row.get("match_status") or "")) != "matched":
+        flags.append("source_not_matched")
+    if auto_kind == "content_word" and textbook_content_phrase_like(
+        clean_text(review_headword),
+        clean_text(label_text),
+        clean_text(note_text),
+    ):
+        flags.append("phrase_like_content")
+    if auto_kind == "function_word":
+        normalized_label = normalize_label_headword(clean_text(label_text))
+        if len(normalized_label) > 1:
+            flags.append("function_label_longer_than_headword")
+    if auto_should_split:
+        flags.append("needs_split")
+    if not auto_reliable:
+        flags.append("not_bank_ready")
+    if not in_current_bank:
+        flags.append("not_in_current_bank")
+    if not dict_summary_lines:
+        flags.append("missing_dict_support")
+    if leading_note_annotation(clean_text(note_text)):
+        flags.append("has_leading_annotation")
+    return flags
+
+
+def build_textbook_proofread_rows(
+    article_rows: list[dict[str, Any]],
+    note_rows: list[dict[str, Any]],
+    textbook_note_table: list[dict[str, Any]],
+    revised_links: dict[str, list[dict[str, Any]]],
+    idiom_links: dict[str, list[dict[str, Any]]],
+    answer_keys: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    article_index = {
+        (clean_text(str(row.get("book_key") or "")), clean_text(str(row.get("title") or ""))): row
+        for row in article_rows
+    }
+    note_table_index = {
+        textbook_note_review_key(
+            str(row.get("book_key") or ""),
+            str(row.get("source_title") or ""),
+            row.get("note_order"),
+            str(row.get("annotation_scope") or "body"),
+            str(row.get("label_text") or ""),
+            str(row.get("note_block") or ""),
+        ): row
+        for row in textbook_note_table
+    }
+    challenge_index = build_textbook_challenge_index(answer_keys)
+
+    results: list[dict[str, Any]] = []
+    sorted_note_rows = sorted(
+        note_rows,
+        key=lambda row: (
+            clean_text(str(row.get("book_key") or "")),
+            clean_text(str(row.get("title") or "")),
+            int(row.get("note_order") or 0),
+            clean_text(str(row.get("label_text") or "")),
+        ),
+    )
+
+    for row in sorted_note_rows:
+        book_key = clean_text(str(row.get("book_key") or ""))
+        title = clean_text(str(row.get("title") or ""))
+        label_text = clean_text(str(row.get("label_text") or ""))
+        note_text = clean_text(str(row.get("note_text") or ""))
+        annotation_scope = clean_text(str(row.get("annotation_scope") or "body"))
+        review_key = textbook_note_review_key(
+            book_key,
+            title,
+            row.get("note_order"),
+            annotation_scope,
+            label_text,
+            note_text,
+        )
+        current_row = note_table_index.get(review_key, {})
+        article = article_index.get((book_key, title), {})
+
+        master_headword = clean_text(str(row.get("headword") or ""))
+        master_gloss = clean_text(str(row.get("gloss") or ""))
+        initial_headword = extract_note_headword(label_text, note_text) or master_headword
+        if master_gloss:
+            auto_seed_gloss = master_gloss
+        else:
+            auto_seed_gloss = summarize_note_gloss(initial_headword, note_text)
+        initial_kind = infer_textbook_term_kind(initial_headword, label_text, note_text, auto_seed_gloss)
+        auto_headword = resolve_textbook_bank_headword(row, initial_headword, initial_kind) or initial_headword
+        auto_kind = infer_textbook_term_kind(auto_headword, label_text, note_text, auto_seed_gloss)
+        if auto_kind == "function_word":
+            auto_gloss = summarize_textbook_function_gloss(auto_headword, note_text, auto_seed_gloss)
+            auto_answer_text = auto_gloss
+        else:
+            auto_gloss = auto_seed_gloss or summarize_note_gloss(auto_headword, note_text)
+            auto_answer_text = build_textbook_answer_text(label_text, note_text, auto_gloss, auto_headword)
+
+        raw_context_window = [
+            clean_text(str(item))
+            for item in list(
+                row.get("context_window")
+                or row.get("text_context_window")
+                or row.get("layout_context_window")
+                or current_row.get("context_window")
+                or []
+            )
+            if clean_text(str(item))
+        ][:7]
+        source_sentence = clean_text(
+            str(
+                row.get("source_sentence")
+                or row.get("text_source_sentence")
+                or row.get("layout_source_sentence")
+                or current_row.get("sentence")
+                or ""
+            )
+        )
+        display_sentence = best_textbook_focus_sentence(source_sentence, raw_context_window, auto_headword, label_text)
+        auto_should_split, auto_split_reason = suggest_review_split(auto_headword, label_text, note_text, auto_kind)
+        auto_reliable = textbook_ref_is_reliable(
+            auto_kind,
+            auto_headword,
+            label_text,
+            note_text,
+            auto_gloss or auto_answer_text,
+            display_sentence or source_sentence,
+        )
+
+        current_ref_id = clean_text(str(current_row.get("ref_id") or ""))
+        current_challenges = challenge_index.get(current_ref_id, [])
+        current_question_types = unique_clean_strings([str(item.get("question_type") or "") for item in current_challenges])
+        current_challenge_ids = unique_clean_strings([str(item.get("challenge_id") or "") for item in current_challenges])
+        has_current_candidate = bool(current_row)
+        in_current_bank = bool(current_challenge_ids)
+
+        dict_headwords = unique_clean_strings(
+            [
+                clean_text(str(item))
+                for item in (
+                    [auto_headword, master_headword, normalize_label_headword(label_text)]
+                    + list(row.get("dict_headwords") or [])
+                    + list(current_row.get("dict_headwords") or [])
+                )
+                if clean_text(str(item))
+            ]
+        )
+        dict_summary_lines = summarize_dict_review_links(dict_headwords, revised_links, idiom_links)
+        auto_flags = build_review_flags(
+            auto_headword,
+            label_text,
+            note_text,
+            row,
+            auto_kind,
+            auto_should_split,
+            auto_reliable,
+            in_current_bank,
+            dict_summary_lines,
+        )
+
+        results.append(
+            {
+                "review_id": stable_slug(f"{book_key}:{title}:{int(row.get('note_order') or 0)}:{label_text}"),
+                "article_id": stable_slug(f"{book_key}:{title}"),
+                "book_key": book_key,
+                "book_title": clean_text(str(row.get("book_title") or article.get("book_title") or "")),
+                "school_stage": textbook_school_stage(book_key),
+                "source_title": title,
+                "manifest_title": clean_text(str(row.get("manifest_title") or article.get("manifest_title") or "")),
+                "page_start": row.get("page_start_print") if row.get("page_start_print") is not None else article.get("page_start_print"),
+                "page_end": row.get("page_end_print") if row.get("page_end_print") is not None else article.get("page_end_print"),
+                "author": clean_text(str(article.get("author") or "")),
+                "dynasty": clean_text(str(article.get("dynasty") or "")),
+                "body_source_mode": clean_text(str(row.get("body_source_mode") or article.get("body_source_mode") or "")),
+                "body_source_title": clean_text(str(row.get("body_source_title") or article.get("body_source_title") or "")),
+                "note_order": int(row.get("note_order") or 0),
+                "annotation_scope": annotation_scope,
+                "label_text": label_text,
+                "normalized_label": normalize_label_headword(label_text),
+                "note_text": note_text,
+                "master_headword": master_headword,
+                "master_kind": clean_text(str(row.get("kind") or "")),
+                "master_gloss": master_gloss,
+                "master_answer_text": clean_text(str(row.get("answer_text") or "")),
+                "auto_headword": auto_headword,
+                "auto_kind": auto_kind,
+                "auto_gloss": auto_gloss,
+                "auto_answer_text": auto_answer_text,
+                "auto_should_split": auto_should_split,
+                "auto_split_reason": auto_split_reason,
+                "auto_reliable": auto_reliable,
+                "auto_flags": auto_flags,
+                "current_has_candidate": has_current_candidate,
+                "current_in_bank": in_current_bank,
+                "current_ref_id": current_ref_id,
+                "current_term_id": clean_text(str(current_row.get("term_id") or "")),
+                "current_kind": clean_text(str(current_row.get("kind") or "")),
+                "current_headword": clean_text(str(current_row.get("headword") or "")),
+                "current_gloss": clean_text(str(current_row.get("gloss") or "")),
+                "current_answer_text": clean_text(str(current_row.get("answer_text") or "")),
+                "current_question_types": current_question_types,
+                "current_challenge_ids": current_challenge_ids,
+                "dict_headwords": dict_headwords,
+                "dict_summary_lines": dict_summary_lines,
+                "match_status": clean_text(str(row.get("match_status") or "")),
+                "match_mode": clean_text(str(row.get("match_mode") or "")),
+                "match_confidence": row.get("match_confidence"),
+                "source_sentence": source_sentence,
+                "display_sentence": display_sentence,
+                "context_window": raw_context_window,
+                "human_confirm": "",
+                "human_kind": "",
+                "human_split": "",
+                "human_term": "",
+                "human_gloss": "",
+                "human_action": "",
+                "human_notes": "",
+            }
+        )
+    return results
+
+
+def write_textbook_proofread_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    fieldnames = [
+        "review_id",
+        "article_id",
+        "book_key",
+        "book_title",
+        "school_stage",
+        "source_title",
+        "manifest_title",
+        "page_start",
+        "page_end",
+        "author",
+        "dynasty",
+        "body_source_mode",
+        "body_source_title",
+        "note_order",
+        "annotation_scope",
+        "label_text",
+        "normalized_label",
+        "note_text",
+        "master_headword",
+        "master_kind",
+        "master_gloss",
+        "master_answer_text",
+        "auto_headword",
+        "auto_kind",
+        "auto_gloss",
+        "auto_answer_text",
+        "auto_should_split",
+        "auto_split_reason",
+        "auto_reliable",
+        "auto_flags",
+        "current_has_candidate",
+        "current_in_bank",
+        "current_ref_id",
+        "current_term_id",
+        "current_kind",
+        "current_headword",
+        "current_gloss",
+        "current_answer_text",
+        "current_question_types",
+        "current_challenge_ids",
+        "dict_headwords",
+        "dict_summary_lines",
+        "match_status",
+        "match_mode",
+        "match_confidence",
+        "source_sentence",
+        "display_sentence",
+        "context_window",
+        "human_confirm",
+        "human_kind",
+        "human_split",
+        "human_term",
+        "human_gloss",
+        "human_action",
+        "human_notes",
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            payload = dict(row)
+            for key in ("auto_flags", "current_question_types", "current_challenge_ids", "dict_headwords", "dict_summary_lines", "context_window"):
+                payload[key] = "｜".join(payload.get(key) or [])
+            writer.writerow(payload)
+
+
+def safe_markdown_code_block(value: str) -> str:
+    return str(value or "").replace("```", "``\u200b`")
+
+
+def write_textbook_proofread_markdown(
+    path: Path,
+    article_rows: list[dict[str, Any]],
+    review_rows: list[dict[str, Any]],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    article_index = {
+        stable_slug(f"{clean_text(str(row.get('book_key') or ''))}:{clean_text(str(row.get('title') or ''))}"): row
+        for row in article_rows
+    }
+    grouped_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in review_rows:
+        grouped_rows[str(row.get("article_id") or "")].append(row)
+
+    lines = [
+        "# 教材正文与注释人工校对底稿",
+        "",
+        "## 校对规则",
+        "1. 以最小干预为原则，不改写教材正文和课下注释，只填写确认、判定、拆分和处理意见。",
+        "2. 先判断能否入题，再判断是实词还是虚词；短语、整句、专名、背景说明优先标记为“不入题”或“拆分后再判”。",
+        "3. 若注释对象能收敛到更小词目，优先保留最小词目，不要把整句或短语直接作为题目。",
+        "4. 自动词类、自动拆分建议、当前入题状态、辞典义项都只是辅助信息；人工只在确有问题时修正。",
+        "5. `人工确认` 统一填写：确认 / 待核 / 剔除。",
+        "6. `人工判定` 统一填写：实词 / 虚词 / 不入题 / 拆分后再判。",
+        "7. `人工拆分` 统一填写：是 / 否；若填“是”，请同时填写 `人工词目` 与 `人工处理意见`。",
+        "8. `人工处理动作` 建议填写：保留 / 改词目 / 改释义 / 拆分 / 剔除 / 待核。",
+        "",
+        "## 机器汇总",
+        f"- 课文条目数：{len(grouped_rows)}",
+        f"- 注释条目数：{len(review_rows)}",
+        f"- 当前已入题：{sum(1 for row in review_rows if row.get('current_in_bank'))}",
+        f"- 当前仅入候选未出题：{sum(1 for row in review_rows if row.get('current_has_candidate') and not row.get('current_in_bank'))}",
+        f"- 自动建议拆分：{sum(1 for row in review_rows if row.get('auto_should_split'))}",
+        f"- 自动判定实词：{sum(1 for row in review_rows if row.get('auto_kind') == 'content_word')}",
+        f"- 自动判定虚词：{sum(1 for row in review_rows if row.get('auto_kind') == 'function_word')}",
+        "",
+    ]
+
+    ordered_article_ids = sorted(
+        grouped_rows,
+        key=lambda article_id: (
+            clean_text(str(article_index.get(article_id, {}).get("book_key") or "")),
+            clean_text(str(article_index.get(article_id, {}).get("title") or "")),
+        ),
+    )
+    for article_id in ordered_article_ids:
+        article = article_index.get(article_id, {})
+        rows = sorted(grouped_rows[article_id], key=lambda item: (int(item.get("note_order") or 0), str(item.get("label_text") or "")))
+        title = clean_text(str(article.get("title") or rows[0].get("source_title") or "未命名条目"))
+        lines.append(f"## 《{title}》")
+        lines.append(f"- 教材：{clean_text(str(rows[0].get('book_title') or ''))}")
+        lines.append(f"- 册别：{clean_text(str(rows[0].get('school_stage') or ''))} / {clean_text(str(rows[0].get('book_key') or ''))}")
+        lines.append(f"- 作者：{clean_text(str(article.get('author') or '')) or '—'}")
+        lines.append(f"- 朝代：{clean_text(str(article.get('dynasty') or '')) or '—'}")
+        lines.append(
+            f"- 页码：{clean_text(str(rows[0].get('page_start') or '')) or '—'}"
+            + (
+                f" - {clean_text(str(rows[0].get('page_end') or ''))}"
+                if clean_text(str(rows[0].get('page_end') or ''))
+                and clean_text(str(rows[0].get('page_end') or '')) != clean_text(str(rows[0].get('page_start') or ''))
+                else ""
+            )
+        )
+        lines.append(
+            f"- 正文来源：{clean_text(str(rows[0].get('body_source_mode') or article.get('body_source_mode') or '')) or '—'} / "
+            f"{clean_text(str(rows[0].get('body_source_title') or article.get('body_source_title') or '')) or '—'}"
+        )
+        lines.append("- 正文：")
+        lines.append("```text")
+        lines.append(safe_markdown_code_block(clean_text_keep_newlines(str(article.get("full_text") or article.get("ocr_full_text") or ""))))
+        lines.append("```")
+        lines.append("")
+        for row in rows:
+            lines.append(f"### 注释 {int(row.get('note_order') or 0):02d}｜{clean_text(str(row.get('label_text') or '')) or '未命名'}")
+            lines.append(f"- 原标签：{clean_text(str(row.get('label_text') or '')) or '—'}")
+            lines.append(f"- 现有注释：{clean_text(str(row.get('note_text') or '')) or '—'}")
+            lines.append(f"- 自动抽取词目：{clean_text(str(row.get('auto_headword') or '')) or '—'}")
+            lines.append(
+                f"- 自动判定：{'虚词' if str(row.get('auto_kind') or '') == 'function_word' else '实词' if str(row.get('auto_kind') or '') == 'content_word' else '—'}"
+            )
+            lines.append(f"- 自动释义：{clean_text(str(row.get('auto_answer_text') or row.get('auto_gloss') or '')) or '—'}")
+            lines.append(f"- 自动建议拆分：{'是' if row.get('auto_should_split') else '否'}")
+            lines.append(f"- 拆分理由：{clean_text(str(row.get('auto_split_reason') or '')) or '—'}")
+            lines.append(f"- 当前已出题：{'是' if row.get('current_in_bank') else '否'}")
+            lines.append(f"- 当前已入候选：{'是' if row.get('current_has_candidate') else '否'}")
+            lines.append(f"- 当前候选词目：{clean_text(str(row.get('current_headword') or '')) or '—'}")
+            lines.append(f"- 当前候选词类：{clean_text(str(row.get('current_kind') or '')) or '—'}")
+            lines.append(f"- 当前候选释义：{clean_text(str(row.get('current_answer_text') or '')) or '—'}")
+            lines.append(
+                f"- 当前题型：{(' / '.join(row.get('current_question_types') or [])) or '—'}"
+            )
+            lines.append(
+                f"- 题目 ID：{(' / '.join(row.get('current_challenge_ids') or [])) or '—'}"
+            )
+            lines.append(
+                f"- 对位状态：{clean_text(str(row.get('match_status') or '')) or '—'} / {clean_text(str(row.get('match_mode') or '')) or '—'} / {clean_text(str(row.get('match_confidence') or '')) or '—'}"
+            )
+            lines.append(f"- 命中句：{clean_text(str(row.get('display_sentence') or row.get('source_sentence') or '')) or '—'}")
+            lines.append(f"- 上下文：{('｜'.join(row.get('context_window') or [])) or '—'}")
+            lines.append(f"- 关联辞典词目：{('｜'.join(row.get('dict_headwords') or [])) or '—'}")
+            lines.append("- 关联辞典义项：")
+            if row.get("dict_summary_lines"):
+                for item in row.get("dict_summary_lines") or []:
+                    lines.append(f"  - {item}")
+            else:
+                lines.append("  - —")
+            lines.append(f"- 自动标记：{('｜'.join(row.get('auto_flags') or [])) or '—'}")
+            lines.append(f"- 人工确认：{clean_text(str(row.get('human_confirm') or ''))}")
+            lines.append(f"- 人工判定：{clean_text(str(row.get('human_kind') or ''))}")
+            lines.append(f"- 人工拆分：{clean_text(str(row.get('human_split') or ''))}")
+            lines.append(f"- 人工词目：{clean_text(str(row.get('human_term') or ''))}")
+            lines.append(f"- 人工释义：{clean_text(str(row.get('human_gloss') or ''))}")
+            lines.append(f"- 人工处理动作：{clean_text(str(row.get('human_action') or ''))}")
+            lines.append(f"- 人工处理意见：{clean_text(str(row.get('human_notes') or ''))}")
+            lines.append("")
+        lines.append("")
+
+    path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+
+def write_textbook_article_packets(article_rows: list[dict[str, Any]], review_rows: list[dict[str, Any]]) -> None:
+    article_index = {
+        stable_slug(f"{clean_text(str(row.get('book_key') or ''))}:{clean_text(str(row.get('title') or ''))}"): row
+        for row in article_rows
+        if clean_text(str(row.get("book_key") or "")) and clean_text(str(row.get("title") or ""))
+    }
+    grouped_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in review_rows:
+        article_id = clean_text(str(row.get("article_id") or ""))
+        if article_id:
+            grouped_rows[article_id].append(row)
+
+    if TEXTBOOK_ARTICLE_PACKET_DIR.exists():
+        shutil.rmtree(TEXTBOOK_ARTICLE_PACKET_DIR)
+    if TEXTBOOK_ARTICLE_PACKET_MD_DIR.exists():
+        shutil.rmtree(TEXTBOOK_ARTICLE_PACKET_MD_DIR)
+    TEXTBOOK_ARTICLE_PACKET_DIR.mkdir(parents=True, exist_ok=True)
+    TEXTBOOK_ARTICLE_PACKET_MD_DIR.mkdir(parents=True, exist_ok=True)
+
+    for article_id, rows in grouped_rows.items():
+        article = article_index.get(article_id, {})
+        ordered_rows = sorted(rows, key=lambda item: (int(item.get("note_order") or 0), clean_text(str(item.get("label_text") or ""))))
+        summary = {
+            "article_id": article_id,
+            "book_key": clean_text(str(article.get("book_key") or ordered_rows[0].get("book_key") or "")),
+            "book_title": clean_text(str(article.get("book_title") or ordered_rows[0].get("book_title") or "")),
+            "title": clean_text(str(article.get("title") or ordered_rows[0].get("source_title") or "")),
+            "manifest_title": clean_text(str(article.get("manifest_title") or ordered_rows[0].get("manifest_title") or "")),
+            "author": clean_text(str(article.get("author") or "")),
+            "dynasty": clean_text(str(article.get("dynasty") or "")),
+            "page_start": article.get("page_start_print"),
+            "page_end": article.get("page_end_print"),
+            "body_source_mode": clean_text(str(article.get("body_source_mode") or ordered_rows[0].get("body_source_mode") or "")),
+            "body_source_title": clean_text(str(article.get("body_source_title") or ordered_rows[0].get("body_source_title") or "")),
+            "full_text": clean_text_keep_newlines(str(article.get("full_text") or article.get("ocr_full_text") or "")),
+            "row_count": len(ordered_rows),
+            "in_bank_count": sum(1 for row in ordered_rows if row.get("current_in_bank")),
+            "needs_split_count": sum(1 for row in ordered_rows if row.get("auto_should_split")),
+        }
+        json_payload = {
+            "article": summary,
+            "rows": ordered_rows,
+        }
+        (TEXTBOOK_ARTICLE_PACKET_DIR / f"{article_id}.json").write_text(
+            json.dumps(json_payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        title = summary["title"] or article_id
+        lines = [
+            f"# {title}",
+            "",
+            "## 校对规则",
+            "",
+            "- 最小干预：优先确认系统自动抽取是否准确，不必重写整条注释。",
+            "- 只保留能稳定落到句中具体字词的条目；整句、整分句、短语拼接项标记为需拆分或不入题。",
+            "- 重点核对：是否实词 / 虚词、当前词目是否准确、课下注释是否可直接作答、是否需要拆分。",
+            "- 可直接填写 human_kind / human_split / human_term / human_gloss / human_action / human_notes。",
+            "",
+            "## 篇目信息",
+            "",
+            f"- 书册：{summary['book_title'] or '—'}",
+            f"- 篇目：{summary['manifest_title'] or title}",
+            f"- 作者：{summary['author'] or '—'}",
+            f"- 朝代：{summary['dynasty'] or '—'}",
+            f"- 页码：{summary['page_start'] or '—'} - {summary['page_end'] or '—'}",
+            f"- 当前可出题：{summary['in_bank_count']}",
+            f"- 待拆分：{summary['needs_split_count']}",
+            f"- 正文来源：{summary['body_source_mode'] or '—'} / {summary['body_source_title'] or '—'}",
+            "",
+            "## 正文",
+            "",
+            safe_markdown_code_block(summary["full_text"]),
+            "",
+            "## 注释条目",
+            "",
+        ]
+        for row in ordered_rows:
+            lines.extend(
+                [
+                    f"### {int(row.get('note_order') or 0)}. {clean_text(str(row.get('label_text') or '')) or '未命名注释'}",
+                    "",
+                    f"- 自动词目：{clean_text(str(row.get('auto_headword') or '')) or '—'}",
+                    f"- 自动判定：{'虚词' if str(row.get('auto_kind') or '') == 'function_word' else '实词' if str(row.get('auto_kind') or '') == 'content_word' else '—'}",
+                    f"- 当前已出题：{'是' if row.get('current_in_bank') else '否'}",
+                    f"- 建议拆分：{'是' if row.get('auto_should_split') else '否'}",
+                    f"- 自动释义：{clean_text(str(row.get('auto_answer_text') or '')) or '—'}",
+                    f"- 命中句：{clean_text(str(row.get('display_sentence') or row.get('source_sentence') or '')) or '—'}",
+                    f"- 课下注释：{clean_text(str(row.get('note_text') or '')) or '—'}",
+                    f"- 辞典义项：{' / '.join(list(row.get('dict_summary_lines') or [])[:4]) or '—'}",
+                    f"- 人工确认：{clean_text(str(row.get('human_confirm') or '')) or '—'}",
+                    f"- 人工词类：{clean_text(str(row.get('human_kind') or '')) or '—'}",
+                    f"- 人工拆分：{clean_text(str(row.get('human_split') or '')) or '—'}",
+                    f"- 人工词目：{clean_text(str(row.get('human_term') or '')) or '—'}",
+                    f"- 人工释义：{clean_text(str(row.get('human_gloss') or '')) or '—'}",
+                    f"- 处理意见：{clean_text(str(row.get('human_action') or '')) or '—'}",
+                    f"- 备注：{clean_text(str(row.get('human_notes') or '')) or '—'}",
+                    "",
+                ]
+            )
+        (TEXTBOOK_ARTICLE_PACKET_MD_DIR / f"{article_id}.md").write_text(
+            "\n".join(lines).rstrip() + "\n",
+            encoding="utf-8",
+        )
 
 
 def write_table_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -3633,7 +5009,8 @@ def main() -> int:
     content_raw_terms = merge_content_terms(content_source_terms, question_docs)
     occurrence_lookup = build_exam_occurrence_lookup(function_source_terms, content_source_terms)
 
-    sections, textbook_refs = load_textbook_sections_from_master_tables()
+    article_rows, note_rows = load_textbook_source_master_tables()
+    sections, textbook_refs = load_textbook_sections_from_master_tables(article_rows, note_rows)
     textbook_note_table = build_textbook_note_table(textbook_refs)
     textbook_note_content = [row for row in textbook_note_table if str(row.get("kind") or "") == "content_word"]
     textbook_note_function = [row for row in textbook_note_table if str(row.get("kind") or "") == "function_word"]
@@ -3723,9 +5100,26 @@ def main() -> int:
     corpus_indexes = build_public_corpus_indexes(textbook_passages, exam_passages)
     exam_tested_terms = build_headword_frequency_records(function_records, content_records)
     function_usage_table = build_function_usage_table(function_records, function_usage_catalog)
+    textbook_article_catalog, textbook_article_bank = build_textbook_article_challenge_assets(
+        article_rows,
+        textbook_bank,
+        answer_keys,
+    )
+    proofread_rows = build_textbook_proofread_rows(
+        article_rows,
+        note_rows,
+        textbook_note_table,
+        revised_links,
+        idiom_links,
+        answer_keys,
+    )
 
     clear_old_runtime_files()
     write_private_answer_keys(answer_keys)
+    TEXTBOOK_PROOFREAD_TABLE_PATH.write_text(json.dumps(proofread_rows, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_textbook_proofread_csv(TEXTBOOK_PROOFREAD_TABLE_CSV_PATH, proofread_rows)
+    write_textbook_proofread_markdown(TEXTBOOK_PROOFREAD_MD_PATH, article_rows, proofread_rows)
+    write_textbook_article_packets(article_rows, proofread_rows)
     write_table_csv(PRIVATE_RUNTIME_DIR / "textbook_notes_table.csv", textbook_note_table)
     write_table_csv(PRIVATE_RUNTIME_DIR / "textbook_notes_content.csv", textbook_note_content)
     write_table_csv(PRIVATE_RUNTIME_DIR / "textbook_notes_function.csv", textbook_note_function)
@@ -3743,6 +5137,8 @@ def main() -> int:
             "textbook_notes": len(textbook_note_table),
             "textbook_content_notes": len(textbook_note_content),
             "textbook_function_notes": len(textbook_note_function),
+            "textbook_article_count": len(textbook_article_catalog),
+            "textbook_article_challenges": sum(int(item.get("challenge_count") or 0) for item in textbook_article_catalog),
             "challenge_counts": {key: len(value) for key, value in challenge_bank.items()},
         },
     }
@@ -3755,6 +5151,8 @@ def main() -> int:
     write_runtime_asset("textbook_notes_function", textbook_note_function, "list", manifest_payload)
     write_runtime_asset("textbook_note_term_index", textbook_note_term_index, "list", manifest_payload)
     write_runtime_asset("textbook_note_stats", textbook_note_stats, "object", manifest_payload)
+    write_runtime_asset("textbook_article_catalog", textbook_article_catalog, "list", manifest_payload)
+    write_runtime_asset("textbook_article_bank", textbook_article_bank, "object", manifest_payload)
     write_runtime_asset("dict_links", dict_links, "object", manifest_payload)
     write_runtime_asset("corpus_indexes", corpus_indexes, "object", manifest_payload)
     write_runtime_asset("textbook_frequency_table", textbook_frequency_table, "list", manifest_payload)

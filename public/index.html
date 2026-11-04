@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>文言練習</title>
+    <title>AI 字詞</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css" />
     <script src="https://my.bdfz.net/site-auth.js" defer></script>
@@ -13,57 +13,67 @@
     <div class="page-glow page-glow-a"></div>
     <div class="page-glow page-glow-b"></div>
     <main class="shell">
-      <header class="topbar">
-        <div class="entry-strip">
-          <button class="entry-tile" data-kind="content_word" type="button">實詞</button>
-          <button class="entry-tile" data-kind="function_word" type="button">虛詞</button>
-        </div>
+      <section class="arena-grid" id="arena-grid">
+        <aside class="left-panel" id="left-panel">
+          <section class="article-panel" id="article-panel" hidden>
+            <section class="article-catalog" id="article-catalog"></section>
+          </section>
+        </aside>
 
-        <label class="theme-picker" for="theme-select">
-          <span>配色</span>
-          <select id="theme-select">
-            <option value="parchment">宣紙</option>
-            <option value="forest">松墨</option>
-            <option value="ink">夜硯</option>
-          </select>
-        </label>
-      </header>
-
-      <section class="arena-grid">
         <article class="battle-stage">
           <header class="stage-head">
-            <div class="rank-badge" id="rank-badge">
-              <span class="rank-kicker" id="rank-kicker">未開局</span>
-              <strong id="rank-name">工蜂</strong>
-              <em id="rank-mode">常規排位</em>
-            </div>
-            <div class="stage-meta">
-              <div class="meta-chip">
-                <span class="meta-label">本輪</span>
-                <strong id="round-fraction">0 / 10</strong>
+            <div class="stage-hero">
+              <div class="stage-title-row">
+                <h1 class="stage-title">AI 字詞</h1>
+                <label class="theme-picker" for="theme-select">
+                  <span>配色</span>
+                  <select id="theme-select">
+                    <option value="parchment">宣紙</option>
+                    <option value="forest">松墨</option>
+                    <option value="ink">夜硯</option>
+                  </select>
+                </label>
               </div>
-              <div class="meta-chip">
-                <span class="meta-label">全對晉級</span>
-                <strong id="round-goal">10 / 10</strong>
-              </div>
+              <p class="account-summary" id="account-summary" hidden></p>
             </div>
+            <section class="mode-panel" id="mode-panel"></section>
           </header>
 
           <section class="question-root" id="question-root">
-            <div class="empty-state">
-              <p>選擇實詞或虛詞後直接進題。</p>
-            </div>
+            <div class="empty-state empty-state-quiet"></div>
           </section>
 
           <div class="round-track" id="round-track" aria-label="本輪作答進度"></div>
         </article>
 
-        <aside class="side-panel">
+        <aside class="right-panel" id="right-panel">
+          <div class="stage-meta">
+            <div class="meta-chip rank-badge" id="rank-badge">
+              <span class="meta-label">段位</span>
+              <strong id="rank-name">工蜂</strong>
+              <em id="rank-mode">常規排位</em>
+            </div>
+            <div class="meta-chip">
+              <span class="meta-label">本輪</span>
+              <strong id="round-fraction">0 / 10</strong>
+            </div>
+            <div class="meta-chip">
+              <span class="meta-label">全對晉級</span>
+              <strong id="round-goal">0 / 10</strong>
+            </div>
+          </div>
           <section class="leaderboard-panel">
             <header class="panel-head">
-              <p>榜單</p>
-              <span id="leaderboard-kind">實詞</span>
+              <div class="panel-head-copy">
+                <p>排行榜</p>
+              </div>
             </header>
+            <div class="leaderboard-tabs" aria-label="排行榜週期">
+              <button class="leaderboard-tab active" data-scope="total" type="button">總榜</button>
+              <button class="leaderboard-tab" data-scope="weekly" type="button">週榜</button>
+              <button class="leaderboard-tab" data-scope="daily" type="button">日榜</button>
+            </div>
+            <div class="leaderboard-meta" id="leaderboard-meta">統計範圍：全部歷史</div>
             <div class="leaderboard-root" id="leaderboard-root"></div>
           </section>
         </aside>
@@ -75,7 +85,7 @@
         <div class="feedback-dialog-head">
           <div>
             <strong>題目問題反饋</strong>
-            <p id="feedback-prompt-meta">把這道題的問題直接提交到 GitHub。</p>
+            <p id="feedback-prompt-meta"></p>
           </div>
           <button id="feedback-close" class="feedback-close" type="button" aria-label="關閉">×</button>
         </div>

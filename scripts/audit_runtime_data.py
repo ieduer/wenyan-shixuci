@@ -13,6 +13,8 @@ from build_runtime_data import (
     GENERATED_DIR,
     PRIVATE_RUNTIME_DIR,
     PUBLIC_RUNTIME_DIR,
+    build_textbook_answer_text,
+    clean_textbook_answer_text,
     RUNTIME_MIRROR_DIR,
     build_headword_frequency_records,
     clean_gloss,
@@ -20,6 +22,8 @@ from build_runtime_data import (
     load_json,
     looks_like_clean_gloss,
     merge_content_terms,
+    normalize_function_profile_text,
+    textbook_content_phrase_like,
 )
 from check_sources import REPO_ROOT, SHICI_PATH, XUCI_PATH, collect_source_report
 
@@ -32,6 +36,7 @@ DATA_QUALITY_PATHS = [
     PUBLIC_RUNTIME_DIR / "data_quality.json",
     RUNTIME_MIRROR_DIR / "data_quality.json",
 ]
+TEXTBOOK_PROOFREAD_TABLE_PATH = PRIVATE_RUNTIME_DIR / "textbook_note_proofread_table.json"
 SUSPICIOUS_RUNTIME_TEXT_RE = re.compile(r"(还中午|僅供個人學習使用|仅供个人学习使用|下載|下载|链接|鏈接)")
 TEXTBOOK_TARGET_BAD_RE = re.compile(
     r"(地名|古地名|在今|今[^。；;，,]{0,16}(?:东|西|南|北|县|市|省|一带)|山名|水名|渡口|都城|国名|郡名|县令|州治|源出|流入长江的地方|一带的人|人名|官名|职官名|職官名|年号|帝号|谥号|匈奴的一个亲王|生卒年不详|(?:春秋|战国|两汉|汉代|唐代|宋代|明代|清代)[^。；;，,]{0,18}(?:人|乐官|大夫|将军|国君|诗人|词人)|部首|复姓|複姓|^姓(?:的支系)?(?:。)?$|^名，姓(?:。)?$)"
@@ -184,20 +189,75 @@ def answer_key_issue_counts(
                 for option in item.get("options") or []:
                     if len(option.get("sentences") or []) != 2:
                         issue_counts["xuci_sentence_pair"] += 1
-            elif question_type == "sentence_meaning" and str(item.get("source_kind") or "") == "textbook":
+            elif str(item.get("source_kind") or "") == "textbook":
                 answer_label = clean_text(str(answer_key.get("correct_label") or ""))
+                item_kind = clean_text(str(item.get("kind") or answer_key.get("kind") or ""))
                 if not textbook_target_in_text(str(item.get("stem") or ""), str(item.get("sentence") or "")):
                     issue_counts["textbook_target_missing_from_sentence"] += 1
                 textbook_support = list(answer_key.get("textbook_support") or [])
-                expected_answer = clean_text(str((textbook_support[0] if textbook_support else {}).get("answer_text") or ""))
-                if expected_answer and clean_text(str(answer_key.get("correct_text") or "")) != expected_answer:
+                support_item = textbook_support[0] if textbook_support else {}
+                expected_answer = (
+                    normalize_function_profile_text(
+                        str(support_item.get("answer_text") or support_item.get("gloss") or support_item.get("note_block") or "")
+                    )
+                    if item_kind == "function_word"
+                    else (
+                        clean_textbook_answer_text(
+                            str(support_item.get("answer_text") or ""),
+                            str(support_item.get("headword") or ""),
+                            str(support_item.get("label_text") or ""),
+                        )
+                        or clean_text(
+                            build_textbook_answer_text(
+                                str(support_item.get("label_text") or ""),
+                                str(support_item.get("note_block") or ""),
+                                str(support_item.get("gloss") or ""),
+                                str(support_item.get("headword") or ""),
+                            )
+                        )
+                    )
+                )
+                actual_answer = (
+                    normalize_function_profile_text(str(answer_key.get("correct_text") or ""))
+                    if item_kind == "function_word"
+                    else clean_text(str(answer_key.get("correct_text") or ""))
+                )
+                if expected_answer and actual_answer != expected_answer:
                     issue_counts["textbook_answer_mismatch"] += 1
+                    if len(issue_examples) < 20:
+                        issue_examples.append(
+                            {
+                                "reason": "textbook_answer_mismatch",
+                                "challenge_id": challenge_id,
+                                "question_type": question_type,
+                                "label_text": clean_text(str(support_item.get("label_text") or "")),
+                                "expected_answer": expected_answer,
+                                "actual_answer": actual_answer,
+                            }
+                        )
+                if clean_text(str(answer_key.get("correct_text") or "")).startswith(("﹝", "〔", "【", "[")):
+                    issue_counts["textbook_answer_leading_bracket"] += 1
+                if item_kind != "function_word" and textbook_content_phrase_like(
+                    str(support_item.get("headword") or ""),
+                    str(support_item.get("label_text") or ""),
+                    str(support_item.get("note_block") or ""),
+                ):
+                    issue_counts["textbook_phrase_target_retained"] += 1
+                    if len(issue_examples) < 20:
+                        issue_examples.append(
+                            {
+                                "reason": "textbook_phrase_target_retained",
+                                "challenge_id": challenge_id,
+                                "question_type": question_type,
+                                "label_text": clean_text(str(support_item.get("label_text") or "")),
+                            }
+                        )
                 if TEXTBOOK_TARGET_BAD_RE.search(
                     " ".join(
                         clean_text(part)
                         for part in (
                             str(answer_key.get("correct_text") or ""),
-                            str((textbook_support[0] if textbook_support else {}).get("note_block") or ""),
+                            str(support_item.get("note_block") or ""),
                         )
                     )
                 ):
@@ -207,8 +267,8 @@ def answer_key_issue_counts(
                         if clean_text(str(option.get("origin") or "")) != "textbook_note":
                             issue_counts["textbook_correct_option_origin"] += 1
                         continue
-                    if clean_text(str(option.get("origin") or "")) != "dict_sense":
-                        issue_counts["textbook_content_non_dict_distractor"] += 1
+                    if clean_text(str(option.get("origin") or "")) != "textbook_note_distractor":
+                        issue_counts["textbook_non_textbook_distractor"] += 1
             elif question_type in {"content_gloss", "function_gloss"} and str(item.get("source_kind") or "") == "exam":
                 option_sentences = [clean_text(str(option.get("sentence") or "")) for option in item.get("options") or []]
                 if not all(option_sentences):
@@ -249,6 +309,43 @@ def duplicate_prompt_counts(challenge_bank: dict[str, list[dict[str, Any]]]) -> 
     return counts, examples
 
 
+def proofread_table_issue_counts() -> tuple[Counter[str], list[dict[str, Any]]]:
+    counts: Counter[str] = Counter()
+    examples: list[dict[str, Any]] = []
+    if not TEXTBOOK_PROOFREAD_TABLE_PATH.exists():
+        return counts, examples
+    rows = load_json(TEXTBOOK_PROOFREAD_TABLE_PATH)
+    if not isinstance(rows, list):
+        counts["proofread_table_invalid"] += 1
+        return counts, examples
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        current_in_bank = bool(row.get("current_in_bank"))
+        current_has_candidate = bool(row.get("current_has_candidate"))
+        current_challenge_ids = list(row.get("current_challenge_ids") or [])
+        auto_should_split = bool(row.get("auto_should_split"))
+        normalized_label = clean_text(str(row.get("normalized_label") or ""))
+        current_headword = clean_text(str(row.get("current_headword") or ""))
+        if current_in_bank and not current_challenge_ids:
+            counts["proofread_in_bank_without_challenge"] += 1
+            if len(examples) < 20:
+                examples.append(
+                    {
+                        "reason": "proofread_in_bank_without_challenge",
+                        "review_id": clean_text(str(row.get("review_id") or "")),
+                        "label_text": clean_text(str(row.get("label_text") or "")),
+                    }
+                )
+        if current_challenge_ids and not current_in_bank:
+            counts["proofread_challenge_without_in_bank"] += 1
+        if current_in_bank and auto_should_split and (not current_headword or current_headword == normalized_label):
+            counts["proofread_split_item_still_in_bank"] += 1
+        if current_in_bank and not current_has_candidate:
+            counts["proofread_in_bank_without_candidate"] += 1
+    return counts, examples
+
+
 def build_summary_report() -> dict[str, Any]:
     source_report = collect_source_report()
     manifest = load_json(PUBLIC_RUNTIME_DIR / "manifest.json")
@@ -267,8 +364,11 @@ def build_summary_report() -> dict[str, Any]:
     challenge_bank = exam_questions["challenge_bank"]
     issue_counts, issue_examples = answer_key_issue_counts(challenge_bank, answer_keys)
     duplicate_counts, duplicate_examples = duplicate_prompt_counts(challenge_bank)
+    proofread_counts, proofread_examples = proofread_table_issue_counts()
     issue_counts.update(duplicate_counts)
+    issue_counts.update(proofread_counts)
     issue_examples.extend(duplicate_examples[: max(0, 20 - len(issue_examples))])
+    issue_examples.extend(proofread_examples[: max(0, 20 - len(issue_examples))])
 
     content_core = [term for term in terms_content if str(term.get("priority_level") or "") == "core"]
     content_secondary = [term for term in terms_content if str(term.get("priority_level") or "") == "secondary"]

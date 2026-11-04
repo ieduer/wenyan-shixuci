@@ -1,0 +1,408 @@
+{
+  "built_at": "2026-05-11T11:17:19.879524+00:00",
+  "phase": "v3",
+  "drop_content": 934,
+  "drop_function": 12,
+  "textbook_drop": {
+    "items_kept": 1794,
+    "items_dropped": 0,
+    "articles_with_zero_after": 0
+  },
+  "v3_exam_challenges": 64,
+  "v3_papers": 24,
+  "answer_keys_total": 1858,
+  "stats": {
+    "terms_content": 761,
+    "terms_function": 22,
+    "exam_question_docs": 24,
+    "exam_v3_challenges": 64,
+    "textbook_article_count": 69,
+    "textbook_article_challenges": 1794,
+    "challenge_counts": {
+      "xuci_pair_compare": 21,
+      "function_gloss": 52,
+      "function_profile": 0,
+      "content_gloss": 25,
+      "sentence_meaning": 1760,
+      "passage_meaning": 0
+    },
+    "answer_keys_total": 1858
+  },
+  "drop_content_reasons": {
+    "blacklist_exact": 38,
+    "blacklist_pattern": 12,
+    "two_char_not_in_whitelist": 884
+  },
+  "v3_papers_breakdown": [
+    {
+      "paper_key": "beijing-2002-None",
+      "year": 2002,
+      "paper": "北京卷",
+      "passage_title": "古之人非无宝也（《吕氏春秋·异宝》节选）",
+      "challenge_count": 2
+    },
+    {
+      "paper_key": "beijing-2003-None",
+      "year": 2003,
+      "paper": "北京卷",
+      "passage_title": "邴原少孤求学（《三国志·邴原传》注引）",
+      "challenge_count": 3
+    },
+    {
+      "paper_key": "beijing-2004-None",
+      "year": 2004,
+      "paper": "北京卷",
+      "passage_title": "辛公义事略（《隋书·辛公义传》节选）",
+      "challenge_count": 2
+    },
+    {
+      "paper_key": "beijing-2005-None",
+      "year": 2005,
+      "paper": "北京卷",
+      "passage_title": "崔杼庆封事（《吕氏春秋·慎行》节选）",
+      "challenge_count": 2
+    },
+    {
+      "paper_key": "beijing-2006-None",
+      "year": 2006,
+      "paper": "北京卷",
+      "passage_title": "晏子谏景公（《晏子春秋》节选）",
+      "challenge_count": 2
+    },
+    {
+      "paper_key": "beijing-2007-None",
+      "year": 2007,
+      "paper": "北京卷",
+      "passage_title": "礼义教化论（《淮南子》节选）",
+      "challenge_count": 2
+    },
+    {
+      "paper_key": "beijing-2008-None",
+      "year": 2008,
+      "paper": "北京卷",
+      "passage_title": "韩延寿治颍川（《汉书·韩延寿传》节选）",
+      "challenge_count": 3
+    },
+    {
+      "paper_key": "beijing-2009-None",
+      "year": 2009,
+      "paper": "北京卷",
+      "passage_title": "叔孙通制朝仪（《史记·叔孙通传》节选）",
+      "challenge_count": 3
+    },
+    {
+      "paper_key": "beijing-2010-None",
+      "year": 2010,
+      "paper": "北京卷",
+      "passage_title": "宋清传（柳宗元）",
+      "challenge_count": 3
+    },
+    {
+      "paper_key": "beijing-2011-None",
+      "year": 2011,
+      "paper": "北京卷",
+      "passage_title": "诎寸伸尺论（《淮南子·汜论训》节选）",
+      "challenge_count": 2
+    },
+    {
+      "paper_key": "beijing-2012-None",
+      "year": 2012,
+      "paper": "北京卷",
+      "passage_title": "李疑传（宋濂《文宪集》节选）",
+      "challenge_count": 3
+    },
+    {
+      "paper_key": "beijing-2013-None",
+      "year": 2013,
+      "paper": "北京卷",
+      "passage_title": "曹彬列传（《宋史》节选）",
+      "challenge_count": 3
+    },
+    {
+      "paper_key": "beijing-2014-None",
+      "year": 2014,
+      "paper": "北京卷",
+      "passage_title": "偃虹堤记（欧阳修《欧阳文忠公集》）",
+      "challenge_count": 2
+    },
+    {
+      "paper_key": "beijing-2015-None",
+      "year": 2015,
+      "paper": "北京卷",
+      "passage_title": "吕氏春秋·去私",
+      "challenge_count": 4
+    },
+    {
+      "paper_key": "beijing-2016-None",
+      "year": 2016,
+      "paper": "北京卷",
+      "passage_title": "管子设谋（《管子·轻重》节选）",
+      "challenge_count": 3
+    },
+    {
+      "paper_key": "beijing-2017-None",
+      "year": 2017,
+      "paper": "北京卷",
+      "passage_title": "秦废封建（苏轼《东坡志林》）",
+      "challenge_count": 3
+    },
+    {
+      "paper_key": "beijing-2018-None",
+      "year": 2018,
+      "paper": "北京卷",
+      "passage_title": "积微・察微（《荀子》《吕氏春秋》节选）",
+      "challenge_count": 3
+    },
+    {
+      "paper_key": "beijing-2019-None",
+      "year": 2019,
+      "paper": "北京卷",
+      "passage_title": "非国语（柳宗元）",
+      "challenge_count": 1
+    },
+    {
+      "paper_key": "beijing-2020-None",
+      "year": 2020,
+      "paper": "北京卷",
+      "passage_title": "智伯之亡（《史记》《资治通鉴》合编）",
+      "challenge_count": 3
+    },
+    {
+      "paper_key": "beijing-2021-None",
+      "year": 2021,
+      "paper": "北京卷",
+      "passage_title": "非韩（王充《论衡·非韩》）",
+      "challenge_count": 3
+    },
+    {
+      "paper_key": "beijing-2022-None",
+      "year": 2022,
+      "paper": "北京卷",
+      "passage_title": "贾谊论积渐（《汉书·贾谊传》节选）",
+      "challenge_count": 3
+    },
+    {
+      "paper_key": "beijing-2023-None",
+      "year": 2023,
+      "paper": "北京卷",
+      "passage_title": "贵廉（顾炎武）",
+      "challenge_count": 3
+    },
+    {
+      "paper_key": "beijing-2024-None",
+      "year": 2024,
+      "paper": "北京卷",
+      "passage_title": "墨子非命",
+      "challenge_count": 3
+    },
+    {
+      "paper_key": "beijing-2025-None",
+      "year": 2025,
+      "paper": "北京卷",
+      "passage_title": "士容（《吕氏春秋》节选）",
+      "challenge_count": 3
+    }
+  ],
+  "dropped_content_examples": [
+    [
+      "一恸",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "一稔",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "一粟",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "一苇",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "一言",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "丁令",
+      "blacklist_exact"
+    ],
+    [
+      "丁口",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "丁宁",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "七庙",
+      "blacklist_exact"
+    ],
+    [
+      "万里",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "万顷",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "丈人",
+      "blacklist_exact"
+    ],
+    [
+      "三吴",
+      "blacklist_exact"
+    ],
+    [
+      "三国",
+      "blacklist_exact"
+    ],
+    [
+      "三岁",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "三王",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "三秋",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "三驱",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "下九",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "下吏",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "下愚",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "下陈",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "不为",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "不任",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "不入",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "不啻",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "不堪",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "不幸",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "不必",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "不效",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "不敏",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "不爱",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "不爽",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "不行",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "不量",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "不齿",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "与使",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "专攻",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "世味",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "丘",
+      "blacklist_exact"
+    ],
+    [
+      "业根",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "东宫",
+      "blacklist_exact"
+    ],
+    [
+      "东家",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "东曦",
+      "blacklist_exact"
+    ],
+    [
+      "东海",
+      "blacklist_exact"
+    ],
+    [
+      "东皋",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "严妆",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "中国",
+      "blacklist_exact"
+    ],
+    [
+      "中流",
+      "two_char_not_in_whitelist"
+    ],
+    [
+      "中绳",
+      "two_char_not_in_whitelist"
+    ]
+  ]
+}

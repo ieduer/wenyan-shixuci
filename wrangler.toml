@@ -8,9 +8,13 @@ routes = [
   { pattern = "wy.bdfz.net/*", zone_name = "bdfz.net" }
 ]
 
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 [vars]
 SITE_KEY = "wy"
-SITE_TITLE = "文言練習"
+SITE_TITLE = "AI 字詞"
 PRIMARY_HOST = "wy.bdfz.net"
 USER_CENTER_ORIGIN = "https://my.bdfz.net"
 REPORT_SYNC_ENDPOINT = "https://my.bdfz.net/api/mastery/report"

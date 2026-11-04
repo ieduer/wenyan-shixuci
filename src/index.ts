@@ -1,7 +1,8 @@
 import answerKeysData from "./generated/answer_keys.json";
 
-type Kind = "function_word" | "content_word";
+type Kind = "function_word" | "content_word" | "textbook_word" | "gaokao_mix";
 type Mode = "ladder" | "review";
+type LeaderboardScope = "total" | "weekly" | "daily";
 type QuestionType =
   | "xuci_pair_compare"
   | "function_gloss"
@@ -59,6 +60,23 @@ interface TextbookRef {
   sentence: string;
   context_window: string[];
   note_block: string;
+}
+
+interface TextbookArticleMeta {
+  article_id: string;
+  book_key: string;
+  book_title: string;
+  school_stage: string;
+  title: string;
+  manifest_title?: string;
+  author?: string;
+  dynasty?: string;
+  page_start?: number | null;
+  page_end?: number | null;
+  note_count?: number;
+  challenge_count?: number;
+  content_count?: number;
+  function_count?: number;
 }
 
 interface BasisRecord {
@@ -138,6 +156,9 @@ interface BankItem {
   paper_key?: string;
   question_number?: number;
   stem: string;
+  article_id?: string;
+  article_title?: string;
+  term_kind?: "function_word" | "content_word";
   sentence?: string;
   passage?: string;
   context_window?: string[];
@@ -159,6 +180,7 @@ interface AnswerKeyRecord {
     paper_key?: string;
     question_number?: number | null;
   };
+  source_meta?: Record<string, unknown>;
   correct_label?: string;
   correct_text?: string;
   explanation: string;
@@ -226,6 +248,8 @@ interface RuntimeData {
   termsFunction: TermRecord[];
   termsContent: TermRecord[];
   examQuestions: ExamQuestionsPayload;
+  textbookArticleCatalog: TextbookArticleMeta[];
+  textbookArticleBank: Record<string, { article: TextbookArticleMeta; items: BankItem[] }>;
   answerKeys: Record<string, AnswerKeyRecord>;
   textbookExamples: Record<string, TextbookRef[]>;
   dictLinks: Record<string, { revised_sense_links: DictLink[]; idiom_links: DictLink[] }>;
@@ -245,6 +269,7 @@ interface ChallengePromptPayload {
   challengeId: string;
   questionType: QuestionType;
   kind: Kind;
+  termKind?: "function_word" | "content_word";
   termId: string;
   termIds: string[];
   senseKey: string;
@@ -252,6 +277,8 @@ interface ChallengePromptPayload {
   sourceKind?: string;
   sourceLabel?: string;
   sourceTitle?: string;
+  articleId?: string;
+  articleTitle?: string;
   sourceMeta?: Record<string, unknown>;
   stem: string;
   sentence?: string;
@@ -285,6 +312,7 @@ interface PlayerStateRow {
   last_round_answered: number;
   last_round_correct: number;
   last_result: string;
+  total_score: number;
   updated_at: string;
 }
 
@@ -292,19 +320,33 @@ const SESSION_COOKIE = "wy_session";
 const DEV_SIGNING_SECRET = "local-dev-only-not-for-production";
 const ROUND_SIZE = 10;
 const ACTIVE_RUN_REUSE_MS = 12 * 60 * 60 * 1000;
+const MIXED_KIND: Kind = "textbook_word";
+const GAOKAO_KIND: Kind = "gaokao_mix";
 const EXAM_TYPE_PRIORITY: Record<Kind, QuestionType[]> = {
   content_word: ["content_gloss"],
   function_word: ["xuci_pair_compare", "function_gloss"],
+  textbook_word: [],
+  gaokao_mix: ["content_gloss", "xuci_pair_compare", "function_gloss", "sentence_meaning", "function_profile"],
 };
 const TEXTBOOK_TYPE_PRIORITY: Record<Kind, QuestionType[]> = {
   content_word: ["sentence_meaning"],
   function_word: ["function_gloss"],
+  textbook_word: ["sentence_meaning", "function_gloss"],
+  gaokao_mix: [],
 };
+const ARTICLE_QUESTION_TYPES: QuestionType[] = ["sentence_meaning", "function_gloss"];
+// v3：句意题（sentence_meaning）也归入 GAOKAO 题池，以容纳 24 卷北京卷真题中的句意辨析小题。
+const GAOKAO_QUESTION_TYPES: QuestionType[] = ["content_gloss", "xuci_pair_compare", "function_gloss", "sentence_meaning", "function_profile"];
 const BADGE_DEFS = [
   { key: "first-correct", title: "初鸣勋章", detail: "答对第一题" },
   { key: "streak-3", title: "三连破阵", detail: "连续答对 3 题" },
   { key: "review-tamer", title: "错题驯服者", detail: "清空当前错题追击" },
-  { key: "perfect-run", title: "满分抄手", detail: "单次挑战 10 题全对" },
+  { key: "article-first-clear", title: "篇目开卷", detail: "完成第一篇字词挑战" },
+  { key: "article-perfect", title: "通篇无失", detail: "单篇字词挑战全对" },
+  { key: "article-collector-3", title: "三篇连缀", detail: "完成 3 篇不同篇目字词挑战" },
+  { key: "gaokao-first-clear", title: "高考入场", detail: "完成第一轮高考混编" },
+  { key: "gaokao-perfect", title: "高考通关", detail: "高考混编一轮全对" },
+  { key: "gaokao-collector-3", title: "高考三轮", detail: "完成 3 轮高考混编" },
 ];
 
 const IDV_TIERS = [
@@ -319,16 +361,213 @@ const IDV_TIERS = [
 ] as const;
 
 let runtimeCache: Promise<RuntimeData> | null = null;
+let activityLogSchemaReady: Promise<void> | null = null;
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const startedAt = Date.now();
     const url = new URL(request.url);
-    if (url.pathname.startsWith("/api/")) {
-      return routeApi(request, env, url);
+    let response: Response;
+    if (url.pathname.endsWith(".bak")) {
+      response = json({ error: "Not found" }, 404);
+    } else if (url.pathname.startsWith("/api/")) {
+      response = await routeApi(request, env, url);
+    } else {
+      response = await env.ASSETS.fetch(request);
     }
-    return env.ASSETS.fetch(request);
+    if (ctx && typeof ctx.waitUntil === "function" && shouldLogActivity(url, request)) {
+      ctx.waitUntil(recordUserActivity(request, env, response, startedAt));
+    }
+    return response;
   },
 };
+
+function shouldLogActivity(url: URL, request: Request): boolean {
+  if (request.method.toUpperCase() === "OPTIONS") return false;
+  if (url.pathname.startsWith("/api/")) return true;
+  return request.method.toUpperCase() === "GET" && (url.pathname === "/" || url.pathname.endsWith(".html"));
+}
+
+function auditText(value: unknown, limit = 500): string | null {
+  if (value === null || value === undefined) return null;
+  const text = String(value)
+    .replace(/[\u0000-\u001F\u007F]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text ? text.slice(0, limit) : null;
+}
+
+function auditHeader(request: Request, name: string, limit = 500): string | null {
+  return auditText(request.headers.get(name), limit);
+}
+
+function auditCfText(request: Request, key: string, limit = 200): string | null {
+  const value = (request as Request & { cf?: Record<string, unknown> }).cf?.[key];
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  return auditText(String(value), limit);
+}
+
+function auditCfNumber(request: Request, key: string): number | null {
+  const value = (request as Request & { cf?: Record<string, unknown> }).cf?.[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function redactQuery(searchParams: URLSearchParams): string | null {
+  const redacted = new URLSearchParams();
+  for (const [key, value] of searchParams.entries()) {
+    if (/token|secret|password|passwd|pwd|key|auth|code/i.test(key)) {
+      redacted.set(key, "<redacted>");
+    } else {
+      redacted.set(key, value.slice(0, 300));
+    }
+  }
+  const text = redacted.toString();
+  return text ? text.slice(0, 2000) : null;
+}
+
+async function ensureActivityLogSchema(env: Env): Promise<void> {
+  if (!activityLogSchemaReady) {
+    activityLogSchemaReady = (async () => {
+      await env.DB.prepare(
+        `CREATE TABLE IF NOT EXISTS user_activity_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          event_id TEXT NOT NULL UNIQUE,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          event_type TEXT NOT NULL,
+          action TEXT NOT NULL,
+          anon_session_id TEXT,
+          auth_slug TEXT,
+          auth_display_name TEXT,
+          session_hash TEXT,
+          device_id TEXT,
+          device_id_hash TEXT,
+          method TEXT NOT NULL,
+          host TEXT,
+          path TEXT NOT NULL,
+          query_redacted TEXT,
+          status INTEGER,
+          duration_ms INTEGER,
+          ip TEXT,
+          ip_hash TEXT,
+          true_client_ip TEXT,
+          forwarded_for TEXT,
+          cf_ray TEXT,
+          cf_colo TEXT,
+          cf_country TEXT,
+          cf_region TEXT,
+          cf_city TEXT,
+          cf_timezone TEXT,
+          cf_asn INTEGER,
+          cf_as_organization TEXT,
+          user_agent TEXT,
+          accept_language TEXT,
+          referer TEXT,
+          origin TEXT,
+          sec_ch_ua TEXT,
+          sec_ch_ua_mobile TEXT,
+          sec_ch_ua_platform TEXT,
+          sec_fetch_site TEXT,
+          sec_fetch_mode TEXT,
+          sec_fetch_dest TEXT,
+          content_type TEXT,
+          content_length INTEGER,
+          metadata_json TEXT NOT NULL DEFAULT '{}'
+        )`
+      ).run();
+      await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_user_activity_logs_created_at ON user_activity_logs(created_at DESC)").run();
+      await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_user_activity_logs_auth_created ON user_activity_logs(auth_slug, created_at DESC)").run();
+      await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_user_activity_logs_anon_created ON user_activity_logs(anon_session_id, created_at DESC)").run();
+      await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_user_activity_logs_ip_created ON user_activity_logs(ip, created_at DESC)").run();
+    })().catch((error) => {
+      activityLogSchemaReady = null;
+      throw error;
+    });
+  }
+  return activityLogSchemaReady;
+}
+
+async function recordUserActivity(request: Request, env: Env, response: Response, startedAt: number): Promise<void> {
+  try {
+    await ensureActivityLogSchema(env);
+    const url = new URL(request.url);
+    const cookies = parseCookies(request.headers.get("Cookie") || "");
+    const sessionToken = cookies[SESSION_COOKIE] || "";
+    const sessionPayload = sessionToken ? await verifyToken(env, request, sessionToken).catch(() => null) : null;
+    const auth = await getAuthContext(request, env).catch(() => null);
+    const forwardedFor = auditHeader(request, "X-Forwarded-For", 500);
+    const ip = auditHeader(request, "CF-Connecting-IP", 200)
+      || auditHeader(request, "True-Client-IP", 200)
+      || (forwardedFor ? forwardedFor.split(",")[0]?.trim() || null : null);
+    const deviceId = auditHeader(request, "X-WY-Device-Id", 128);
+    const secret = getSigningSecret(env, request);
+    const contentLengthRaw = request.headers.get("Content-Length");
+    const contentLength = contentLengthRaw ? Number.parseInt(contentLengthRaw, 10) : null;
+    const safeContentLength = Number.isFinite(contentLength || NaN) ? contentLength : null;
+    const eventType = url.pathname.startsWith("/api/") ? "api.request" : "page.view";
+    const action = `${request.method.toUpperCase()} ${url.pathname}`;
+
+    await env.DB.prepare(
+      `INSERT INTO user_activity_logs (
+        event_id, event_type, action, anon_session_id, auth_slug, auth_display_name,
+        session_hash, device_id, device_id_hash,
+        method, host, path, query_redacted, status, duration_ms,
+        ip, ip_hash, true_client_ip, forwarded_for,
+        cf_ray, cf_colo, cf_country, cf_region, cf_city, cf_timezone, cf_asn, cf_as_organization,
+        user_agent, accept_language, referer, origin,
+        sec_ch_ua, sec_ch_ua_mobile, sec_ch_ua_platform, sec_fetch_site, sec_fetch_mode, sec_fetch_dest,
+        content_type, content_length, metadata_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      crypto.randomUUID(),
+      eventType,
+      action,
+      typeof sessionPayload?.sid === "string" ? sessionPayload.sid : null,
+      auth?.user.slug || null,
+      auth?.user.displayName || null,
+      sessionToken ? (await sha256Hex(`wy-session:${sessionToken}:${secret}`)).slice(0, 32) : null,
+      deviceId,
+      deviceId ? (await sha256Hex(`wy-device:${deviceId}:${secret}`)).slice(0, 32) : null,
+      request.method.toUpperCase(),
+      auditHeader(request, "Host", 200),
+      url.pathname,
+      redactQuery(url.searchParams),
+      response.status,
+      Math.max(0, Date.now() - startedAt),
+      ip,
+      ip ? (await sha256Hex(`wy-ip:${ip}:${secret}`)).slice(0, 32) : null,
+      auditHeader(request, "True-Client-IP", 200),
+      forwardedFor,
+      auditHeader(request, "CF-Ray", 200),
+      auditCfText(request, "colo", 80),
+      auditCfText(request, "country", 80) || auditHeader(request, "CF-IPCountry", 80),
+      auditCfText(request, "region", 120) || auditCfText(request, "regionCode", 80),
+      auditCfText(request, "city", 120),
+      auditCfText(request, "timezone", 120),
+      auditCfNumber(request, "asn"),
+      auditCfText(request, "asOrganization", 200),
+      auditHeader(request, "User-Agent", 1200),
+      auditHeader(request, "Accept-Language", 500),
+      auditHeader(request, "Referer", 1000),
+      auditHeader(request, "Origin", 500),
+      auditHeader(request, "Sec-CH-UA", 500),
+      auditHeader(request, "Sec-CH-UA-Mobile", 80),
+      auditHeader(request, "Sec-CH-UA-Platform", 200),
+      auditHeader(request, "Sec-Fetch-Site", 80),
+      auditHeader(request, "Sec-Fetch-Mode", 80),
+      auditHeader(request, "Sec-Fetch-Dest", 80),
+      auditHeader(request, "Content-Type", 300),
+      safeContentLength,
+      JSON.stringify({ siteKey: env.SITE_KEY || "wy" })
+    ).run();
+  } catch (error) {
+    console.warn("user activity log failed", error);
+  }
+}
 
 async function routeApi(request: Request, env: Env, url: URL): Promise<Response> {
   try {
@@ -338,7 +577,7 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
     if (method === "GET" && path === "/api/challenge/next") return handleChallengeNext(request, env, url);
     if (method === "POST" && path === "/api/challenge/answer") return handleChallengeAnswer(request, env);
     if (method === "GET" && path.startsWith("/api/term/")) return handleTerm(request, env, path.slice("/api/term/".length));
-    if (method === "GET" && path === "/api/leaderboard") return handleLeaderboard(env, url);
+    if (method === "GET" && path === "/api/leaderboard") return handleLeaderboard(request, env, url);
     if (method === "POST" && path === "/api/report/finalize") return handleReportFinalize(request, env);
     if (method === "GET" && path.startsWith("/api/report/")) return handleReportGet(request, env, path.slice("/api/report/".length), url);
     if (method === "POST" && path === "/api/feedback") return handleFeedbackSubmit(request, env);
@@ -366,9 +605,11 @@ async function handleBootstrap(request: Request, env: Env): Promise<Response> {
   if (auth) {
     await flushSyncOutbox(env, owner.ownerId, auth.user.slug, auth.cookieHeader);
   }
-  const leaderboard = await loadLeaderboard(env, "content_word");
+  const gaokaoState = await getPlayerState(env, owner.ownerId, GAOKAO_KIND);
+  const mixedState = await getPlayerState(env, owner.ownerId, MIXED_KIND);
   const contentState = await getPlayerState(env, owner.ownerId, "content_word");
   const functionState = await getPlayerState(env, owner.ownerId, "function_word");
+  const leaderboard = await loadLeaderboard(env, GAOKAO_KIND, owner.ownerId);
   const manifestStats = runtime.dataQuality?.manifest_stats || {};
   const response = json(
     {
@@ -387,15 +628,30 @@ async function handleBootstrap(request: Request, env: Env): Promise<Response> {
         : { authenticated: false, user: null },
       player: {
         ownerId: owner.ownerId,
+        gaokao: summarizePlayerState(gaokaoState),
+        mixed: summarizePlayerState(mixedState),
         content: summarizePlayerState(contentState),
         function: summarizePlayerState(functionState),
       },
       stats: {
+        articleCount: runtime.textbookArticleCatalog.length,
+        mixedChallenges: runtime.textbookArticleCatalog.reduce(
+          (sum, article) => sum + Number(article.challenge_count || 0),
+          0
+        ),
+        gaokaoMixedChallenges: GAOKAO_QUESTION_TYPES.reduce(
+          (sum, questionType) =>
+            sum +
+            (runtime.examQuestions.challenge_bank[questionType]?.filter((item) => String(item.source_kind || "") === "exam")
+              .length || 0),
+          0
+        ),
         functionTerms: runtime.termsFunction.length,
         contentTerms: runtime.termsContent.length,
         textbookNotes: Number(manifestStats["textbook_notes"] || 0),
         textbookContentNotes: Number(manifestStats["textbook_content_notes"] || 0),
         textbookFunctionNotes: Number(manifestStats["textbook_function_notes"] || 0),
+        textbookArticleChallenges: Number(manifestStats["textbook_article_challenges"] || 0),
         functionChallenges: ["xuci_pair_compare", "function_gloss"].reduce(
           (sum, questionType) => sum + (runtime.examQuestions.challenge_bank[questionType as QuestionType]?.length || 0),
           0
@@ -407,6 +663,7 @@ async function handleBootstrap(request: Request, env: Env): Promise<Response> {
         validatedFunctionTerms: runtime.termsFunction.filter((term) => !term.needs_manual_review).length,
         validatedContentTerms: runtime.termsContent.filter((term) => !term.needs_manual_review).length,
       },
+      articles: runtime.textbookArticleCatalog,
       dataQuality: runtime.dataQuality,
       leaderboard,
     },
@@ -429,21 +686,40 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
 
   const kind = canonicalKind(url.searchParams.get("kind"));
   const mode = canonicalMode(url.searchParams.get("mode"));
+  const requestedArticleId = cleanString(url.searchParams.get("articleId"), 120);
   const requestedRunId = cleanString(url.searchParams.get("runId"), 80);
   let runId = requestedRunId;
   let runRow = runId ? await getRun(env, runId, owner.ownerId) : null;
+  const activeArticleId =
+    requestedArticleId ||
+    cleanString(runRow?.target_key, 120) ||
+    cleanString(url.searchParams.get("targetKey"), 120);
+  const articleMeta =
+    kind === MIXED_KIND && activeArticleId
+      ? runtime.textbookArticleCatalog.find((item) => item.article_id === activeArticleId) || null
+      : null;
   if (!runRow) {
-    runRow = await findActiveRun(env, owner.ownerId, kind, mode);
+    runRow = await findActiveRun(env, owner.ownerId, kind, mode, kind === MIXED_KIND ? "article" : "", activeArticleId);
     if (runRow && !requestedRunId && !isReusableActiveRun(runRow)) {
       await retireRun(env, String(runRow.id || ""), owner.ownerId);
       runRow = null;
     }
     runId = runRow ? String(runRow.id || "") : "";
   }
+  const runArticleId = cleanString(runRow?.target_key, 120) || activeArticleId;
+  if (kind === MIXED_KIND && mode === "ladder" && !runArticleId) {
+    return json({ error: "articleId required" }, 400);
+  }
   const playerState = await getPlayerState(env, owner.ownerId, kind);
   if (!runRow) {
+    const articleTargetCount =
+      kind === MIXED_KIND
+        ? Math.max(1, Math.min(ROUND_SIZE, Number(articleMeta?.challenge_count || 0) || ROUND_SIZE))
+        : ROUND_SIZE;
     const targetCount =
-      mode === "review" ? Math.min(ROUND_SIZE, await countPendingReview(env, owner.ownerId, kind)) : ROUND_SIZE;
+      mode === "review"
+        ? Math.min(ROUND_SIZE, await countPendingReview(env, owner.ownerId, kind))
+        : articleTargetCount;
     if (mode === "review" && targetCount <= 0) {
       return json(
         {
@@ -471,10 +747,20 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
     runId = crypto.randomUUID();
     const sourceRunId = cleanString(url.searchParams.get("sourceRunId"), 80) || null;
     await env.DB.prepare(
-      `INSERT INTO challenge_runs (id, session_id, kind, mode, status, started_at, updated_at, target_count, source_run_id)
-       VALUES (?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?)`
+      `INSERT INTO challenge_runs (id, session_id, kind, mode, status, started_at, updated_at, target_count, source_run_id, target_scope, target_key, target_label)
+       VALUES (?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?)`
     )
-      .bind(runId, owner.ownerId, kind, mode, targetCount, sourceRunId)
+      .bind(
+        runId,
+        owner.ownerId,
+        kind,
+        mode,
+        targetCount,
+        sourceRunId,
+        kind === MIXED_KIND ? "article" : "",
+        kind === MIXED_KIND ? runArticleId : "",
+        kind === MIXED_KIND ? cleanString(articleMeta?.title || articleMeta?.manifest_title || "", 120) : ""
+      )
       .run();
     runRow = await getRun(env, runId, owner.ownerId);
   }
@@ -549,7 +835,8 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
     usedChallengeIds,
     historicalChallengeIds,
     reviewTargets,
-    lastPrompt
+    lastPrompt,
+    runArticleId
   );
   if (!bankItem) {
     if (mode === "review" && String(runRow.status || "") === "active") {
@@ -584,6 +871,7 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
     challengeId: bankItem.challenge_id,
     questionType: bankItem.question_type,
     kind,
+    termKind: (bankItem.source_meta?.term_kind || bankItem.term_kind || bankItem.kind) as "function_word" | "content_word",
     termId: bankItem.term_id,
     termIds: bankItem.term_ids && bankItem.term_ids.length ? bankItem.term_ids : [bankItem.term_id],
     senseKey,
@@ -591,6 +879,8 @@ async function handleChallengeNext(request: Request, env: Env, url: URL): Promis
     sourceKind: bankItem.source_kind,
     sourceLabel: bankItem.source_label,
     sourceTitle: bankItem.source_title,
+    articleId: cleanString(String(bankItem.article_id || bankItem.source_meta?.article_id || runArticleId || ""), 120),
+    articleTitle: cleanString(String(bankItem.article_title || bankItem.source_meta?.article_title || bankItem.source_title || ""), 120),
     sourceMeta: bankItem.source_meta,
     stem: bankItem.stem,
     sentence: bankItem.sentence,
@@ -833,9 +1123,20 @@ async function handleTerm(request: Request, env: Env, rawTermId: string): Promis
   );
 }
 
-async function handleLeaderboard(env: Env, url: URL): Promise<Response> {
+async function handleLeaderboard(request: Request, env: Env, url: URL): Promise<Response> {
+  const sessionState = await ensureAnonSession(request, env);
+  const auth = await getAuthContext(request, env);
+  const owner = await resolveOwnerSession(env, sessionState, auth?.user || null);
+  if (auth) {
+    await flushSyncOutbox(env, owner.ownerId, auth.user.slug, auth.cookieHeader);
+  }
   const kind = canonicalKind(url.searchParams.get("kind"));
-  return json(await loadLeaderboard(env, kind), 200);
+  const limit = clampNumber(Number(url.searchParams.get("limit") || 10), 1, 30);
+  const response = json(await loadLeaderboard(env, kind, owner.ownerId, limit), 200);
+  if (sessionState.isNew) {
+    response.headers.append("Set-Cookie", buildSessionCookie(env, request, sessionState.token));
+  }
+  return response;
 }
 
 async function handleReportFinalize(request: Request, env: Env): Promise<Response> {
@@ -1191,6 +1492,18 @@ async function loadRuntime(env: Env, request: Request): Promise<RuntimeData> {
         ...rawExamQuestions,
         challenge_bank: filteredChallengeBank,
       };
+      const textbookArticleCatalog = await loadShardedAsset<TextbookArticleMeta[]>(
+        env,
+        request,
+        manifest,
+        "textbook_article_catalog"
+      );
+      const textbookArticleBank = await loadShardedAsset<Record<string, { article: TextbookArticleMeta; items: BankItem[] }>>(
+        env,
+        request,
+        manifest,
+        "textbook_article_bank"
+      );
       const termMap = new Map<string, TermRecord>();
       [...termsFunction, ...termsContent].forEach((term) => termMap.set(term.term_id, term));
       return {
@@ -1198,6 +1511,8 @@ async function loadRuntime(env: Env, request: Request): Promise<RuntimeData> {
         termsFunction,
         termsContent,
         examQuestions,
+        textbookArticleCatalog,
+        textbookArticleBank,
         answerKeys: answerKeyMap,
         textbookExamples,
         dictLinks,
@@ -1262,8 +1577,143 @@ function selectBankItem(
   usedChallengeIds: Set<string>,
   historicalChallengeIds: Set<string>,
   reviewTargets: Array<Record<string, unknown>>,
-  lastPrompt: ChallengePromptPayload | null
+  lastPrompt: ChallengePromptPayload | null,
+  articleId = ""
 ): BankItem | null {
+  if (kind === MIXED_KIND) {
+    const answeredCount = Number(runRow.answered_count || 0);
+    const recentTermIds = uniqueStrings(lastPrompt?.termIds?.length ? lastPrompt.termIds : [lastPrompt?.termId || ""]);
+    const blockedChallengeIds =
+      mode === "review" ? usedChallengeIds : new Set<string>([...usedChallengeIds, ...historicalChallengeIds]);
+    const allArticleItems = Object.values(runtime.textbookArticleBank)
+      .flatMap((bucket) => Array.isArray(bucket?.items) ? bucket.items : [])
+      .filter((item) => ARTICLE_QUESTION_TYPES.includes(item.question_type));
+    const pool =
+      mode === "review"
+        ? allArticleItems
+        : (runtime.textbookArticleBank[articleId]?.items || []).filter((item) => ARTICLE_QUESTION_TYPES.includes(item.question_type));
+
+    const pickMixedPool = (blocked: Set<string>): BankItem | null => {
+      if (mode === "review") {
+        for (const reviewTarget of reviewTargets) {
+          const reviewTermId = String(reviewTarget.term_id || "");
+          const reviewQuestionType = String(reviewTarget.question_type || "") as QuestionType;
+          const candidates = pool.filter(
+            (item) =>
+              item.question_type === reviewQuestionType &&
+              !usedChallengeIds.has(String(item.challenge_id || "")) &&
+              ((item.term_ids && item.term_ids.includes(reviewTermId)) || item.term_id === reviewTermId)
+          );
+          const selected = chooseUnusedItem(
+            candidates,
+            usedChallengeIds,
+            `${ownerId}:${String(runRow.id)}:review:${reviewQuestionType}:${reviewTermId}:${answeredCount}`
+          );
+          if (selected) return selected;
+        }
+        return null;
+      }
+
+      const preferredTermKind =
+        lastPrompt?.termKind === "content_word"
+          ? "function_word"
+          : lastPrompt?.termKind === "function_word"
+            ? "content_word"
+            : "";
+      const relatedFirst = recentTermIds.length
+        ? pool.filter((item) => sharesRelatedTerm(item, recentTermIds))
+        : [];
+      const priorityBuckets = [
+        preferredTermKind
+          ? (relatedFirst.length ? relatedFirst : pool).filter(
+              (item) => cleanString(item.source_meta?.term_kind || item.term_kind, 40) === preferredTermKind
+            )
+          : [],
+        relatedFirst,
+        pool,
+      ];
+      for (const candidates of priorityBuckets) {
+        if (!candidates.length) continue;
+        const selected = chooseUnusedItem(
+          candidates,
+          blocked,
+          `${ownerId}:${String(runRow.id)}:${articleId}:${answeredCount}:${preferredTermKind}:${recentTermIds.join(",")}`
+        );
+        if (selected) return selected;
+      }
+      return null;
+    };
+
+    const selected = pickMixedPool(blockedChallengeIds);
+    if (selected || mode === "review" || historicalChallengeIds.size === 0) {
+      return selected;
+    }
+    return pickMixedPool(new Set<string>(usedChallengeIds));
+  }
+
+  if (kind === GAOKAO_KIND) {
+    const bank = runtime.examQuestions.challenge_bank;
+    const answeredCount = Number(runRow.answered_count || 0);
+    const recentTermIds = uniqueStrings(lastPrompt?.termIds?.length ? lastPrompt.termIds : [lastPrompt?.termId || ""]);
+    const examPool = GAOKAO_QUESTION_TYPES.flatMap((questionType) => bank[questionType] || []).filter(
+      (item) => GAOKAO_QUESTION_TYPES.includes(item.question_type) && String(item.source_kind || "") === "exam"
+    );
+    const pickGaokaoPool = (blockedChallengeIds: Set<string>): BankItem | null => {
+      if (mode === "review") {
+        for (const reviewTarget of reviewTargets) {
+          const reviewTermId = String(reviewTarget.term_id || "");
+          const reviewQuestionType = String(reviewTarget.question_type || "") as QuestionType;
+          const candidates = examPool.filter(
+            (item) =>
+              item.question_type === reviewQuestionType &&
+              !usedChallengeIds.has(String(item.challenge_id || "")) &&
+              ((item.term_ids && item.term_ids.includes(reviewTermId)) || item.term_id === reviewTermId)
+          );
+          const selected = chooseUnusedItem(
+            pickBankByPriority(candidates, playerState),
+            usedChallengeIds,
+            `${ownerId}:${String(runRow.id)}:gaokao-review:${reviewQuestionType}:${reviewTermId}:${answeredCount}`
+          );
+          if (selected) return selected;
+        }
+        return null;
+      }
+
+      const preferredTermKind =
+        lastPrompt?.termKind === "content_word"
+          ? "function_word"
+          : lastPrompt?.termKind === "function_word"
+            ? "content_word"
+            : "";
+      const relatedFirst = recentTermIds.length ? examPool.filter((item) => sharesRelatedTerm(item, recentTermIds)) : [];
+      const priorityBuckets = [
+        preferredTermKind
+          ? (relatedFirst.length ? relatedFirst : examPool).filter((item) => String(item.kind || "") === preferredTermKind)
+          : [],
+        relatedFirst,
+        examPool,
+      ];
+      for (const candidates of priorityBuckets) {
+        if (!candidates.length) continue;
+        const selected = chooseUnusedItem(
+          pickBankByPriority(candidates, playerState),
+          blockedChallengeIds,
+          `${ownerId}:${String(runRow.id)}:gaokao:${answeredCount}:${preferredTermKind}:${recentTermIds.join(",")}`
+        );
+        if (selected) return selected;
+      }
+      return null;
+    };
+
+    const blockedChallengeIds =
+      mode === "review" ? usedChallengeIds : new Set<string>([...usedChallengeIds, ...historicalChallengeIds]);
+    const selected = pickGaokaoPool(blockedChallengeIds);
+    if (selected || mode === "review" || historicalChallengeIds.size === 0) {
+      return selected;
+    }
+    return pickGaokaoPool(new Set<string>(usedChallengeIds));
+  }
+
   const bank = runtime.examQuestions.challenge_bank;
   const answeredCount = Number(runRow.answered_count || 0);
   const recentTermIds = uniqueStrings(lastPrompt?.termIds?.length ? lastPrompt.termIds : [lastPrompt?.termId || ""]);
@@ -1332,7 +1782,11 @@ function selectBankItem(
 
   const blockedChallengeIds =
     mode === "review" ? usedChallengeIds : new Set<string>([...usedChallengeIds, ...historicalChallengeIds]);
-  return pickWithBlocked(blockedChallengeIds);
+  const selected = pickWithBlocked(blockedChallengeIds);
+  if (selected || mode === "review" || historicalChallengeIds.size === 0) {
+    return selected;
+  }
+  return pickWithBlocked(new Set<string>(usedChallengeIds));
 }
 
 function buildSenseKey(item: BankItem): string {
@@ -1564,10 +2018,13 @@ async function listPendingReviewTargets(
   kind?: Kind
 ): Promise<Array<Record<string, unknown>>> {
   const { results } = await env.DB.prepare(
-    `SELECT id, term_id, sense_key, question_type, priority, source_item_id, created_at
-     FROM review_queue
-     WHERE session_id = ? AND status = 'pending' AND due_at <= ?
-     ORDER BY priority DESC, created_at ASC
+    `SELECT rq.id, rq.term_id, rq.sense_key, rq.question_type, rq.priority, rq.source_item_id, rq.created_at,
+            ci.prompt_json AS source_prompt_json
+     FROM review_queue rq
+     LEFT JOIN challenge_items ci
+       ON ci.id = rq.source_item_id AND ci.session_id = rq.session_id
+     WHERE rq.session_id = ? AND rq.status = 'pending' AND rq.due_at <= ?
+     ORDER BY rq.priority DESC, rq.created_at ASC
      LIMIT 200`
   )
     .bind(sessionId, new Date().toISOString())
@@ -1575,8 +2032,10 @@ async function listPendingReviewTargets(
   const deduped = new Map<string, Record<string, unknown>>();
   for (const row of results || []) {
     const questionType = String(row.question_type || "") as QuestionType;
-    const rowKind = kindForQuestionType(questionType);
-    if (kind && rowKind !== kind) continue;
+    if (!reviewKindMatches(kind, questionType)) continue;
+    const sourcePrompt = safeParseObject(row.source_prompt_json) as unknown as ChallengePromptPayload;
+    if (kind === MIXED_KIND && cleanString(sourcePrompt?.sourceKind, 20) !== "textbook") continue;
+    if (kind === GAOKAO_KIND && cleanString(sourcePrompt?.sourceKind, 20) !== "exam") continue;
     const key = buildReviewTargetKey(String(row.term_id || ""), String(row.sense_key || ""), questionType);
     if (!deduped.has(key)) {
       deduped.set(key, row);
@@ -1610,11 +2069,48 @@ async function unlockBadges(
   if (Number(run.correct_count || 0) >= 1) conditions.add("first-correct");
   if (Number(run.max_streak || 0) >= 3) conditions.add("streak-3");
   if (pendingReviewCount === 0 && Number(run.answered_count || 0) >= 4) conditions.add("review-tamer");
-  if (
-    Number(run.answered_count || 0) >= ROUND_SIZE &&
-    Number(run.correct_count || 0) === Number(run.answered_count || 0)
-  ) {
-    conditions.add("perfect-run");
+  if (String(run.kind || "") === MIXED_KIND) {
+    const targetCount = getRunTargetCount(run);
+    if (Number(run.answered_count || 0) >= targetCount) {
+      conditions.add("article-first-clear");
+    }
+    if (
+      Number(run.answered_count || 0) >= targetCount &&
+      Number(run.correct_count || 0) === Number(run.answered_count || 0)
+    ) {
+      conditions.add("article-perfect");
+    }
+    const distinctArticlesRow = await env.DB.prepare(
+      `SELECT COUNT(DISTINCT target_key) AS c
+       FROM challenge_runs
+       WHERE session_id = ? AND kind = ? AND mode = 'ladder' AND status = 'finished' AND COALESCE(target_key, '') <> ''`
+    )
+      .bind(sessionId, MIXED_KIND)
+      .first<Record<string, unknown>>();
+    if (Number(distinctArticlesRow?.c || 0) >= 3) {
+      conditions.add("article-collector-3");
+    }
+  }
+  if (String(run.kind || "") === GAOKAO_KIND) {
+    if (Number(run.answered_count || 0) >= ROUND_SIZE) {
+      conditions.add("gaokao-first-clear");
+    }
+    if (
+      Number(run.answered_count || 0) >= ROUND_SIZE &&
+      Number(run.correct_count || 0) === Number(run.answered_count || 0)
+    ) {
+      conditions.add("gaokao-perfect");
+    }
+    const gaokaoRoundsRow = await env.DB.prepare(
+      `SELECT COUNT(*) AS c
+       FROM challenge_runs
+       WHERE session_id = ? AND kind = ? AND mode = 'ladder' AND status = 'finished'`
+    )
+      .bind(sessionId, GAOKAO_KIND)
+      .first<Record<string, unknown>>();
+    if (Number(gaokaoRoundsRow?.c || 0) >= 3) {
+      conditions.add("gaokao-collector-3");
+    }
   }
 
   const unlocked: Array<{ key: string; title: string; detail: string }> = [];
@@ -1639,7 +2135,7 @@ async function unlockBadges(
 async function getRun(env: Env, runId: string, sessionId: string): Promise<Record<string, unknown> | null> {
   return (
     (await env.DB.prepare(
-      `SELECT id, session_id, kind, mode, status, started_at, updated_at, finished_at, score, correct_count, answered_count, streak, max_streak, rating_delta, report_id, target_count, source_run_id
+      `SELECT id, session_id, kind, mode, status, started_at, updated_at, finished_at, score, correct_count, answered_count, streak, max_streak, rating_delta, report_id, target_count, source_run_id, target_scope, target_key, target_label
        FROM challenge_runs WHERE id = ? AND session_id = ?`
     )
       .bind(runId, sessionId)
@@ -1647,16 +2143,24 @@ async function getRun(env: Env, runId: string, sessionId: string): Promise<Recor
   );
 }
 
-async function findActiveRun(env: Env, sessionId: string, kind: Kind, mode: Mode): Promise<Record<string, unknown> | null> {
+async function findActiveRun(
+  env: Env,
+  sessionId: string,
+  kind: Kind,
+  mode: Mode,
+  targetScope = "",
+  targetKey = ""
+): Promise<Record<string, unknown> | null> {
   return (
     (await env.DB.prepare(
-      `SELECT id, session_id, kind, mode, status, started_at, updated_at, finished_at, score, correct_count, answered_count, streak, max_streak, rating_delta, report_id, target_count, source_run_id
+      `SELECT id, session_id, kind, mode, status, started_at, updated_at, finished_at, score, correct_count, answered_count, streak, max_streak, rating_delta, report_id, target_count, source_run_id, target_scope, target_key, target_label
        FROM challenge_runs
        WHERE session_id = ? AND kind = ? AND mode = ? AND status = 'active'
+         AND COALESCE(target_scope, '') = ? AND COALESCE(target_key, '') = ?
        ORDER BY updated_at DESC
        LIMIT 1`
     )
-      .bind(sessionId, kind, mode)
+      .bind(sessionId, kind, mode, targetScope, targetKey)
       .first<Record<string, unknown>>()) || null
   );
 }
@@ -1704,6 +2208,9 @@ function summarizeRun(run: Record<string, unknown>): Record<string, unknown> {
     reportId: run.report_id || null,
     targetCount: getRunTargetCount(run),
     sourceRunId: run.source_run_id || null,
+    targetScope: run.target_scope || "",
+    targetKey: run.target_key || "",
+    targetLabel: run.target_label || "",
   };
 }
 
@@ -1722,16 +2229,24 @@ function buildReportMarkdown(
   items: Array<Record<string, unknown>>,
   payload: Record<string, unknown>
 ): string {
+  const targetLabel = cleanString(run.target_label, 120);
+  const runTitle =
+    String(run.kind) === MIXED_KIND
+      ? `${targetLabel || "篇目"}字词挑战`
+      : String(run.kind) === GAOKAO_KIND
+        ? "高考混编挑战"
+      : `${String(run.kind) === "function_word" ? "虚词" : "实词"}挑战`;
   const lines = [
-    "# 文言实虚词本次报告",
+    "# AI 字词本次报告",
     "",
-    `- 挑战类型：${String(run.kind) === "function_word" ? "虚词挑战" : "实词挑战"}`,
+    `- 挑战类型：${runTitle}`,
     `- 模式：${String(run.mode)}`,
     `- 得分：${Number(run.score || 0)}`,
     `- 正确率：${Math.round(Number(payload.accuracy || 0) * 100)}%`,
     `- 已答题数：${Number(run.answered_count || 0)}`,
     `- 最大连胜：${Number(run.max_streak || 0)}`,
     `- 错题追击队列：${Number(payload.queue_after_run || 0)}`,
+    ...(targetLabel ? [`- 篇目：${targetLabel}`] : []),
     "",
     "## 错题词",
     ...(Array.isArray(payload.mistake_terms) && payload.mistake_terms.length
@@ -1786,7 +2301,15 @@ async function upsertOwnerSession(env: Env, ownerId: string, alias: string, disp
 
 async function getPlayerState(env: Env, sessionId: string, kind: Kind): Promise<PlayerStateRow> {
   const existing = await env.DB.prepare(
-    `SELECT session_id, kind, tier_index, highest_tier_index, rounds_played, perfect_rounds, total_answered, total_correct, perfect_streak, last_run_id, last_round_answered, last_round_correct, last_result, updated_at
+    `SELECT session_id, kind, tier_index, highest_tier_index, rounds_played, perfect_rounds, total_answered, total_correct, perfect_streak, last_run_id, last_round_answered, last_round_correct, last_result, updated_at,
+            COALESCE((
+              SELECT SUM(CASE WHEN cr.score > 0 THEN cr.score ELSE 0 END)
+              FROM challenge_runs cr
+              WHERE cr.session_id = player_kind_state.session_id
+                AND cr.kind = player_kind_state.kind
+                AND cr.mode = 'ladder'
+                AND cr.status = 'finished'
+            ), 0) AS total_score
      FROM player_kind_state WHERE session_id = ? AND kind = ?`
   )
     .bind(sessionId, kind)
@@ -1801,7 +2324,15 @@ async function getPlayerState(env: Env, sessionId: string, kind: Kind): Promise<
     .bind(sessionId, kind)
     .run();
   const created = await env.DB.prepare(
-    `SELECT session_id, kind, tier_index, highest_tier_index, rounds_played, perfect_rounds, total_answered, total_correct, perfect_streak, last_run_id, last_round_answered, last_round_correct, last_result, updated_at
+    `SELECT session_id, kind, tier_index, highest_tier_index, rounds_played, perfect_rounds, total_answered, total_correct, perfect_streak, last_run_id, last_round_answered, last_round_correct, last_result, updated_at,
+            COALESCE((
+              SELECT SUM(CASE WHEN cr.score > 0 THEN cr.score ELSE 0 END)
+              FROM challenge_runs cr
+              WHERE cr.session_id = player_kind_state.session_id
+                AND cr.kind = player_kind_state.kind
+                AND cr.mode = 'ladder'
+                AND cr.status = 'finished'
+            ), 0) AS total_score
      FROM player_kind_state WHERE session_id = ? AND kind = ?`
   )
     .bind(sessionId, kind)
@@ -1824,6 +2355,7 @@ function normalizePlayerState(row: PlayerStateRow, kind: Kind, sessionId: string
     last_round_answered: Number(row?.last_round_answered || 0),
     last_round_correct: Number(row?.last_round_correct || 0),
     last_result: String(row?.last_result || "idle"),
+    total_score: Math.round(Number(row?.total_score || 0)),
     updated_at: String(row?.updated_at || ""),
   };
 }
@@ -1841,6 +2373,7 @@ function summarizePlayerState(row: PlayerStateRow): Record<string, unknown> {
     perfectRounds: row.perfect_rounds,
     totalAnswered: row.total_answered,
     totalCorrect: row.total_correct,
+    totalScore: row.total_score,
     accuracy,
     perfectStreak: row.perfect_streak,
     lastRunId: row.last_run_id,
@@ -2131,43 +2664,182 @@ async function finalizeRunReport(
   };
 }
 
-async function loadLeaderboard(env: Env, kind: Kind): Promise<Record<string, unknown>> {
-  const { results } = await env.DB.prepare(
-    `SELECT p.session_id, a.display_name, a.alias, p.tier_index, p.highest_tier_index, p.rounds_played, p.perfect_rounds, p.total_answered, p.total_correct, p.updated_at
-     FROM player_kind_state p
-     JOIN anon_sessions a ON a.id = p.session_id
-     WHERE p.kind = ?
-     ORDER BY p.tier_index DESC, p.perfect_rounds DESC, p.total_correct DESC, p.updated_at ASC
-     LIMIT 20`
-  )
-    .bind(kind)
-    .all<Record<string, unknown>>();
+function getChinaDateParts(nowMs: number): { year: number; month: number; day: number } {
+  const shifted = new Date(nowMs + 8 * 60 * 60 * 1000);
   return {
-    kind,
-    entries: (results || []).map((row, index) => {
-      const tier = getTierInfo(Number(row.tier_index || 1));
-      return {
-        rank: index + 1,
-        displayName: String(row.display_name || row.alias || "佚名考生"),
-        tier,
-        roundsPlayed: Number(row.rounds_played || 0),
-        perfectRounds: Number(row.perfect_rounds || 0),
-        totalAnswered: Number(row.total_answered || 0),
-        totalCorrect: Number(row.total_correct || 0),
-        updatedAt: row.updated_at,
-      };
-    }),
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
   };
 }
 
-function isoWeek(date: Date): { year: number; week: number } {
-  const target = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  const dayNr = (target.getUTCDay() + 6) % 7;
-  target.setUTCDate(target.getUTCDate() - dayNr + 3);
-  const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
-  const diff = target.getTime() - firstThursday.getTime();
-  const week = 1 + Math.round(diff / 604800000);
-  return { year: target.getUTCFullYear(), week };
+function getDailyKey(nowMs = Date.now()): string {
+  const { year, month, day } = getChinaDateParts(nowMs);
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function getWeeklyKey(nowMs = Date.now()): string {
+  const { year, month, day } = getChinaDateParts(nowMs);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const weekday = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - weekday);
+  const weekYear = date.getUTCFullYear();
+  const yearStart = new Date(Date.UTC(weekYear, 0, 1));
+  const weekNo = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return `${weekYear}-W${String(weekNo).padStart(2, "0")}`;
+}
+
+function formatSqlUtc(ms: number): string {
+  const date = new Date(ms);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const hour = String(date.getUTCHours()).padStart(2, "0");
+  const minute = String(date.getUTCMinutes()).padStart(2, "0");
+  const second = String(date.getUTCSeconds()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+}
+
+function getChinaPeriodBounds(scope: Exclude<LeaderboardScope, "total">, nowMs = Date.now()): { start: string; end: string } {
+  const { year, month, day } = getChinaDateParts(nowMs);
+  const todayStartUtcMs = Date.UTC(year, month - 1, day) - 8 * 60 * 60 * 1000;
+  if (scope === "daily") {
+    return {
+      start: formatSqlUtc(todayStartUtcMs),
+      end: formatSqlUtc(todayStartUtcMs + 24 * 60 * 60 * 1000),
+    };
+  }
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const weekday = date.getUTCDay() || 7;
+  const weekStartUtcMs = todayStartUtcMs - (weekday - 1) * 24 * 60 * 60 * 1000;
+  return {
+    start: formatSqlUtc(weekStartUtcMs),
+    end: formatSqlUtc(weekStartUtcMs + 7 * 24 * 60 * 60 * 1000),
+  };
+}
+
+function toLeaderboardEntry(row: Record<string, unknown>): Record<string, unknown> {
+  const totalAnswered = Number(row.total_answered || 0);
+  const totalCorrect = Number(row.total_correct || 0);
+  return {
+    rank: Number(row.rank || 0),
+    sessionId: String(row.session_id || ""),
+    displayName: cleanString(row.display_name || row.alias || "佚名考生", 80) || "佚名考生",
+    tier: getTierInfo(Number(row.tier_index || 1)),
+    roundsPlayed: Number(row.rounds_played || 0),
+    perfectRounds: Number(row.perfect_rounds || 0),
+    totalAnswered,
+    totalCorrect,
+    accuracy: totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0,
+    score: Math.round(Number(row.score || 0)),
+    runs: Number(row.runs || 0),
+    updatedAt: String(row.updated_at || ""),
+  };
+}
+
+async function readTotalLeaderboard(
+  env: Env,
+  kind: Kind,
+  ownerId: string,
+  limit: number
+): Promise<{ top: Record<string, unknown>[]; me: Record<string, unknown> | null }> {
+  const { results } = await env.DB.prepare(
+    `WITH ranked AS (
+       SELECT p.session_id, a.display_name, a.alias, p.tier_index, p.rounds_played, p.perfect_rounds, p.total_answered, p.total_correct, p.updated_at,
+              ROW_NUMBER() OVER (
+                ORDER BY p.tier_index DESC, p.perfect_rounds DESC, p.total_correct DESC, p.rounds_played DESC, p.updated_at ASC, p.session_id ASC
+              ) AS rank
+       FROM player_kind_state p
+       JOIN anon_sessions a ON a.id = p.session_id
+       WHERE p.kind = ?
+     )
+     SELECT * FROM ranked
+     WHERE rank <= ? OR session_id = ?
+     ORDER BY rank ASC`
+  )
+    .bind(kind, limit, ownerId || "__none__")
+    .all<Record<string, unknown>>();
+  const entries = (results || []).map(toLeaderboardEntry);
+  return {
+    top: entries.filter((entry) => Number(entry.rank || 0) <= limit),
+    me: entries.find((entry) => String(entry.sessionId || "") === ownerId) || null,
+  };
+}
+
+async function readScopedLeaderboard(
+  env: Env,
+  kind: Kind,
+  scope: Exclude<LeaderboardScope, "total">,
+  ownerId: string,
+  limit: number
+): Promise<{ top: Record<string, unknown>[]; me: Record<string, unknown> | null }> {
+  const { start, end } = getChinaPeriodBounds(scope);
+  const { results } = await env.DB.prepare(
+    `WITH aggregated AS (
+       SELECT cr.session_id,
+              SUM(CASE WHEN cr.score > 0 THEN cr.score ELSE 0 END) AS score,
+              COUNT(*) AS runs,
+              MAX(cr.updated_at) AS updated_at
+       FROM challenge_runs cr
+       WHERE cr.kind = ? AND cr.mode = 'ladder' AND cr.status = 'finished' AND cr.started_at >= ? AND cr.started_at < ?
+       GROUP BY cr.session_id
+     ),
+     ranked AS (
+       SELECT ag.session_id, a.display_name, a.alias,
+              COALESCE(p.tier_index, 1) AS tier_index,
+              COALESCE(p.rounds_played, 0) AS rounds_played,
+              COALESCE(p.perfect_rounds, 0) AS perfect_rounds,
+              COALESCE(p.total_answered, 0) AS total_answered,
+              COALESCE(p.total_correct, 0) AS total_correct,
+              ag.score, ag.runs, ag.updated_at,
+              ROW_NUMBER() OVER (
+                ORDER BY ag.score DESC, ag.runs DESC, p.tier_index DESC, p.perfect_rounds DESC, ag.updated_at ASC, ag.session_id ASC
+              ) AS rank
+       FROM aggregated ag
+       JOIN anon_sessions a ON a.id = ag.session_id
+       LEFT JOIN player_kind_state p ON p.session_id = ag.session_id AND p.kind = ?
+     )
+     SELECT * FROM ranked
+     WHERE rank <= ? OR session_id = ?
+     ORDER BY rank ASC`
+  )
+    .bind(kind, start, end, kind, limit, ownerId || "__none__")
+    .all<Record<string, unknown>>();
+  const entries = (results || []).map(toLeaderboardEntry);
+  return {
+    top: entries.filter((entry) => Number(entry.rank || 0) <= limit),
+    me: entries.find((entry) => String(entry.sessionId || "") === ownerId) || null,
+  };
+}
+
+async function loadLeaderboard(
+  env: Env,
+  kind: Kind,
+  ownerId = "",
+  limit = 10
+): Promise<Record<string, unknown>> {
+  const safeLimit = clampNumber(Math.round(limit || 10), 1, 30);
+  const now = Date.now();
+  const dailyKey = getDailyKey(now);
+  const weeklyKey = getWeeklyKey(now);
+  const [total, weekly, daily] = await Promise.all([
+    readTotalLeaderboard(env, kind, ownerId, safeLimit),
+    readScopedLeaderboard(env, kind, "weekly", ownerId, safeLimit),
+    readScopedLeaderboard(env, kind, "daily", ownerId, safeLimit),
+  ]);
+  return {
+    kind,
+    period: { dailyKey, weeklyKey },
+    total: total.top,
+    weekly: weekly.top,
+    daily: daily.top,
+    me: {
+      total: total.me,
+      weekly: weekly.me,
+      daily: daily.me,
+    },
+    entries: total.top,
+  };
 }
 
 async function getAuthContext(request: Request, env: Env): Promise<{ user: UserCenterUser; cookieHeader: string } | null> {
@@ -2259,7 +2931,13 @@ async function flushSyncOutbox(env: Env, sessionId: string, authSubject: string,
 
 function buildProgressSyncPayload(run: Record<string, unknown>, accuracy: number): Record<string, unknown> {
   const kind = String(run.kind || "");
-  const itemTitle = `${kind === "function_word" ? "虚词" : "实词"}挑战`;
+  const targetLabel = cleanString(run.target_label, 120);
+  const itemTitle =
+    kind === MIXED_KIND
+      ? `${targetLabel || "篇目"}字词挑战`
+      : kind === GAOKAO_KIND
+        ? "高考混编挑战"
+      : `${kind === "function_word" ? "虚词" : "实词"}挑战`;
   return {
     siteKey: "wy",
     itemKey: `run:${String(run.id)}`,
@@ -2275,6 +2953,8 @@ function buildProgressSyncPayload(run: Record<string, unknown>, accuracy: number
       correctCount: Number(run.correct_count || 0),
       runMode: String(run.mode || ""),
       targetCount: getRunTargetCount(run),
+      targetLabel,
+      targetKey: cleanString(run.target_key, 120),
     },
   };
 }
@@ -2285,14 +2965,20 @@ function buildMasterySyncPayload(
   reportId: string
 ): Record<string, unknown> {
   const kind = String(run.kind || "");
+  const targetLabel = cleanString(run.target_label, 120);
   return {
     siteKey: "wy",
     itemKey: `run:${String(run.id)}`,
-    itemTitle: `${kind === "function_word" ? "虚词" : "实词"}挑战`,
+    itemTitle:
+      kind === MIXED_KIND
+        ? `${targetLabel || "篇目"}字词挑战`
+        : kind === GAOKAO_KIND
+          ? "高考混编挑战"
+        : `${kind === "function_word" ? "虚词" : "实词"}挑战`,
     scorePercent: Math.round(accuracy * 100),
     isPerfect: accuracy === 1,
-    challengeType: "gaokao",
-    challengeIdentifier: reportId,
+    challengeType: kind === MIXED_KIND ? "article" : kind === GAOKAO_KIND ? "gaokao_mix" : "gaokao",
+    challengeIdentifier: kind === MIXED_KIND ? cleanString(run.target_key, 120) || reportId : reportId,
   };
 }
 
@@ -2330,6 +3016,13 @@ function kindForQuestionType(questionType: QuestionType): Kind {
   return questionType === "xuci_pair_compare" || questionType === "function_gloss" || questionType === "function_profile"
     ? "function_word"
     : "content_word";
+}
+
+function reviewKindMatches(kind: Kind | undefined, questionType: QuestionType): boolean {
+  if (!kind) return true;
+  if (kind === MIXED_KIND) return ARTICLE_QUESTION_TYPES.includes(questionType);
+  if (kind === GAOKAO_KIND) return GAOKAO_QUESTION_TYPES.includes(questionType);
+  return kindForQuestionType(questionType) === kind;
 }
 
 function buildReviewTargetKey(termId: string, senseKey: string, questionType: QuestionType): string {
@@ -2566,8 +3259,11 @@ function normalizeSubmittedAnswer(value: unknown): ChallengeAnswerPayload | null
 
 function canonicalKind(value: unknown): Kind {
   const raw = cleanString(value, 40).toLowerCase();
+  if (raw === "textbook_word" || raw === "mixed" || raw === "article" || raw === "ai_zici") return MIXED_KIND;
+  if (raw === "gaokao_mix" || raw === "gaokao" || raw === "gaokao_mixed") return GAOKAO_KIND;
   if (raw === "xuci" || raw === "function_word") return "function_word";
-  return "content_word";
+  if (raw === "content_word") return "content_word";
+  return GAOKAO_KIND;
 }
 
 function cleanString(value: unknown, maxLength: number): string {

@@ -18,6 +18,8 @@
    - `public/runtime/terms_content*.json`
    - `public/runtime/exam_questions*.json`
    - `public/runtime/textbook_examples*.json`
+   - `public/runtime/textbook_article_catalog*.json`
+   - `public/runtime/textbook_article_bank*.json`
    - `public/runtime/dict_links*.json`
    - `public/runtime/manifest.json`
 3. Runtime JSON is size-checked. Any asset above 25 MiB is split automatically by query dimension and shard index.
@@ -26,15 +28,15 @@
 
 ## Challenge model
 
-- Kind values: `function_word`, `content_word`
+- Kind values: `function_word`, `content_word`, `textbook_word`
 - Question types:
   - `xuci_pair_compare`
   - `content_gloss`
-  - `translation_keypoint`
+  - `function_gloss`
   - `sentence_meaning`
   - `passage_meaning`
-  - `analysis_short`
-- `analysis_short` in V1 is multi-select key-point grading, not free-text scoring
+- Current live default is `textbook_word`: choose one textbook article, then mix content-word and function-word note questions within that article
+- `textbook_article_catalog` provides article list and counts; `textbook_article_bank` stores per-article mixed challenge items
 
 ## User center sync
 

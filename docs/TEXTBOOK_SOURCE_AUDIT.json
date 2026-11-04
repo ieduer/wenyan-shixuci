@@ -61,7 +61,7 @@
     "raw_topics_path": "/Users/ylsuen/CF/wenyan-shixuci/data/runtime_private/forum_textbook_topics_raw.json",
     "parsed_cache_path": "/Users/ylsuen/CF/wenyan-shixuci/data/runtime_private/forum_textbook_source_cache.json",
     "topic_count": 177,
-    "post_count": 1171,
+    "post_count": 1174,
     "article_hits": 69
   },
   "examples": {
@@ -131,17 +131,17 @@
         "page_start_print": 53,
         "page_end_print": 54,
         "note_order": 2,
-        "kind": "content_word",
-        "headword": "薄言",
+        "kind": "function_word",
+        "headword": "言",
         "label_text": "薄言",
         "gloss": "薄言都是助词，无实义",
         "answer_text": "薄言都是助词，无实义",
         "note_text": "“薄”“言”都是助词，无实义。",
         "annotation_scope": "body",
         "dict_headwords": [
+          "言",
           "薄言",
-          "薄",
-          "言"
+          "薄"
         ],
         "body_source_mode": "forum_raw",
         "body_source_title": "6 芣苢 插秧歌",
