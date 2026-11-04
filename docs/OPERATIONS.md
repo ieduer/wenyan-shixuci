@@ -215,3 +215,12 @@ update `PROJECT_STATE.md` in the same task.
 Every AI closeout must record changed files, generated artifacts, tests, live
 version/deployment, rollback, dirty-tree state, unresolved follow-ups, and the
 manual/state updates in `reports/agent_action_log.jsonl`. Chat is not a durable handoff.
+
+## 2026-11-04 accepted baseline and question-bank fixes
+
+- Release authority: `platform/release-authority.json` project `wy-bdfz-net` is `accepted` (managed_manual). Baseline adopted from live 7447c0b9 = commit `4b86c2c` (`refs/heads/claude/wy-live-baseline-20260707`, rebuilds the live bundle byte-for-byte). Current accepted: `71053cc` (`refs/heads/claude/wy-bank-fix-20261104`), version `39b3fb8c`, deployment `4eab69a2`; rollback version `7447c0b9`.
+- Source of the live bank: the v3 pipeline (`scripts/v3/build_v3.py`) output, 1,858 answer keys. `main` (`b1337f5`) still holds the older 1,244-key catalog — never deploy from it.
+- Runtime JSON is gitignored. To reproduce the release artifact: copy the accepted runtime into `data/runtime/`, `public/runtime/`, `data/runtime_private/answer_keys.json`, then `npm run apply:fixes` (idempotent; consistency gate) and `node --test tests/bank-fixes.test.mjs`.
+- `scripts/v3/apply_bank_fixes.py` applies `data/manual/v3/bank_fixes_*.json` plus rules (dictionary entries only for the target word, OCR character repairs, stray leading quotes) to exam_questions, textbook_article_bank and the answer keys; `scripts/build_runtime_data.py` runs it after build_v3.
+- Release driver and evidence: `/Users/ylsuen/CF/_meta/reports/operations/bank-fix-wy-20261104/release/` (phases adopt/prepare/baseline/upload/verify/register/promote/production/realpath/accept/rollback). Report: `../REPORT.md` there.
+- Graded answers use the answer snapshot stored in D1 when an item is served, so changing a key never re-grades history.

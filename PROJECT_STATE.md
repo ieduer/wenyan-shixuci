@@ -1,13 +1,13 @@
 # Project State
 
-Last updated: 2026-08-14 PDT
-Current version: production and accepted source remain unchanged; source-only scoring candidate is based on d094f50879fa8a85bc68b745f641ae4e3ca1fab8
-Current objective: keep the inactive wy-server-graded-practice-v1 candidate source-safe while preparing a bounded corrective draft; do not change the current answer path, production runtime, or student data
-Completed work: the candidate contract, exact answer-key catalog digest, immutable server-attempt boundary, privacy-bounded v2 envelope, additive unapplied D1 schema, replacement-safe append-only guards, monotonic delivery-status transition history, race-safe idempotent outbox/conflict isolation, aggregate blocked health, hostile tests, and exact Node 22.21.1/24.18.0 CI were prepared in an isolated checkout
-Pending work: keep pending_mapping until User Center registers the exact contract, WY resolves an immutable positive live User Center userId at the server grading boundary, a future sink provides CAS lease/expiry recovery/crash-safe readback, the migration/deployment receives independent review, and a real-account WY to My A–F acceptance/readback/rollback loop passes
-Known problems: the current authenticated answer path still owns data by mutable User Center slug; the legacy sync_outbox is not an A–F evidence ledger; the canonical local worktree has unrelated intentional data/frontend/runtime/migration changes that this candidate did not touch
-Next recommended task: review the bounded monotonic-status corrective draft; do not import it into src/index.ts, apply migration 0100, add a sink/binding, deploy, or mutate D1/Queue/student data until every listed blocker is closed with current evidence
-Deployment status: candidate only, blocked, pending_mapping, runtimeScoringActive=false; no route/config/binding change, migration execution, D1/Queue/student-data mutation, Cloudflare deployment, or My score write performed
-Rollback anchor: npx wrangler versions deploy 7447c0b9-7cb0-4595-9e02-dbe7891cf89d@100 --name wenyan-shixuci --yes
-Operations authority: /Users/ylsuen/CF/wenyan-shixuci/docs/OPERATIONS.md
-Ownership status: candidate source files belong to task wy-server-graded-practice-v1-candidate-20260814; no production mutation authority is implied; consult reports/agent_action_log.jsonl
+Last updated: 2026-11-04 UTC
+Current version: accepted production source 71053cc4c64ad27b3c889d9dbbe8acdcddf2868a (refs/heads/claude/wy-bank-fix-20261104), Worker version 39b3fb8c-206a-4c7c-99f5-886c2a827616, deployment 4eab69a2-df38-4035-a9ed-7435f80188bf (2026-11-04T02:51Z); registry project wy-bdfz-net is state accepted
+Current objective: question-bank quality; 438 textbook questions fixed from the 2026-11-04 two-round review (data/manual/v3/bank_fixes_20261104.json, scripts/v3/apply_bank_fixes.py)
+Completed work: live 7447c0b9 adopted as accepted baseline 4b86c2c (rebuilds the live bundle byte-for-byte); bank fixes released through release-worker-transaction.mjs; Status 20261104-wy-bank-review r1
+Pending work: merge claude/wy-bank-fix-20261104 into main (main b1337f5 predates the v3 1,858-key bank); the inactive wy-server-graded-practice-v1 candidate still pins the 1,244-key main catalog and fails against the live bank; a full data rebuild needs the archived textbook_ai_migration tree
+Known problems: runtime JSON (data/runtime, public/runtime) is gitignored — rebuild it by copying the accepted runtime and running npm run apply:fixes; the authenticated answer path still owns data by mutable User Center slug
+Next recommended task: merge the release branch into main; realign the scoring candidate with the 1,858-key catalog before any activation
+Deployment status: production = 39b3fb8c (accepted); no D1/binding/route/secret change
+Rollback anchor: version 7447c0b9-7cb0-4595-9e02-dbe7891cf89d (deployment 3f8c5946, source 4b86c2c) via /Users/ylsuen/CF/_meta/reports/operations/bank-fix-wy-20261104/release/wy-release.mjs rollback <reason>
+Operations authority: docs/OPERATIONS.md; release report /Users/ylsuen/CF/_meta/reports/operations/bank-fix-wy-20261104/REPORT.md
+Ownership status: release bank-fix-wy-20261104 complete (claude-opus-5.5); consult reports/agent_action_log.jsonl
